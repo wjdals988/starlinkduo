@@ -1,6 +1,7 @@
 extends SceneTree
 
 const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
+const CardFrames := preload("res://src/ui/card_frame_visual.gd")
 
 var failures: Array[String] = []
 
@@ -34,8 +35,9 @@ func _init() -> void:
 	_test_duel_commitment_tamper_rejected()
 	_test_duel_commitment_process_restart_recovery()
 	_test_reduced_motion_effect_cues()
+	_test_card_scope_frames()
 	if failures.is_empty():
-		print("PASS: 29 core, content, run, character, duel, relic, item, event, boss, encounter, route, accessibility, save, economy, protocol, and transport tests")
+		print("PASS: 30 core, content, run, character, duel, relic, item, event, boss, encounter, route, accessibility, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -49,6 +51,12 @@ func _test_reduced_motion_effect_cues() -> void:
 		_expect(visual.static_mode and is_equal_approx(visual.progress, 0.82), "reduced motion keeps a stable spatial cue for %s" % effect_type)
 		_expect(not visual.effect_description().is_empty(), "effect %s has a non-color accessibility description" % effect_type)
 	visual.free()
+
+func _test_card_scope_frames() -> void:
+	var signatures := {}
+	for scope in CardData.Scope.values():
+		signatures[CardFrames.frame_signature(scope)] = true
+	_expect(signatures.size() == 5, "five card ownership scopes use five distinct geometric frame signatures")
 
 func _test_initial_state() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())

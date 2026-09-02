@@ -36,6 +36,10 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 		action_hint,
 	]
 	add_theme_stylebox_override("focus", _focus_style())
+	var frame := preload("res://src/ui/card_frame_visual.gd").new()
+	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	frame.configure(card.owner_scope, accent)
+	add_child(frame)
 	var inset := MarginContainer.new()
 	inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
