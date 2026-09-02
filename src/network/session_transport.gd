@@ -14,6 +14,15 @@ func get_state() -> String:
 func request_permissions() -> void:
 	pass
 
+func has_permissions() -> bool:
+	return false
+
+func is_enabled() -> bool:
+	return false
+
+func get_paired_devices() -> Array[Dictionary]:
+	return []
+
 func start_host(_service_uuid: String) -> bool:
 	return false
 
@@ -28,4 +37,3 @@ func poll() -> void:
 
 func close() -> void:
 	pass
-

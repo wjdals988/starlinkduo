@@ -21,6 +21,23 @@ func request_permissions() -> void:
 	if _plugin != null:
 		_plugin.requestBluetoothPermissions()
 
+func has_permissions() -> bool:
+	return _plugin != null and _plugin.hasBluetoothPermissions()
+
+func is_enabled() -> bool:
+	return _plugin != null and _plugin.isBluetoothEnabled()
+
+func get_paired_devices() -> Array[Dictionary]:
+	var devices: Array[Dictionary] = []
+	if _plugin == null:
+		return devices
+	var parsed: Variant = JSON.parse_string(_plugin.getBondedDevicesJson())
+	if parsed is Array:
+		for item in parsed:
+			if item is Dictionary and item.has("name") and item.has("address"):
+				devices.append({"name": String(item.name), "address": String(item.address)})
+	return devices
+
 func start_host(service_uuid: String) -> bool:
 	return _plugin != null and _plugin.startHost(service_uuid)
 
@@ -49,4 +66,3 @@ func poll() -> void:
 func close() -> void:
 	if _plugin != null:
 		_plugin.closeConnection()
-

@@ -10,6 +10,7 @@ const COLOR_BLUE := Color("#62a8ff")
 const COLOR_ORANGE := Color("#ffac5f")
 const COLOR_RED := Color("#ff667d")
 const COLOR_YELLOW := Color("#ffd45f")
+const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
 
 var engine: CombatEngine
 var state: CombatState
@@ -58,6 +59,15 @@ func _draw() -> void:
 		var point := Vector2(size.x * (0.09 + index * 0.125), size.y * (0.12 + (index % 2) * 0.28))
 		draw_circle(point, radius, Color(0.55, 0.76, 1.0, 0.28))
 
+func _process(_delta: float) -> void:
+	if bluetooth_transport == null:
+		return
+	bluetooth_transport.poll()
+	if connection_label != null:
+		var next_text := _connection_status_text()
+		if connection_label.text != next_text:
+			connection_label.text = next_text
+
 func _build_interface() -> void:
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -95,7 +105,7 @@ func _build_top_bar() -> Control:
 	turn_label.add_theme_color_override("font_color", COLOR_MUTED)
 	row.add_child(turn_label)
 
-	for item in [["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop]]:
+	for item in [["연결", _show_connection], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop]]:
 		var navigation := Button.new()
 		navigation.text = item[0]
 		navigation.custom_minimum_size = Vector2(88, 42)
@@ -105,7 +115,7 @@ func _build_top_bar() -> Control:
 		row.add_child(navigation)
 
 	connection_label = Label.new()
-	connection_label.text = "●  BLUETOOTH READY" if bluetooth_transport.is_available() else "●  LOCAL DEMO"
+	connection_label.text = _connection_status_text()
 	connection_label.tooltip_text = "Android Bluetooth 플러그인 감지됨" if Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME) else "에디터/에뮬레이터 로컬 모드"
 	connection_label.add_theme_font_size_override("font_size", 17)
 	connection_label.add_theme_color_override("font_color", COLOR_CYAN)
@@ -297,6 +307,79 @@ func _clear_overlay() -> void:
 	for child in overlay_content.get_children():
 		child.queue_free()
 	overlay.show()
+
+func _show_connection() -> void:
+	_clear_overlay()
+	overlay_title.text = "근거리 협동 연결"
+	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
+		overlay_subtitle.text = "현재 환경에는 Android Bluetooth 플러그인이 없어 로컬 데모로 실행 중입니다."
+		_add_connection_notice("APK를 Android 12 이상 갤럭시에서 실행하세요.", COLOR_YELLOW)
+		return
+	if not bluetooth_transport.is_enabled():
+		overlay_subtitle.text = "Bluetooth가 꺼져 있습니다. 빠른 설정에서 Bluetooth를 켠 뒤 새로고침하세요."
+		_add_connection_action("상태 새로고침", _show_connection, COLOR_YELLOW)
+		return
+	if not bluetooth_transport.has_permissions():
+		overlay_subtitle.text = "주변 기기 권한이 필요합니다. 위치 정보는 수집하지 않습니다."
+		_add_connection_action("주변 기기 권한 허용", _request_bluetooth_permissions, COLOR_CYAN)
+		return
+	overlay_subtitle.text = "한 명은 방 만들기, 다른 한 명은 아래의 페어링된 기기를 선택하세요."
+	var host_button := _add_connection_action("방 만들기 · 이 기기가 호스트", _start_bluetooth_host, COLOR_BLUE)
+	host_button.tooltip_text = "연결을 기다리며 전투 결과를 판정합니다."
+	var divider := HSeparator.new()
+	overlay_content.add_child(divider)
+	var paired := bluetooth_transport.get_paired_devices()
+	if paired.is_empty():
+		_add_connection_notice("페어링된 기기가 없습니다. Android 설정에서 두 기기를 먼저 페어링하세요.", COLOR_YELLOW)
+	else:
+		for device in paired:
+			var label := "%s\n%s" % [device.name, device.address]
+			_add_connection_action(label, _join_bluetooth_host.bind(device.address), COLOR_ORANGE)
+
+func _request_bluetooth_permissions() -> void:
+	bluetooth_transport.request_permissions()
+	overlay_subtitle.text = "권한 요청을 보냈습니다. 허용 후 상태 새로고침을 누르세요."
+	_add_connection_action("상태 새로고침", _show_connection, COLOR_CYAN)
+
+func _start_bluetooth_host() -> void:
+	if bluetooth_transport.start_host(SERVICE_UUID):
+		overlay_subtitle.text = "참가자를 기다리는 중… 상대 기기에서 이 기기를 선택하세요."
+	else:
+		overlay_subtitle.text = "방을 만들지 못했습니다. 권한과 Bluetooth 상태를 확인하세요."
+
+func _join_bluetooth_host(address: String) -> void:
+	if bluetooth_transport.connect_to(address, SERVICE_UUID):
+		overlay_subtitle.text = "호스트에 연결하는 중…"
+	else:
+		overlay_subtitle.text = "연결을 시작하지 못했습니다. 페어링 상태를 확인하세요."
+
+func _add_connection_action(text: String, callback: Callable, accent: Color) -> Button:
+	var button := Button.new()
+	button.custom_minimum_size.y = 64
+	button.text = text
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 14, accent, 2))
+	button.pressed.connect(callback)
+	overlay_content.add_child(button)
+	return button
+
+func _add_connection_notice(text: String, accent: Color) -> void:
+	var notice := Label.new()
+	notice.text = text
+	notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notice.add_theme_font_size_override("font_size", 19)
+	notice.add_theme_color_override("font_color", accent)
+	overlay_content.add_child(notice)
+
+func _connection_status_text() -> String:
+	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
+		return "●  LOCAL DEMO"
+	match bluetooth_transport.get_state():
+		"listening": return "●  WAITING"
+		"connecting": return "●  CONNECTING"
+		"connected": return "●  CONNECTED"
+		"error": return "●  CONNECTION ERROR"
+		_: return "●  BLUETOOTH READY" if bluetooth_transport.is_available() else "●  BLUETOOTH OFF"
 
 func _show_map() -> void:
 	_clear_overlay()

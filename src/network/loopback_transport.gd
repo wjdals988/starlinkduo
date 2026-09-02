@@ -15,6 +15,12 @@ static func pair() -> Array[LoopbackTransport]:
 func is_available() -> bool:
 	return true
 
+func has_permissions() -> bool:
+	return true
+
+func is_enabled() -> bool:
+	return true
+
 func get_state() -> String:
 	return current_state
 
@@ -47,4 +53,3 @@ func close() -> void:
 func _set_state(value: String) -> void:
 	current_state = value
 	state_changed.emit(value)
-

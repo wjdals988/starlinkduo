@@ -19,6 +19,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import org.json.JSONArray
+import org.json.JSONObject
 
 class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     companion object {
@@ -45,6 +47,30 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
 
     @UsedByGodot
     fun isBluetoothAvailable(): Boolean = adapter() != null
+
+    @UsedByGodot
+    fun isBluetoothEnabled(): Boolean = adapter()?.isEnabled == true
+
+    @UsedByGodot
+    fun hasBluetoothPermissions(): Boolean = hasConnectPermission() && hasScanPermission()
+
+    @UsedByGodot
+    fun getBondedDevicesJson(): String {
+        val bluetooth = adapter() ?: return "[]"
+        if (!hasConnectPermission()) return "[]"
+        return try {
+            val result = JSONArray()
+            bluetooth.bondedDevices
+                .sortedWith(compareBy({ it.name ?: "" }, { it.address }))
+                .forEach { device ->
+                    result.put(JSONObject().put("name", device.name ?: "이름 없는 기기").put("address", device.address))
+                }
+            result.toString()
+        } catch (error: SecurityException) {
+            report("bonded_devices_failed", error)
+            "[]"
+        }
+    }
 
     @UsedByGodot
     fun getState(): String = state
@@ -169,6 +195,11 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
         return activity?.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
     }
 
+    private fun hasScanPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return activity?.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+    }
+
     private fun fail(code: String): Boolean {
         errors.add(code)
         return false
@@ -186,4 +217,3 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
         super.onMainDestroy()
     }
 }
-
