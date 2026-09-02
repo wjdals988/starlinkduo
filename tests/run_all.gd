@@ -87,6 +87,7 @@ func _test_loopback_transport() -> void:
 	_expect(host.send_message("{\"type\":\"ready\"}"), "connected loopback sends a message")
 	guest.poll()
 	_expect(received == ["{\"type\":\"ready\"}"], "loopback delivers the exact payload")
+	host.dispose()
 
 func _test_run_map_generation() -> void:
 	var generator := MapGenerator.new()
@@ -232,6 +233,9 @@ func _test_host_authoritative_session() -> void:
 	guest.poll()
 	_expect(state.turn == 2 and state.enemies[0].health == 31, "host alone resolves simultaneous turn")
 	_expect(not hashes.is_empty() and hashes[-1] == StateHasher.hash_snapshot(state.to_snapshot()), "guest receives verified authoritative snapshot")
+	host.close()
+	guest.close()
+	transports[0].dispose()
 
 func _test_host_authoritative_route_session() -> void:
 	var transports := LoopbackTransport.pair()
@@ -270,6 +274,9 @@ func _test_host_authoritative_route_session() -> void:
 	host.poll()
 	guest.poll()
 	_expect(run.consumables[1].is_empty() and host.combat_state.players[1].block == 12, "host applies and consumes guest item authoritatively")
+	host.close()
+	guest.close()
+	transports[0].dispose()
 	host_store.clear()
 
 func _test_session_rejects_stale_sequence() -> void:
@@ -285,6 +292,8 @@ func _test_session_rejects_stale_sequence() -> void:
 	transports[1].send_message(repeated)
 	host.poll()
 	_expect(errors == ["stale_sequence"], "duplicate sequence is rejected exactly once")
+	host.close()
+	transports[0].dispose()
 
 func _test_combat_snapshot_round_trip() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())
@@ -524,6 +533,9 @@ func _test_host_authoritative_duel_session() -> void:
 	transports[1].connect_to("loopback", "duel")
 	guest.poll()
 	_expect(guest.duel_state != null and guest.duel_state.duel_id == preserved_duel_id and guest.duel_state.turn == 2, "reconnecting transport restores the existing authoritative duel")
+	host.close()
+	guest.close()
+	transports[0].dispose()
 	store.clear()
 	DuelSaveStore.new().clear()
 
@@ -594,6 +606,9 @@ func _test_duel_commitment_tamper_rejected() -> void:
 	_expect(host.duel_state.turn == 1 and host.duel_state.plans.size() == 1 and errors.has("duel_commitment_mismatch"), "tampered duel reveal is rejected before guest plan validation")
 	_expect(guest.guest_pending_duel_plays.is_empty(), "guest clears rejected commitment and can choose again")
 	_expect(guest.submit_duel_plan(1, [{"card_id": committed_card}]).ok, "guest can recommit after a rejected reveal")
+	host.close()
+	guest.close()
+	transports[0].dispose()
 	run_store.clear()
 	DuelSaveStore.new().clear()
 
@@ -635,6 +650,12 @@ func _test_duel_commitment_process_restart_recovery() -> void:
 	restarted_guest.poll()
 	_expect(restarted_host.duel_state.turn == 2 and restarted_guest.duel_state.turn == 2, "both app processes resume commit reveal and resolve the interrupted turn")
 	_expect(host_store.load_pending_commitment().is_empty() and guest_store.load_pending_commitment().is_empty(), "resolved restarted turn clears both pending checkpoints")
+	host.close()
+	guest.close()
+	restarted_host.close()
+	restarted_guest.close()
+	first_transports[0].dispose()
+	restarted_transports[0].dispose()
 	host_store.clear()
 	guest_store.clear()
 	run_store.clear()

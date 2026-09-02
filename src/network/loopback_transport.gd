@@ -50,6 +50,15 @@ func close() -> void:
 	if peer != null and peer.current_state != "closed":
 		peer._set_state("closed")
 
+func dispose() -> void:
+	var connected_peer := peer
+	peer = null
+	inbox.clear()
+	if connected_peer != null:
+		if connected_peer.peer == self:
+			connected_peer.peer = null
+		connected_peer.inbox.clear()
+
 func _set_state(value: String) -> void:
 	current_state = value
 	state_changed.emit(value)

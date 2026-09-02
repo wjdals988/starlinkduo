@@ -73,6 +73,12 @@ func _ready() -> void:
 	if not run_coordinator.run.pending_event.is_empty():
 		_show_event.call_deferred()
 
+func _exit_tree() -> void:
+	if cooperative_session != null:
+		cooperative_session.close()
+	elif bluetooth_transport != null:
+		bluetooth_transport.close()
+
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), COLOR_VOID)
 	for index in range(8):

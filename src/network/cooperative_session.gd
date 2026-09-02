@@ -35,7 +35,7 @@ func _init(session_role: Role, session_transport: SessionTransport, combat_engin
 	run_coordinator = coordinator
 	duel_save_store = session_duel_store if session_duel_store != null else DuelSaveStore.new()
 	transport.message_received.connect(_on_message)
-	transport.transport_error.connect(func(code: String, detail: String) -> void: session_error.emit(code, detail))
+	transport.transport_error.connect(_on_transport_error)
 	transport.state_changed.connect(_on_transport_state_changed)
 	if role == Role.HOST and transport.get_state() == "connected":
 		_publish_snapshot("session_started")
@@ -201,7 +201,19 @@ func poll() -> void:
 	transport.poll()
 
 func close() -> void:
+	if transport == null:
+		return
+	if transport.message_received.is_connected(_on_message):
+		transport.message_received.disconnect(_on_message)
+	if transport.transport_error.is_connected(_on_transport_error):
+		transport.transport_error.disconnect(_on_transport_error)
+	if transport.state_changed.is_connected(_on_transport_state_changed):
+		transport.state_changed.disconnect(_on_transport_state_changed)
 	transport.close()
+	transport = null
+
+func _on_transport_error(code: String, detail: String) -> void:
+	session_error.emit(code, detail)
 
 func _on_message(raw: String) -> void:
 	var message := SessionProtocol.decode(raw)
