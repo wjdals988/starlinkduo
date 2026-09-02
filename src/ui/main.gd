@@ -31,6 +31,7 @@ var active_route_combat := false
 var reduce_motion := false
 var haptics_enabled := true
 var glow_enabled := true
+var large_text_enabled := false
 
 var team_health_label: Label
 var team_health_bar: ProgressBar
@@ -79,6 +80,7 @@ func _ready() -> void:
 		duel_engine = DuelEngine.new(catalog)
 		game_mode = "duel"
 	_build_interface()
+	_apply_text_scale_tree(self)
 	_refresh()
 	if not run_coordinator.run.pending_event.is_empty():
 		_show_event.call_deferred()
@@ -202,6 +204,7 @@ func _show_settings() -> void:
 	_clear_overlay()
 	overlay_title.text = "화면 · 조작 설정"
 	overlay_subtitle.text = "연출 강도와 진동을 기기별로 조절합니다. 변경 사항은 이 기기에 자동 저장됩니다."
+	_add_setting_toggle("큰 글씨", "핵심 문구와 버튼 글자를 115%로 확대합니다.", large_text_enabled, _set_large_text)
 	_add_setting_toggle("모션 줄이기", "카드 선택 전환을 즉시 표시해 화면 움직임을 줄입니다.", reduce_motion, _set_reduce_motion)
 	_add_setting_toggle("진동 피드백", "카드를 선택하거나 취소할 때 짧은 햅틱 신호를 사용합니다.", haptics_enabled, _set_haptics)
 	_add_setting_toggle("선택 카드 발광", "선택 카드의 강조 테두리 강도를 높입니다.", glow_enabled, _set_glow)
@@ -243,6 +246,11 @@ func _set_glow(enabled: bool) -> void:
 	_save_accessibility_settings()
 	_refresh()
 
+func _set_large_text(enabled: bool) -> void:
+	large_text_enabled = enabled
+	_save_accessibility_settings()
+	_apply_text_scale_tree(self)
+
 func _load_accessibility_settings() -> void:
 	var config := ConfigFile.new()
 	if config.load("user://accessibility.cfg") != OK:
@@ -250,13 +258,26 @@ func _load_accessibility_settings() -> void:
 	reduce_motion = bool(config.get_value("presentation", "reduce_motion", false))
 	haptics_enabled = bool(config.get_value("presentation", "haptics", true))
 	glow_enabled = bool(config.get_value("presentation", "glow", true))
+	large_text_enabled = bool(config.get_value("presentation", "large_text", false))
 
 func _save_accessibility_settings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("presentation", "reduce_motion", reduce_motion)
 	config.set_value("presentation", "haptics", haptics_enabled)
 	config.set_value("presentation", "glow", glow_enabled)
+	config.set_value("presentation", "large_text", large_text_enabled)
 	config.save("user://accessibility.cfg")
+
+func _apply_text_scale_tree(node: Node) -> void:
+	var scale_factor := 1.15 if large_text_enabled else 1.0
+	if node is Label or node is Button:
+		var control := node as Control
+		if not control.has_meta("base_font_size"):
+			control.set_meta("base_font_size", control.get_theme_font_size("font_size"))
+		var base_size := int(control.get_meta("base_font_size"))
+		control.add_theme_font_size_override("font_size", maxi(1, roundi(base_size * scale_factor)))
+	for child in node.get_children():
+		_apply_text_scale_tree(child)
 
 func _build_battlefield() -> Control:
 	var row := HBoxContainer.new()
@@ -528,6 +549,7 @@ func _clear_overlay() -> void:
 		child.queue_free()
 	overlay.show()
 	_focus_first_overlay_control.call_deferred()
+	_apply_text_scale_tree.call_deferred(overlay)
 
 func _close_overlay() -> void:
 	overlay.hide()
@@ -1518,6 +1540,7 @@ func _rebuild_hand() -> void:
 		if selected and not reduce_motion:
 			card_button.modulate = Color(1.35, 1.35, 1.35, 0.25)
 			card_button.create_tween().tween_property(card_button, "modulate", Color.WHITE, 0.16)
+	_apply_text_scale_tree.call_deferred(hand_container)
 
 func _on_card_pressed(hand_index: int, card: CardData) -> void:
 	if haptics_enabled:

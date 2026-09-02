@@ -14,11 +14,9 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	primary_tag = String(card.tags[0]) if not card.tags.is_empty() else "전술"
 	effect_kind = String(card.effects[0].get("type", "utility")) if not card.effects.is_empty() else "utility"
 	effect_accent = _effect_color(effect_kind)
-	# Retain a native button label for focus tooling while visual copy uses child labels.
-	# Android currently exposes the Godot canvas as one SurfaceView, so TalkBack still needs a platform bridge.
-	text = String(card.display_name)
-	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color", "font_focus_color"]:
-		add_theme_color_override(state, Color.TRANSPARENT)
+	# Visual copy uses child labels. Android exposes the canvas as one SurfaceView,
+	# so a hidden native button caption would not improve TalkBack and can cause duplicate rendering.
+	text = ""
 	tooltip_text = "%s · %s · %s · 에너지 %d" % [card.display_name, primary_tag, effect_text, card.energy_cost]
 	add_theme_stylebox_override("focus", _focus_style())
 	var inset := MarginContainer.new()
