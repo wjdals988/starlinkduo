@@ -228,8 +228,18 @@ func _test_run_coordinator_economy() -> void:
 	_expect(coordinator.buy_consumable(0, consumable), "consumable purchase adds carried item")
 	run.gold[0] = int(consumable.price)
 	_expect(not coordinator.buy_consumable(0, consumable), "sold consumable cannot be purchased twice")
+	var removal_cost := int(stocked.remove_card_cost)
+	run.gold[0] = removal_cost
+	var deck_size_before_removal: int = run.decks[0].size()
+	_expect(coordinator.remove_card(0, 0, removal_cost), "shop removal service removes one selected card")
+	_expect(run.decks[0].size() == deck_size_before_removal - 1 and run.gold[0] == 0, "card removal deducts exact gold and updates deck")
+	run.gold[0] = removal_cost
+	_expect(not coordinator.remove_card(0, 0, removal_cost), "card removal service can only be used once per shop visit")
+	coordinator._set_shop_access(["shop", "rest"])
+	_expect(run.shop_purchases[0].is_empty(), "a later shop visit receives a fresh inventory purchase state")
+	coordinator.checkpoint("shop_reopened")
 	var restored := store.load_active()
-	_expect(restored != null and restored.decks[0] == run.decks[0], "economy mutations persist at checkpoints")
+	_expect(restored != null and restored.decks[0] == run.decks[0] and restored.shop_purchases[0] == run.shop_purchases[0], "economy mutations persist at checkpoints")
 	store.clear()
 
 func _test_host_authoritative_session() -> void:

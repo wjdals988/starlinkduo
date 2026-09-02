@@ -1151,11 +1151,77 @@ func _show_shop() -> void:
 		consumable_button.pressed.connect(_buy_shop_consumable.bind(consumable))
 		item_row.add_child(consumable_button)
 	overlay_content.add_child(item_row)
-	var services := Label.new()
-	services.text = "카드 제거 %d C · 소비 아이템 최대 3개" % inventory.remove_card_cost
-	services.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	services.add_theme_color_override("font_color", COLOR_MUTED)
-	overlay_content.add_child(services)
+	var removal_sold := run_coordinator.run.shop_purchases[local_slot].has("service:remove_card")
+	var removal_disabled := removal_sold or run_coordinator.run.gold[local_slot] < int(inventory.remove_card_cost) or run_coordinator.run.decks[local_slot].size() <= 5
+	var removal_text := "✓ 카드 정비 완료" if removal_sold else "✂  덱에서 카드 1장 제거 · %d C" % inventory.remove_card_cost
+	var removal_button := _action_button(removal_text, _show_remove_card_picker.bind(int(inventory.remove_card_cost)), Color("#bc8cff"), 58)
+	removal_button.disabled = removal_disabled
+	overlay_content.add_child(removal_button)
+	var service_hint := "방문당 1회 · 최소 덱 5장 · 소비 아이템 최대 3개"
+	if not removal_sold and run_coordinator.run.gold[local_slot] < int(inventory.remove_card_cost):
+		service_hint = "카드 제거에 %d C가 더 필요합니다 · %s" % [int(inventory.remove_card_cost) - run_coordinator.run.gold[local_slot], service_hint]
+	_info_panel("정비 서비스", service_hint, Color("#bc8cff"))
+
+func _show_remove_card_picker(cost: int) -> void:
+	_clear_overlay()
+	overlay_title.text = "덱 정비 · 제거할 카드 선택"
+	overlay_subtitle.text = "P%d 덱 %d장 · 카드 1장 제거 %d C · 선택 후 한 번 더 확인합니다." % [local_slot + 1, run_coordinator.run.decks[local_slot].size(), cost]
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	overlay_content.add_child(grid)
+	for index in run_coordinator.run.decks[local_slot].size():
+		var card_id := StringName(run_coordinator.run.decks[local_slot][index])
+		if not catalog.has(card_id):
+			continue
+		var card: CardData = catalog[card_id]
+		var button := preload("res://src/ui/card_button.gd").new()
+		button.custom_minimum_size = Vector2(245, 190)
+		var accent := _scope_color(card.owner_scope)
+		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "제거 후보로 선택")
+		button.pressed.connect(_show_remove_card_confirmation.bind(index, cost))
+		grid.add_child(button)
+	_add_connection_action("←  상점으로 돌아가기", _show_shop, COLOR_MUTED)
+
+func _show_remove_card_confirmation(deck_index: int, cost: int) -> void:
+	if deck_index < 0 or deck_index >= run_coordinator.run.decks[local_slot].size():
+		_show_shop()
+		return
+	var card_id := StringName(run_coordinator.run.decks[local_slot][deck_index])
+	var card: CardData = catalog[card_id]
+	_clear_overlay()
+	overlay_title.text = "카드 제거 확인"
+	overlay_subtitle.text = "%s을(를) 덱에서 영구 제거하고 %d C를 사용합니다." % [card.display_name, cost]
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	overlay_content.add_child(row)
+	var preview := preload("res://src/ui/card_button.gd").new()
+	preview.custom_minimum_size = Vector2(280, 220)
+	var accent := _scope_color(card.owner_scope)
+	preview.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, true, "제거 예정")
+	preview.disabled = true
+	row.add_child(preview)
+	_info_panel("되돌릴 수 없는 정비", "확정하면 현재 런의 덱에서 즉시 제거되고 체크포인트에 저장됩니다. 이번 상점에서는 한 번만 이용할 수 있습니다.", COLOR_RED)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var cancel := _action_button("←  다른 카드 선택", _show_remove_card_picker.bind(cost), COLOR_MUTED, 64)
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(cancel)
+	var confirm := _action_button("✂  %d C 사용하고 제거" % cost, _remove_shop_card.bind(deck_index, cost), COLOR_RED, 64)
+	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(confirm)
+	overlay_content.add_child(actions)
+
+func _remove_shop_card(deck_index: int, cost: int) -> void:
+	if not run_coordinator.remove_card(local_slot, deck_index, cost):
+		overlay_subtitle.text = "카드를 제거하지 못했습니다. 크레딧과 덱 상태를 다시 확인해 주세요."
+		return
+	_clear_overlay()
+	overlay_title.text = "덱 정비 완료"
+	overlay_subtitle.text = "카드 1장을 제거했습니다. P%d 덱은 이제 %d장입니다." % [local_slot + 1, run_coordinator.run.decks[local_slot].size()]
+	_info_panel("체크포인트 저장 완료", "보유 크레딧 %d C · 이번 상점의 카드 제거 서비스를 사용했습니다." % run_coordinator.run.gold[local_slot], Color("#bc8cff"))
+	_add_connection_action("▣  상점으로 돌아가기", _show_shop, COLOR_ORANGE)
 
 func _show_consumables() -> void:
 	if game_mode == "duel":

@@ -99,6 +99,20 @@ func buy_consumable(player_slot: int, entry: Dictionary) -> bool:
 	checkpoint("consumable_purchase")
 	return true
 
+func remove_card(player_slot: int, deck_index: int, cost: int) -> bool:
+	var purchase_key := "service:remove_card"
+	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or cost < 0:
+		return false
+	if run.shop_purchases[player_slot].has(purchase_key) or run.gold[player_slot] < cost:
+		return false
+	if deck_index < 0 or deck_index >= run.decks[player_slot].size() or run.decks[player_slot].size() <= 5:
+		return false
+	run.gold[player_slot] -= cost
+	run.decks[player_slot].remove_at(deck_index)
+	run.shop_purchases[player_slot].append(purchase_key)
+	checkpoint("card_removed")
+	return true
+
 func use_consumable(combat: CombatState, player_slot: int, item_index: int, engine: CombatEngine) -> Dictionary:
 	if not _valid_slot(player_slot):
 		return {"ok": false, "error": "invalid_slot"}
@@ -322,7 +336,10 @@ func _apply_noncombat_effects(completed_types: Array[String]) -> Array[String]:
 
 func _set_shop_access(completed_types: Array[String]) -> void:
 	for slot in 2:
-		run.shop_open[slot] = slot < completed_types.size() and completed_types[slot] == "shop"
+		var opens_shop := slot < completed_types.size() and completed_types[slot] == "shop"
+		if opens_shop:
+			run.shop_purchases[slot].clear()
+		run.shop_open[slot] = opens_shop
 
 func _resolve_event(event: Dictionary, first: int, second: int) -> Dictionary:
 	if first != second:
