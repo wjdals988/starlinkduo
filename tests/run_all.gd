@@ -17,8 +17,9 @@ func _init() -> void:
 	_test_combat_snapshot_round_trip()
 	_test_full_card_catalog()
 	_test_full_run_content_catalog()
+	_test_route_selection_and_key_gate()
 	if failures.is_empty():
-		print("PASS: 14 core, content, run, save, economy, protocol, and transport tests")
+		print("PASS: 15 core, content, run, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -224,6 +225,28 @@ func _test_full_run_content_catalog() -> void:
 		_expect(stage.elites.size() == 2, "each stage has two elites")
 		_expect(not stage.boss.id.is_empty(), "each stage has one boss")
 	_expect(content.true_boss.health > content.stages[-1].boss.health, "true boss exceeds final stage boss health")
+
+func _test_route_selection_and_key_gate() -> void:
+	var store := RunSaveStore.new("user://route_test.json")
+	store.clear()
+	var coordinator := RunCoordinator.new(FullCardCatalog.build(), store)
+	var run := coordinator.start_new(99)
+	var step: Dictionary = run.map.stages[0].steps[0]
+	var first := coordinator.choose_route(0, step.lanes[0].options[0].id)
+	_expect(first.ok and not first.ready, "first personal route waits for teammate")
+	_expect(not coordinator.complete_routes(["combat"]).ok, "routes cannot complete before both choices")
+	var second := coordinator.choose_route(1, step.lanes[1].options[0].id)
+	_expect(second.ok and second.ready, "second personal route makes the pair ready")
+	_expect(coordinator.complete_routes([first.node_type, second.node_type]).ok and run.step == 1, "completed pair advances exactly one step")
+	run.step = MapGenerator.TRAVERSAL_STEPS - 1
+	run.pending_routes = {0: "a", 1: "b"}
+	coordinator.complete_routes(["combat", "combat"])
+	_expect(run.stage == 2 and not run.keys[0], "stage completion does not grant a free key")
+	run.stage = 1
+	run.pending_routes = {0: "a", 1: "b"}
+	coordinator.complete_routes(["key_challenge", "combat"])
+	_expect(run.keys[0], "completed key challenge unlocks only its stage key")
+	store.clear()
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:

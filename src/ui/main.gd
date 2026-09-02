@@ -403,6 +403,8 @@ func _show_map() -> void:
 	var run := run_coordinator.run
 	overlay_title.text = "항로 선택 · STAGE %d" % run.stage
 	overlay_subtitle.text = "진행 %d / 8   ·   열쇠 %d / 3   ·   런 %s" % [run.step, run.keys.count(true), run.run_id]
+	if run.pending_routes.size() == 2:
+		_add_connection_action("선택 완료 · 노드 진입", _enter_selected_routes, COLOR_CYAN)
 	var stage: Dictionary = run.map.stages[run.stage - 1]
 	for step_data in stage.steps:
 		var row := HBoxContainer.new()
@@ -412,15 +414,46 @@ func _show_map() -> void:
 		marker.text = "%s %02d" % ["현재" if int(step_data.index) == run.step else "구간", int(step_data.index) + 1]
 		marker.add_theme_color_override("font_color", COLOR_CYAN if int(step_data.index) == run.step else COLOR_MUTED)
 		row.add_child(marker)
+		var is_current := int(step_data.index) == run.step
 		if step_data.kind == "common":
-			row.add_child(_route_chip("공동 · %s" % _node_label(step_data.options[0].type), COLOR_CYAN))
+			if is_current and run.pending_routes.is_empty():
+				row.add_child(_route_button("공동 · %s 선택" % _node_label(step_data.options[0].type), COLOR_CYAN, _choose_route.bind(local_slot, step_data.options[0].id)))
+			else:
+				row.add_child(_route_chip("공동 · %s" % _node_label(step_data.options[0].type), COLOR_CYAN))
 		else:
 			for slot in 2:
-				var option_texts: Array[String] = []
-				for option in step_data.lanes[slot].options:
-					option_texts.append(_node_label(option.type))
-				row.add_child(_route_chip("P%d  %s" % [slot + 1, " / ".join(option_texts)], COLOR_BLUE if slot == 0 else COLOR_ORANGE))
+				var accent := COLOR_BLUE if slot == 0 else COLOR_ORANGE
+				if is_current and slot == local_slot and not run.pending_routes.has(slot):
+					var choices := VBoxContainer.new()
+					choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+					for option in step_data.lanes[slot].options:
+						choices.add_child(_route_button("P%d · %s" % [slot + 1, _node_label(option.type)], accent, _choose_route.bind(slot, option.id)))
+					row.add_child(choices)
+				else:
+					var option_texts: Array[String] = []
+					for option in step_data.lanes[slot].options:
+						option_texts.append(_node_label(option.type))
+					var prefix := "선택됨" if is_current and run.pending_routes.has(slot) else "P%d" % (slot + 1)
+					row.add_child(_route_chip("%s  %s" % [prefix, " / ".join(option_texts)], accent))
 		overlay_content.add_child(row)
+
+func _choose_route(slot: int, node_id: String) -> void:
+	var result := run_coordinator.choose_route(slot, node_id)
+	if not result.ok:
+		overlay_subtitle.text = "항로를 선택하지 못했습니다: %s" % result.error
+		return
+	if cooperative_session == null and not result.ready:
+		var step_data: Dictionary = run_coordinator.run.map.stages[run_coordinator.run.stage - 1].steps[run_coordinator.run.step]
+		var teammate_slot := 1 - slot
+		run_coordinator.choose_route(teammate_slot, step_data.lanes[teammate_slot].options[0].id)
+	_show_map()
+
+func _enter_selected_routes() -> void:
+	var types := run_coordinator.selected_route_types()
+	var result := run_coordinator.complete_routes(types)
+	if result.ok:
+		overlay_subtitle.text = "%s 진입 완료 · 진행 상황을 저장했습니다." % " + ".join(types.map(func(type: String) -> String: return _node_label(type)))
+		_show_map()
 
 func _show_reward() -> void:
 	_clear_overlay()
@@ -484,6 +517,16 @@ func _route_chip(text: String, accent: Color) -> PanelContainer:
 	label.add_theme_font_size_override("font_size", 16)
 	chip.add_child(label)
 	return chip
+
+func _route_button(text: String, accent: Color, callback: Callable) -> Button:
+	var button := Button.new()
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.custom_minimum_size.y = 48
+	button.text = text
+	button.add_theme_font_size_override("font_size", 16)
+	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, accent, 2))
+	button.pressed.connect(callback)
+	return button
 
 func _node_label(type: String) -> String:
 	return {"combat": "전투", "event": "이벤트", "shop": "상점", "rest": "휴식", "elite": "엘리트", "key_challenge": "열쇠 도전"}.get(type, type)

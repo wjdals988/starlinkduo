@@ -14,6 +14,7 @@ var decks: Array[Array] = [[], []]
 var relics: Array[Array] = [[], []]
 var consumables: Array[Array] = [[], []]
 var map: Dictionary = {}
+var pending_routes: Dictionary = {}
 var checkpoint_reason := "new_run"
 
 func _init(seed_value: int = 1) -> void:
@@ -42,6 +43,7 @@ func to_snapshot() -> Dictionary:
 		"relics": relics.duplicate(true),
 		"consumables": consumables.duplicate(true),
 		"map": map.duplicate(true),
+		"pending_routes": pending_routes.duplicate(true),
 		"checkpoint_reason": checkpoint_reason,
 	}
 
@@ -59,6 +61,7 @@ static func from_snapshot(snapshot: Dictionary) -> RunState:
 	result.relics.assign(snapshot.relics)
 	result.consumables.assign(snapshot.consumables)
 	result.map = _normalize_json_numbers(snapshot.map)
+	result.pending_routes = _normalize_json_numbers(snapshot.get("pending_routes", {}))
 	result.checkpoint_reason = snapshot.checkpoint_reason
 	return result
 

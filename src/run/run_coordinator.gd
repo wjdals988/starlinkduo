@@ -56,10 +56,56 @@ func buy_card(player_slot: int, entry: Dictionary) -> bool:
 	checkpoint("shop_purchase")
 	return true
 
+func choose_route(player_slot: int, node_id: String) -> Dictionary:
+	if not _valid_slot(player_slot):
+		return {"ok": false, "error": "invalid_slot"}
+	if run.step < 0 or run.step >= MapGenerator.TRAVERSAL_STEPS:
+		return {"ok": false, "error": "route_unavailable"}
+	var step_data: Dictionary = run.map.stages[run.stage - 1].steps[run.step]
+	if step_data.kind == "common":
+		if step_data.options[0].id != node_id:
+			return {"ok": false, "error": "invalid_node"}
+		run.pending_routes = {0: node_id, 1: node_id}
+		checkpoint("routes_ready")
+		return {"ok": true, "ready": true, "node_type": step_data.options[0].type}
+	var valid_node := false
+	var node_type := ""
+	for option in step_data.lanes[player_slot].options:
+		if option.id == node_id:
+			valid_node = true
+			node_type = option.type
+			break
+	if not valid_node:
+		return {"ok": false, "error": "invalid_node"}
+	run.pending_routes[player_slot] = node_id
+	checkpoint("route_selected")
+	return {"ok": true, "ready": run.pending_routes.size() == 2, "node_type": node_type}
+
+func complete_routes(completed_types: Array[String]) -> Dictionary:
+	if run.pending_routes.size() != 2:
+		return {"ok": false, "error": "routes_not_ready"}
+	if completed_types.has("key_challenge"):
+		run.unlock_key(run.stage)
+	run.pending_routes.clear()
+	advance_step()
+	return {"ok": true}
+
+func selected_route_types() -> Array[String]:
+	var result: Array[String] = []
+	if run.pending_routes.size() != 2:
+		return result
+	var step_data: Dictionary = run.map.stages[run.stage - 1].steps[run.step]
+	if step_data.kind == "common":
+		return [String(step_data.options[0].type), String(step_data.options[0].type)]
+	for slot in 2:
+		for option in step_data.lanes[slot].options:
+			if option.id == run.pending_routes.get(slot, ""):
+				result.append(String(option.type))
+	return result
+
 func advance_step() -> void:
 	run.step += 1
-	if run.step > MapGenerator.TRAVERSAL_STEPS:
-		run.unlock_key(run.stage)
+	if run.step >= MapGenerator.TRAVERSAL_STEPS:
 		run.stage = mini(run.stage + 1, 3)
 		run.step = 0
 	checkpoint("step_complete")
