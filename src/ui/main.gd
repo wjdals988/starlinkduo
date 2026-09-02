@@ -28,6 +28,9 @@ var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
 var active_route_types: Array[String] = []
 var active_route_combat := false
+var reduce_motion := false
+var haptics_enabled := true
+var glow_enabled := true
 
 var team_health_label: Label
 var team_health_bar: ProgressBar
@@ -53,6 +56,7 @@ var intent_label: Label
 var energy_label: Label
 
 func _ready() -> void:
+	_load_accessibility_settings()
 	catalog = FullCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
 	run_coordinator.resume_or_start(20260902)
@@ -172,8 +176,68 @@ func _show_hub() -> void:
 	_clear_overlay()
 	overlay_title.text = "함선 메뉴"
 	overlay_subtitle.text = "원정 정보와 장비를 확인합니다. 전투 진행 상태는 유지됩니다."
-	for item in [["◈  플레이 모드", _show_mode, COLOR_CYAN], ["◆  대원 편성", _show_roster, COLOR_BLUE], ["⌁  항로 지도", _show_map, COLOR_CYAN], ["✦  전투 보상", _show_reward, COLOR_YELLOW], ["▣  궤도 상점", _show_shop, COLOR_ORANGE], ["＋  유물 · 소비품", _show_consumables, Color("#bc8cff")]]:
+	for item in [["◈  플레이 모드", _show_mode, COLOR_CYAN], ["◆  대원 편성", _show_roster, COLOR_BLUE], ["⌁  항로 지도", _show_map, COLOR_CYAN], ["✦  전투 보상", _show_reward, COLOR_YELLOW], ["▣  궤도 상점", _show_shop, COLOR_ORANGE], ["＋  유물 · 소비품", _show_consumables, Color("#bc8cff")], ["⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED]]:
 		_add_connection_action(item[0], item[1], item[2])
+
+func _show_settings() -> void:
+	_clear_overlay()
+	overlay_title.text = "화면 · 조작 설정"
+	overlay_subtitle.text = "연출 강도와 진동을 기기별로 조절합니다. 변경 사항은 이 기기에 자동 저장됩니다."
+	_add_setting_toggle("모션 줄이기", "카드 선택 전환을 즉시 표시해 화면 움직임을 줄입니다.", reduce_motion, _set_reduce_motion)
+	_add_setting_toggle("진동 피드백", "카드를 선택하거나 취소할 때 짧은 햅틱 신호를 사용합니다.", haptics_enabled, _set_haptics)
+	_add_setting_toggle("선택 카드 발광", "선택 카드의 강조 테두리 강도를 높입니다.", glow_enabled, _set_glow)
+	_info_panel("접근성 기준", "주요 터치 영역 48dp 이상 · 상태를 색상과 문자로 함께 표시 · 모달 외부 전투 입력 차단", COLOR_CYAN)
+
+func _add_setting_toggle(title: String, description: String, value: bool, callback: Callable) -> void:
+	var row := PanelContainer.new()
+	row.custom_minimum_size.y = 78
+	row.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL, 16, Color("#8297bb55"), 1, 16, 10))
+	var content := HBoxContainer.new()
+	row.add_child(content)
+	var copy := Label.new()
+	copy.text = "%s\n%s" % [title, description]
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.add_theme_font_size_override("font_size", 15)
+	copy.add_theme_color_override("font_color", COLOR_TEXT)
+	content.add_child(copy)
+	var toggle := CheckButton.new()
+	toggle.text = "켜짐" if value else "꺼짐"
+	toggle.button_pressed = value
+	toggle.custom_minimum_size = Vector2(120, 48)
+	toggle.toggled.connect(func(enabled: bool) -> void:
+		toggle.text = "켜짐" if enabled else "꺼짐"
+		callback.call(enabled)
+	)
+	content.add_child(toggle)
+	overlay_content.add_child(row)
+
+func _set_reduce_motion(enabled: bool) -> void:
+	reduce_motion = enabled
+	_save_accessibility_settings()
+
+func _set_haptics(enabled: bool) -> void:
+	haptics_enabled = enabled
+	_save_accessibility_settings()
+
+func _set_glow(enabled: bool) -> void:
+	glow_enabled = enabled
+	_save_accessibility_settings()
+	_refresh()
+
+func _load_accessibility_settings() -> void:
+	var config := ConfigFile.new()
+	if config.load("user://accessibility.cfg") != OK:
+		return
+	reduce_motion = bool(config.get_value("presentation", "reduce_motion", false))
+	haptics_enabled = bool(config.get_value("presentation", "haptics", true))
+	glow_enabled = bool(config.get_value("presentation", "glow", true))
+
+func _save_accessibility_settings() -> void:
+	var config := ConfigFile.new()
+	config.set_value("presentation", "reduce_motion", reduce_motion)
+	config.set_value("presentation", "haptics", haptics_enabled)
+	config.set_value("presentation", "glow", glow_enabled)
+	config.save("user://accessibility.cfg")
 
 func _build_battlefield() -> Control:
 	var row := HBoxContainer.new()
@@ -370,6 +434,7 @@ func _build_overlay() -> void:
 	overlay_subtitle = Label.new()
 	overlay_subtitle.add_theme_font_size_override("font_size", 16)
 	overlay_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
+	overlay_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	titles.add_child(overlay_subtitle)
 	var close := Button.new()
 	close.text = "×  닫기"
@@ -377,10 +442,14 @@ func _build_overlay() -> void:
 	close.add_theme_stylebox_override("normal", _panel_style(Color("#192541"), 24, Color("#91a5c655"), 1, 16, 8))
 	close.pressed.connect(func() -> void: overlay.hide())
 	header.add_child(close)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
 	overlay_content = VBoxContainer.new()
-	overlay_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	overlay_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	overlay_content.add_theme_constant_override("separation", 12)
-	column.add_child(overlay_content)
+	scroll.add_child(overlay_content)
 
 func _show_mode() -> void:
 	_clear_overlay()
@@ -437,6 +506,12 @@ func _clear_overlay() -> void:
 func _show_connection() -> void:
 	_clear_overlay()
 	overlay_title.text = "근거리 2인 연결"
+	var steps := HBoxContainer.new()
+	steps.add_theme_constant_override("separation", 8)
+	steps.add_child(_status_chip("1  Bluetooth 켜기", COLOR_CYAN))
+	steps.add_child(_status_chip("2  호스트·참가 선택", COLOR_BLUE))
+	steps.add_child(_status_chip("3  호환 코드 확인", COLOR_ORANGE))
+	overlay_content.add_child(steps)
 	_add_connection_notice("호환 코드 · %s" % GameCompatibility.code(), COLOR_MUTED)
 	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
 		overlay_subtitle.text = "현재 환경에는 Android Bluetooth 플러그인이 없어 로컬 데모로 실행 중입니다."
@@ -444,10 +519,12 @@ func _show_connection() -> void:
 		return
 	if not bluetooth_transport.is_enabled():
 		overlay_subtitle.text = "Bluetooth가 꺼져 있습니다. 빠른 설정에서 Bluetooth를 켠 뒤 새로고침하세요."
+		_info_panel("비행기 안에서 연결하기", "1. 비행기 모드를 유지합니다.\n2. 빠른 설정에서 Bluetooth만 다시 켭니다.\n3. 두 기기를 Android 설정에서 페어링한 뒤 돌아옵니다.", COLOR_CYAN)
 		_add_connection_action("상태 새로고침", _show_connection, COLOR_YELLOW)
 		return
 	if not bluetooth_transport.has_permissions():
 		overlay_subtitle.text = "주변 기기 권한이 필요합니다. 위치 정보는 수집하지 않습니다."
+		_info_panel("권한 안내", "Android 12 이상에서는 Bluetooth 연결에 주변 기기 권한이 필요합니다. 앱은 위치나 인터넷 연결을 사용하지 않습니다.", COLOR_BLUE)
 		_add_connection_action("주변 기기 권한 허용", _request_bluetooth_permissions, COLOR_CYAN)
 		return
 	overlay_subtitle.text = "한 명은 방 만들기, 다른 한 명은 아래의 페어링된 기기를 선택하세요."
@@ -457,7 +534,7 @@ func _show_connection() -> void:
 	overlay_content.add_child(divider)
 	var paired := bluetooth_transport.get_paired_devices()
 	if paired.is_empty():
-		_add_connection_notice("페어링된 기기가 없습니다. Android 설정에서 두 기기를 먼저 페어링하세요.", COLOR_YELLOW)
+		_info_panel("페어링된 기기 없음", "Android 설정에서 상대 Galaxy를 먼저 페어링하세요. 한 명만 방을 만들고 다른 한 명은 표시된 기기 이름을 선택해야 합니다.", COLOR_YELLOW)
 	else:
 		for device in paired:
 			var label := "%s\n%s" % [device.name, device.address]
@@ -523,6 +600,32 @@ func _add_connection_notice(text: String, accent: Color) -> void:
 	notice.add_theme_font_size_override("font_size", 19)
 	notice.add_theme_color_override("font_color", accent)
 	overlay_content.add_child(notice)
+
+func _status_chip(text: String, accent: Color) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chip.custom_minimum_size.y = 48
+	chip.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.10), 24, Color(accent, 0.65), 1, 12, 6))
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 13)
+	label.add_theme_color_override("font_color", COLOR_TEXT)
+	chip.add_child(label)
+	return chip
+
+func _info_panel(title: String, body: String, accent: Color) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.08), 16, Color(accent, 0.55), 1, 18, 14))
+	var label := Label.new()
+	label.text = "%s\n%s" % [title, body]
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", COLOR_TEXT)
+	panel.add_child(label)
+	overlay_content.add_child(panel)
+	return panel
 
 func _connection_status_text() -> String:
 	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
@@ -600,20 +703,34 @@ func _show_roster() -> void:
 	for slot in 2:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
+		var identity := PanelContainer.new()
+		identity.custom_minimum_size = Vector2(190, 100)
+		identity.add_theme_stylebox_override("panel", _panel_style(Color("#111a31"), 16, COLOR_BLUE if slot == 0 else COLOR_ORANGE, 2, 8, 6))
+		var identity_row := HBoxContainer.new()
+		identity.add_child(identity_row)
+		var portrait := TextureRect.new()
+		portrait.custom_minimum_size = Vector2(72, 88)
+		portrait.texture = load(_character_portrait(run_coordinator.run.characters[slot]))
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		identity_row.add_child(portrait)
 		var slot_label := Label.new()
-		slot_label.custom_minimum_size.x = 170
-		slot_label.text = "P%d  %s" % [slot + 1, _character_name(run_coordinator.run.characters[slot])]
-		slot_label.add_theme_font_size_override("font_size", 19)
+		slot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot_label.text = "P%d\n%s" % [slot + 1, _character_name(run_coordinator.run.characters[slot])]
+		slot_label.add_theme_font_size_override("font_size", 17)
 		slot_label.add_theme_color_override("font_color", COLOR_BLUE if slot == 0 else COLOR_ORANGE)
-		row.add_child(slot_label)
+		identity_row.add_child(slot_label)
+		row.add_child(identity)
 		var can_edit := cooperative_session == null or slot == local_slot
 		for character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
 			var button := Button.new()
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			button.custom_minimum_size.y = 62
+			button.custom_minimum_size.y = 100
 			button.text = "%s\n%s" % [_character_name(character_id), _character_role(character_id)]
 			button.disabled = not selection_open or not can_edit or run_coordinator.run.characters[slot] == character_id or run_coordinator.run.characters[1 - slot] == character_id
-			button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, _character_color(character_id), 2))
+			button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 14, _character_color(character_id), 2, 8, 6))
+			button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, _character_color(character_id), 3, 8, 6))
+			button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 14, Color("#4d5a71"), 1, 8, 6))
 			button.pressed.connect(_select_character.bind(slot, character_id))
 			row.add_child(button)
 		overlay_content.add_child(row)
@@ -690,16 +807,17 @@ func _show_map() -> void:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
 		var marker := Label.new()
-		marker.custom_minimum_size.x = 95
-		marker.text = "%s %02d" % ["현재" if int(step_data.index) == run.step else "구간", int(step_data.index) + 1]
+		marker.custom_minimum_size.x = 106
+		marker.text = "%s  %02d" % ["▶ 현재" if int(step_data.index) == run.step else "· 구간", int(step_data.index) + 1]
+		marker.add_theme_font_size_override("font_size", 15)
 		marker.add_theme_color_override("font_color", COLOR_CYAN if int(step_data.index) == run.step else COLOR_MUTED)
 		row.add_child(marker)
 		var is_current := int(step_data.index) == run.step
 		if step_data.kind == "common":
 			if is_current and run.pending_routes.is_empty():
-				row.add_child(_route_button("공동 · %s 선택" % _node_label(step_data.options[0].type), COLOR_CYAN, _choose_route.bind(local_slot, step_data.options[0].id)))
+				row.add_child(_route_button("%s  공동 · %s 선택" % [_node_icon(step_data.options[0].type), _node_label(step_data.options[0].type)], COLOR_CYAN, _choose_route.bind(local_slot, step_data.options[0].id)))
 			else:
-				row.add_child(_route_chip("공동 · %s" % _node_label(step_data.options[0].type), COLOR_CYAN))
+				row.add_child(_route_chip("%s  공동 · %s" % [_node_icon(step_data.options[0].type), _node_label(step_data.options[0].type)], COLOR_CYAN))
 		else:
 			for slot in 2:
 				var accent := COLOR_BLUE if slot == 0 else COLOR_ORANGE
@@ -707,7 +825,7 @@ func _show_map() -> void:
 					var choices := VBoxContainer.new()
 					choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 					for option in step_data.lanes[slot].options:
-						choices.add_child(_route_button("P%d · %s" % [slot + 1, _node_label(option.type)], accent, _choose_route.bind(slot, option.id)))
+						choices.add_child(_route_button("%s  P%d · %s" % [_node_icon(option.type), slot + 1, _node_label(option.type)], accent, _choose_route.bind(slot, option.id)))
 					row.add_child(choices)
 				else:
 					var option_texts: Array[String] = []
@@ -857,7 +975,7 @@ func _show_reward() -> void:
 	var rewards := run_coordinator.current_card_reward(local_slot)
 	if rewards.is_empty():
 		overlay_subtitle.text = "받을 수 있는 카드 보상이 없습니다. 전투에서 승리하면 보상이 해금됩니다."
-		_add_connection_notice("보상은 플레이어별로 전투당 1회만 선택할 수 있습니다.", COLOR_MUTED)
+		_info_panel("보상 대기 중", "전투 승리 후 전용 카드 2장과 공용 카드 1장 중 하나를 선택합니다. 보상은 플레이어별로 전투당 한 번만 획득할 수 있습니다.", COLOR_YELLOW)
 		return
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -865,11 +983,12 @@ func _show_reward() -> void:
 	overlay_content.add_child(row)
 	for card_id in rewards:
 		var card: CardData = catalog[card_id]
-		var button := Button.new()
+		var button := preload("res://src/ui/card_button.gd").new()
 		button.custom_minimum_size = Vector2(260, 220)
-		button.text = "%s\n\n%d 에너지\n%s\n\n%s" % [_rarity_label(card.rarity), card.energy_cost, card.display_name, _effect_summary(card)]
-		button.add_theme_font_size_override("font_size", 19)
-		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 18, _scope_color(card.owner_scope), 3))
+		var accent := _scope_color(card.owner_scope)
+		button.configure(card, _rarity_label(card.rarity), _effect_summary(card), accent, false, "＋ 이 카드 획득")
+		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 18, accent, 3, 14, 10))
+		button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 18, accent, 4, 14, 10))
 		button.pressed.connect(_claim_reward.bind(card_id))
 		row.add_child(button)
 
@@ -885,7 +1004,7 @@ func _show_shop() -> void:
 	overlay_title.text = "궤도 정거장 상점"
 	if not run_coordinator.run.shop_open[local_slot]:
 		overlay_subtitle.text = "현재 항로에서는 상점을 이용할 수 없습니다."
-		_add_connection_notice("상점 노드를 선택해 도착한 플레이어만 구매할 수 있습니다.", COLOR_MUTED)
+		_info_panel("상점 접근 조건", "항로에서 상점 노드를 선택한 플레이어만 구매할 수 있습니다. 크레딧과 구매 결과는 플레이어별로 저장됩니다.", COLOR_ORANGE)
 		return
 	var inventory := run_coordinator.current_shop(local_slot)
 	overlay_subtitle.text = "P%d 보유 크레딧 %d · 공용 카드는 희소성 때문에 10%% 할증" % [local_slot + 1, run_coordinator.run.gold[local_slot]]
@@ -895,12 +1014,14 @@ func _show_shop() -> void:
 	overlay_content.add_child(row)
 	for entry in inventory.cards:
 		var card: CardData = catalog[StringName(entry.card_id)]
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(190, 190)
-		button.text = "%s\n%s\n%s\n\n%d C" % [_rarity_label(card.rarity), card.display_name, _effect_summary(card), entry.price]
+		var button := preload("res://src/ui/card_button.gd").new()
+		button.custom_minimum_size = Vector2(200, 190)
+		var accent := _scope_color(card.owner_scope)
+		button.configure(card, _rarity_label(card.rarity), _effect_summary(card), accent, false, "%d C  ·  구매" % entry.price)
 		button.disabled = run_coordinator.run.gold[local_slot] < int(entry.price)
-		button.add_theme_font_size_override("font_size", 16)
-		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, _scope_color(card.owner_scope), 2))
+		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, accent, 2, 12, 8))
+		button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 16, accent, 3, 12, 8))
+		button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 16, Color("#4d5a71"), 1, 12, 8))
 		button.pressed.connect(_buy_shop_card.bind(entry))
 		row.add_child(button)
 	var item_row := HBoxContainer.new()
@@ -936,7 +1057,7 @@ func _show_consumables() -> void:
 	_add_connection_notice("활성 유물 %d개%s" % [relic_names.size(), " · " + ", ".join(relic_names) if not relic_names.is_empty() else ""], COLOR_CYAN)
 	if not active_route_combat or state.phase != CombatState.Phase.PLANNING:
 		overlay_subtitle.text = "소비 아이템은 항로 전투의 행동 선택 단계에서만 사용할 수 있습니다."
-		_add_connection_notice("P%d 소지품 %d / 3" % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()], COLOR_MUTED)
+		_info_panel("P%d 소지품 · %d / 3" % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()], "소비 아이템은 행동 선택 단계에서 사용하며 즉시 소모됩니다. 유물은 조건을 만족하면 자동으로 발동합니다.", Color("#bc8cff"))
 		return
 	overlay_subtitle.text = "P%d 소지품 %d / 3 · 사용 즉시 소모되고 체크포인트에 저장됩니다." % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()]
 	if run_coordinator.run.consumables[local_slot].is_empty():
@@ -994,12 +1115,15 @@ func _shop_item_button(text: String, accent: Color, disabled: bool) -> Button:
 	button.disabled = disabled
 	button.add_theme_font_size_override("font_size", 14)
 	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, accent, 2))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 12, accent, 3))
+	button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 12, Color("#4d5a71"), 1))
 	return button
 
 func _route_chip(text: String, accent: Color) -> PanelContainer:
 	var chip := PanelContainer.new()
 	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	chip.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL, 12, accent, 1))
+	chip.custom_minimum_size.y = 46
+	chip.add_theme_stylebox_override("panel", _panel_style(Color("#101a31b8"), 23, Color(accent, 0.55), 1, 12, 6))
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1019,12 +1143,16 @@ func _route_button(text: String, accent: Color, callback: Callable) -> Button:
 	button.custom_minimum_size.y = 48
 	button.text = text
 	button.add_theme_font_size_override("font_size", 16)
-	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, accent, 2))
+	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 24, accent, 2, 12, 6))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.20), 24, accent, 3, 12, 6))
 	button.pressed.connect(callback)
 	return button
 
 func _node_label(type: String) -> String:
 	return {"combat": "전투", "event": "이벤트", "shop": "상점", "rest": "휴식", "elite": "엘리트", "key_challenge": "열쇠 도전"}.get(type, type)
+
+func _node_icon(type: String) -> String:
+	return {"combat": "⚔", "event": "?", "shop": "▣", "rest": "＋", "elite": "◆", "key_challenge": "✦", "boss": "☠", "true_boss": "☄"}.get(type, "·")
 
 func _refresh() -> void:
 	_refresh_character_identity()
@@ -1116,15 +1244,20 @@ func _rebuild_hand() -> void:
 		var accent := _scope_color(card.owner_scope)
 		card_button.configure(card, _rarity_label(card.rarity), _effect_summary(card), accent, selected)
 		var base_color := COLOR_PANEL_SOFT if selected else COLOR_PANEL
-		var border_width := 4 if selected else 2
+		var border_width := (4 if glow_enabled else 3) if selected else 2
 		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 16, accent, border_width, 12, 8))
 		card_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 16, accent, 3, 12, 8))
 		card_button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.30), 16, accent, 4, 12, 8))
 		card_button.add_theme_color_override("font_color", COLOR_TEXT)
 		card_button.pressed.connect(_on_card_pressed.bind(hand_index, card))
 		hand_container.add_child(card_button)
+		if selected and not reduce_motion:
+			card_button.modulate = Color(1.35, 1.35, 1.35, 0.25)
+			card_button.create_tween().tween_property(card_button, "modulate", Color.WHITE, 0.16)
 
 func _on_card_pressed(hand_index: int, card: CardData) -> void:
+	if haptics_enabled:
+		Input.vibrate_handheld(28, 0.22)
 	if selected_hand_indices.has(hand_index):
 		var selected_position := selected_hand_indices.find(hand_index)
 		selected_hand_indices.remove_at(selected_position)

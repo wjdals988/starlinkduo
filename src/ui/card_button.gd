@@ -4,7 +4,7 @@ var accent := Color.WHITE
 var selected := false
 var seed_value := 0
 
-func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool) -> void:
+func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "") -> void:
 	accent = accent_color
 	selected = is_selected
 	seed_value = String(card.id).hash()
@@ -45,7 +45,8 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	var effect := _label(effect_text, 12, Color("#dce6f7"))
 	effect.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(effect)
-	var state_label := _label("◆ 선택됨" if is_selected else "탭하여 선택", 11, accent if is_selected else Color("#8fa0bc"))
+	var resolved_footer := footer_text if not footer_text.is_empty() else ("◆ 선택됨" if is_selected else "탭하여 선택")
+	var state_label := _label(resolved_footer, 11, accent if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	state_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	state_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
