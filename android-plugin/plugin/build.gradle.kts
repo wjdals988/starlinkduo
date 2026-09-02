@@ -7,6 +7,7 @@ val pluginPackageName = "com.starlinkduo.bluetooth"
 
 android {
     namespace = pluginPackageName
+    // Keep AAR metadata compatible with Godot 4.7.2's Android template.
     compileSdk = 36
 
     buildFeatures {
@@ -22,6 +23,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        disable += "GradleDependency"
     }
 
 }

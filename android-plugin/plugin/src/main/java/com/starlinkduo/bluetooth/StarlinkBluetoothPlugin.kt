@@ -7,7 +7,6 @@ import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import org.godotengine.godot.Godot
 import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.UsedByGodot
@@ -19,6 +18,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -32,6 +32,7 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     private val executor: ExecutorService = Executors.newCachedThreadPool()
     private val messages = ConcurrentLinkedQueue<String>()
     private val errors = ConcurrentLinkedQueue<String>()
+    private val connectionGeneration = AtomicLong(0)
 
     @Volatile private var state = "idle"
     @Volatile private var serverSocket: BluetoothServerSocket? = null
@@ -77,7 +78,6 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
 
     @UsedByGodot
     fun requestBluetoothPermissions() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         val host = activity ?: return
         val permissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -93,18 +93,22 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     fun startHost(serviceUuid: String): Boolean {
         val bluetooth = adapter() ?: return fail("bluetooth_unavailable")
         if (!hasConnectPermission()) return fail("permission_required")
-        closeSockets()
-        state = "listening"
+        val generation = beginOperation("listening")
         executor.execute {
             try {
                 val server = bluetooth.listenUsingRfcommWithServiceRecord(SERVICE_NAME, UUID.fromString(serviceUuid))
-                serverSocket = server
+                if (!registerServerIfCurrent(server, generation)) {
+                    server.close()
+                    return@execute
+                }
                 val accepted = server.accept()
                 server.close()
-                serverSocket = null
-                attach(accepted)
+                clearServerIfCurrent(server, generation)
+                attach(accepted, generation)
+            } catch (error: SecurityException) {
+                if (isCurrent(generation)) reportCurrent("permission_revoked", error, generation)
             } catch (error: Exception) {
-                if (state != "closed") report("host_failed", error)
+                if (isCurrent(generation) && state != "closed") reportCurrent("host_failed", error, generation)
             }
         }
         return true
@@ -114,17 +118,22 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     fun connectToDevice(address: String, serviceUuid: String): Boolean {
         val bluetooth = adapter() ?: return fail("bluetooth_unavailable")
         if (!hasConnectPermission()) return fail("permission_required")
-        closeSockets()
-        state = "connecting"
+        val generation = beginOperation("connecting")
         executor.execute {
             try {
                 bluetooth.cancelDiscovery()
                 val device = bluetooth.getRemoteDevice(address)
                 val pending = device.createRfcommSocketToServiceRecord(UUID.fromString(serviceUuid))
+                if (!registerSocketIfCurrent(pending, generation)) {
+                    pending.close()
+                    return@execute
+                }
                 pending.connect()
-                attach(pending)
+                attach(pending, generation)
+            } catch (error: SecurityException) {
+                if (isCurrent(generation)) reportCurrent("permission_revoked", error, generation)
             } catch (error: Exception) {
-                report("connect_failed", error)
+                if (isCurrent(generation)) reportCurrent("connect_failed", error, generation)
             }
         }
         return true
@@ -154,30 +163,34 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     fun pollError(): String = errors.poll() ?: ""
 
     @UsedByGodot
+    @Synchronized
     fun closeConnection() {
+        connectionGeneration.incrementAndGet()
         state = "closed"
         closeSockets()
     }
 
-    private fun attach(connectedSocket: BluetoothSocket) {
-        socket = connectedSocket
-        output = DataOutputStream(connectedSocket.outputStream)
-        state = "connected"
+    private fun attach(connectedSocket: BluetoothSocket, generation: Long) {
+        val connectedOutput = DataOutputStream(connectedSocket.outputStream)
+        if (!activateSocketIfCurrent(connectedSocket, connectedOutput, generation)) {
+            try { connectedSocket.close() } catch (_: IOException) { }
+            return
+        }
         try {
             val input = DataInputStream(connectedSocket.inputStream)
-            while (state == "connected") {
+            while (isCurrent(generation) && state == "connected") {
                 val size = input.readInt()
                 if (size !in 1..MAX_MESSAGE_BYTES) throw IOException("invalid_message_size:$size")
                 val payload = ByteArray(size)
                 input.readFully(payload)
-                messages.add(payload.toString(Charsets.UTF_8))
+                if (isCurrent(generation)) messages.add(payload.toString(Charsets.UTF_8))
             }
         } catch (_: EOFException) {
-            if (state != "closed") state = "disconnected"
+            if (isCurrent(generation) && state != "closed") state = "disconnected"
         } catch (error: IOException) {
-            if (state != "closed") report("read_failed", error)
+            if (isCurrent(generation) && state != "closed") reportCurrent("read_failed", error, generation)
         } finally {
-            closeSockets()
+            closeSocketsIfCurrent(generation)
         }
     }
 
@@ -190,13 +203,56 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
         serverSocket = null
     }
 
+    @Synchronized
+    private fun closeSocketsIfCurrent(generation: Long) {
+        if (isCurrent(generation)) closeSockets()
+    }
+
+    @Synchronized
+    private fun beginOperation(nextState: String): Long {
+        val generation = connectionGeneration.incrementAndGet()
+        closeSockets()
+        messages.clear()
+        errors.clear()
+        state = nextState
+        return generation
+    }
+
+    @Synchronized
+    private fun registerServerIfCurrent(server: BluetoothServerSocket, generation: Long): Boolean {
+        if (!isCurrent(generation)) return false
+        serverSocket = server
+        return true
+    }
+
+    @Synchronized
+    private fun clearServerIfCurrent(server: BluetoothServerSocket, generation: Long) {
+        if (isCurrent(generation) && serverSocket === server) serverSocket = null
+    }
+
+    @Synchronized
+    private fun registerSocketIfCurrent(pending: BluetoothSocket, generation: Long): Boolean {
+        if (!isCurrent(generation)) return false
+        socket = pending
+        return true
+    }
+
+    @Synchronized
+    private fun activateSocketIfCurrent(connected: BluetoothSocket, stream: DataOutputStream, generation: Long): Boolean {
+        if (!isCurrent(generation) || socket != null && socket !== connected) return false
+        socket = connected
+        output = stream
+        state = "connected"
+        return true
+    }
+
+    private fun isCurrent(generation: Long): Boolean = connectionGeneration.get() == generation
+
     private fun hasConnectPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         return activity?.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun hasScanPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         return activity?.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
     }
 
@@ -209,6 +265,11 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
         state = "error"
         errors.add("$code:${error.message ?: error.javaClass.simpleName}")
         closeSockets()
+    }
+
+    private fun reportCurrent(code: String, error: Exception, generation: Long) {
+        if (!isCurrent(generation)) return
+        report(code, error)
     }
 
     override fun onMainDestroy() {
