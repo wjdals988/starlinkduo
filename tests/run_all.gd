@@ -12,8 +12,10 @@ func _init() -> void:
 	_test_reward_and_shop_generation()
 	_test_run_save_round_trip()
 	_test_run_coordinator_economy()
+	_test_host_authoritative_session()
+	_test_session_rejects_stale_sequence()
 	if failures.is_empty():
-		print("PASS: 9 core, run, save, economy, and transport tests")
+		print("PASS: 11 core, run, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -154,6 +156,39 @@ func _test_run_coordinator_economy() -> void:
 	var restored := store.load_active()
 	_expect(restored != null and restored.decks[0] == run.decks[0], "economy mutations persist at checkpoints")
 	store.clear()
+
+func _test_host_authoritative_session() -> void:
+	var transports := LoopbackTransport.pair()
+	transports[0].start_host("test")
+	transports[1].connect_to("loopback", "test")
+	var catalog := DemoCardCatalog.build()
+	var engine := CombatEngine.new(catalog)
+	var state := engine.create_demo_combat()
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, state)
+	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
+	var hashes: Array[String] = []
+	guest.snapshot_received.connect(func(_snapshot: Dictionary, state_hash: String) -> void: hashes.append(state_hash))
+	_expect(guest.submit_plan(1, [{"card_id": "engineer_bolt", "target": 0}]).ok, "guest sends intent without mutating host directly")
+	host.poll()
+	_expect(state.players[1].ready, "host validates and accepts guest plan")
+	_expect(host.submit_plan(0, [{"card_id": &"guardian_strike", "target": 0}]).ok, "host accepts local plan")
+	guest.poll()
+	_expect(state.turn == 2 and state.enemies[0].health == 31, "host alone resolves simultaneous turn")
+	_expect(not hashes.is_empty() and hashes[-1] == StateHasher.hash_snapshot(state.to_snapshot()), "guest receives verified authoritative snapshot")
+
+func _test_session_rejects_stale_sequence() -> void:
+	var transports := LoopbackTransport.pair()
+	transports[0].start_host("test")
+	transports[1].connect_to("loopback", "test")
+	var engine := CombatEngine.new(DemoCardCatalog.build())
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, engine.create_demo_combat())
+	var errors: Array[String] = []
+	host.session_error.connect(func(code: String, _detail: String) -> void: errors.append(code))
+	var repeated := SessionProtocol.encode("resync_request", 1, {})
+	transports[1].send_message(repeated)
+	transports[1].send_message(repeated)
+	host.poll()
+	_expect(errors == ["stale_sequence"], "duplicate sequence is rejected exactly once")
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:
