@@ -17,7 +17,7 @@ var combat_state: CombatState
 var run_coordinator: RunCoordinator
 var duel_engine: DuelEngine
 var duel_state: DuelState
-var duel_save_store := DuelSaveStore.new()
+var duel_save_store: DuelSaveStore
 var game_mode := "cooperative"
 var remote_snapshot: Dictionary = {}
 var guest_pending_duel_plays: Array[Dictionary] = []
@@ -27,12 +27,13 @@ var host_guest_duel_commitment: Dictionary = {}
 var outgoing_sequence := 0
 var incoming_sequence := 0
 
-func _init(session_role: Role, session_transport: SessionTransport, combat_engine: CombatEngine = null, initial_state: CombatState = null, coordinator: RunCoordinator = null) -> void:
+func _init(session_role: Role, session_transport: SessionTransport, combat_engine: CombatEngine = null, initial_state: CombatState = null, coordinator: RunCoordinator = null, session_duel_store: DuelSaveStore = null) -> void:
 	role = session_role
 	transport = session_transport
 	engine = combat_engine
 	combat_state = initial_state
 	run_coordinator = coordinator
+	duel_save_store = session_duel_store if session_duel_store != null else DuelSaveStore.new()
 	transport.message_received.connect(_on_message)
 	transport.transport_error.connect(func(code: String, detail: String) -> void: session_error.emit(code, detail))
 	transport.state_changed.connect(_on_transport_state_changed)
@@ -72,6 +73,7 @@ func set_game_mode(mode: String) -> Dictionary:
 	guest_pending_duel_plays.clear()
 	guest_duel_nonce = ""
 	guest_duel_commit_turn = -1
+	duel_save_store.clear_pending()
 	game_mode = mode
 	if mode == "duel":
 		duel_engine = DuelEngine.new(FullCardCatalog.build())
@@ -114,10 +116,19 @@ func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 	var turn := _known_duel_turn()
 	guest_duel_commit_turn = turn
 	var commitment := _duel_plan_commitment(turn, guest_pending_duel_plays, guest_duel_nonce)
+	var pending_error := duel_save_store.save_pending_commitment({
+		"role": "guest",
+		"duel_id": String(duel_state.duel_id),
+		"turn": turn,
+		"commitment": commitment,
+		"plays": guest_pending_duel_plays,
+		"nonce": guest_duel_nonce,
+	})
+	if pending_error != OK:
+		_clear_guest_duel_commitment()
+		return _error("duel_commitment_persist_failed")
 	if not _send("duel_commit", {"slot": slot, "turn": turn, "commitment": commitment}):
-		guest_pending_duel_plays.clear()
-		guest_duel_nonce = ""
-		guest_duel_commit_turn = -1
+		_clear_guest_duel_commitment()
 		return _error("send_failed")
 	return {"ok": true, "commitment": commitment}
 
@@ -211,6 +222,7 @@ func _on_transport_state_changed(next_state: String) -> void:
 		session_error.emit("peer_disconnected", next_state)
 		return
 	if next_state == "connected" and role == Role.HOST:
+		_restore_duel_commitment_if_matching()
 		_send("game_mode", {"mode": game_mode})
 		if game_mode == "duel" and duel_state != null:
 			_publish_duel_snapshot("session_started")
@@ -237,6 +249,10 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 				_send_rejection("invalid_duel_commitment")
 				return
 			host_guest_duel_commitment = {"turn": duel_state.turn, "hash": commitment}
+			if duel_save_store.save_pending_commitment({"role": "host", "duel_id": String(duel_state.duel_id), "turn": duel_state.turn, "commitment": commitment}) != OK:
+				host_guest_duel_commitment.clear()
+				_send_rejection("duel_commitment_persist_failed")
+				return
 			peer_ready.emit(1, true)
 			_request_duel_reveal_if_ready()
 		"duel_reveal":
@@ -250,15 +266,18 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 			var revealed_hash := _duel_plan_commitment(int(payload.turn), duel_plays, String(payload.get("nonce", "")))
 			if revealed_hash != String(host_guest_duel_commitment.hash):
 				host_guest_duel_commitment.clear()
+				duel_save_store.clear_pending()
 				_send_rejection("duel_commitment_mismatch")
 				return
 			var duel_result := duel_engine.submit_plan(duel_state, 1, duel_plays)
 			if not duel_result.ok:
 				host_guest_duel_commitment.clear()
+				duel_save_store.clear_pending()
 				_send_rejection(duel_result.error)
 				return
 			host_guest_duel_commitment.clear()
 			duel_save_store.save(duel_state)
+			duel_save_store.clear_pending()
 			_publish_duel_snapshot("duel_plan_accepted")
 			_resolve_duel_if_ready()
 		"character_select":
@@ -341,6 +360,7 @@ func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 			game_mode = next_mode
 			if next_mode == "cooperative":
 				duel_state = null
+				_clear_guest_duel_commitment()
 			game_mode_changed.emit(game_mode)
 		"duel_snapshot":
 			var duel_snapshot: Variant = payload.get("state", null)
@@ -349,10 +369,9 @@ func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 				session_error.emit("invalid_duel_snapshot", "missing or mismatched state")
 				return
 			duel_state = DuelState.from_snapshot(duel_snapshot)
+			_restore_duel_commitment_if_matching()
 			if guest_duel_commit_turn >= 0 and (duel_state.phase == DuelState.Phase.FINISHED or duel_state.turn != guest_duel_commit_turn or duel_state.players[1].ready):
-				guest_pending_duel_plays.clear()
-				guest_duel_nonce = ""
-				guest_duel_commit_turn = -1
+				_clear_guest_duel_commitment()
 			game_mode = "duel"
 			duel_snapshot_received.emit(duel_state.to_snapshot(), duel_hash)
 		"run_snapshot":
@@ -376,10 +395,8 @@ func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 			snapshot_received.emit(remote_snapshot, expected_hash)
 		"reject":
 			var rejection_code := String(payload.get("code", "rejected"))
-			if rejection_code in ["duel_commitment_mismatch", "invalid_duel_commitment", "duel_reveal_without_commitment"]:
-				guest_pending_duel_plays.clear()
-				guest_duel_nonce = ""
-				guest_duel_commit_turn = -1
+			if rejection_code in ["duel_commitment_mismatch", "invalid_duel_commitment", "duel_reveal_without_commitment", "duel_commitment_persist_failed", "duel_turn_mismatch"]:
+				_clear_guest_duel_commitment()
 			session_error.emit(rejection_code, "host rejected command")
 		_:
 			session_error.emit("guest_message_forbidden", message_type)
@@ -405,6 +422,45 @@ func _request_duel_reveal_if_ready() -> void:
 
 static func _duel_plan_commitment(turn: int, plays: Array[Dictionary], nonce: String) -> String:
 	return StateHasher.hash_snapshot({"turn": turn, "plays": plays, "nonce": nonce})
+
+func _restore_duel_commitment_if_matching() -> void:
+	if duel_state == null or duel_state.phase != DuelState.Phase.PLANNING:
+		return
+	var pending := duel_save_store.load_pending_commitment()
+	var expected_role := "host" if role == Role.HOST else "guest"
+	if String(pending.get("role", "")) != expected_role or String(pending.get("duel_id", "")) != String(duel_state.duel_id) or int(pending.get("turn", -1)) != duel_state.turn:
+		if not pending.is_empty():
+			duel_save_store.clear_pending()
+		return
+	if role == Role.HOST:
+		if duel_state.players[1].ready:
+			duel_save_store.clear_pending()
+			return
+		var commitment := String(pending.get("commitment", ""))
+		if commitment.length() == 64:
+			host_guest_duel_commitment = {"turn": duel_state.turn, "hash": commitment}
+		return
+	var restored_plays: Array[Dictionary] = []
+	for play in pending.get("plays", []):
+		if play is Dictionary:
+			var restored_play: Dictionary = play.duplicate(true)
+			if restored_play.has("card_id"):
+				restored_play.card_id = StringName(restored_play.card_id)
+			restored_plays.append(restored_play)
+	var nonce := String(pending.get("nonce", ""))
+	var stored_hash := String(pending.get("commitment", ""))
+	if restored_plays.is_empty() or nonce.is_empty() or stored_hash != _duel_plan_commitment(duel_state.turn, restored_plays, nonce):
+		duel_save_store.clear_pending()
+		return
+	guest_pending_duel_plays = restored_plays
+	guest_duel_nonce = nonce
+	guest_duel_commit_turn = duel_state.turn
+
+func _clear_guest_duel_commitment() -> void:
+	guest_pending_duel_plays.clear()
+	guest_duel_nonce = ""
+	guest_duel_commit_turn = -1
+	duel_save_store.clear_pending()
 
 func _publish_duel_snapshot(reason: String) -> bool:
 	if role != Role.HOST or duel_state == null:

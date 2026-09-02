@@ -29,8 +29,9 @@ func _init() -> void:
 	_test_host_authoritative_duel_session()
 	_test_duel_save_round_trip()
 	_test_duel_commitment_tamper_rejected()
+	_test_duel_commitment_process_restart_recovery()
 	if failures.is_empty():
-		print("PASS: 26 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 27 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -552,6 +553,48 @@ func _test_duel_commitment_tamper_rejected() -> void:
 	_expect(guest.submit_duel_plan(1, [{"card_id": committed_card}]).ok, "guest can recommit after a rejected reveal")
 	run_store.clear()
 	DuelSaveStore.new().clear()
+
+func _test_duel_commitment_process_restart_recovery() -> void:
+	var host_store := DuelSaveStore.new("user://duel_restart_host.json")
+	var guest_store := DuelSaveStore.new("user://duel_restart_guest.json")
+	host_store.clear()
+	guest_store.clear()
+	var first_transports := LoopbackTransport.pair()
+	first_transports[0].start_host("duel-restart")
+	first_transports[1].connect_to("loopback", "duel-restart")
+	var catalog := FullCardCatalog.build()
+	var run_store := RunSaveStore.new("user://duel_restart_run.json")
+	run_store.clear()
+	var coordinator := RunCoordinator.new(catalog, run_store)
+	coordinator.start_new(9292)
+	var combat_engine := CombatEngine.new(catalog)
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, first_transports[0], combat_engine, combat_engine.create_demo_combat(), coordinator, host_store)
+	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, first_transports[1], null, null, null, guest_store)
+	host.set_game_mode("duel")
+	guest.poll()
+	var guest_card: StringName = guest.duel_state.players[1].hand[0]
+	_expect(guest.submit_duel_plan(1, [{"card_id": guest_card}]).ok, "guest persists a commitment before sending it")
+	host.poll()
+	var host_card: StringName = host.duel_state.players[0].hand[0]
+	_expect(host.submit_duel_plan(0, [{"card_id": host_card}]).ok, "host persists its ready plan while waiting for reveal")
+	_expect(not host_store.load_pending_commitment().is_empty() and not guest_store.load_pending_commitment().is_empty(), "both devices checkpoint their side of the pending reveal")
+
+	var restarted_transports := LoopbackTransport.pair()
+	restarted_transports[0].start_host("duel-restart")
+	var restarted_host := CooperativeSession.new(CooperativeSession.Role.HOST, restarted_transports[0], combat_engine, combat_engine.create_demo_combat(), coordinator, host_store)
+	restarted_host.game_mode = "duel"
+	restarted_host.duel_engine = DuelEngine.new(catalog)
+	restarted_host.duel_state = host_store.load_active()
+	var restarted_guest := CooperativeSession.new(CooperativeSession.Role.GUEST, restarted_transports[1], null, null, null, guest_store)
+	restarted_transports[1].connect_to("loopback", "duel-restart")
+	restarted_guest.poll()
+	restarted_host.poll()
+	restarted_guest.poll()
+	_expect(restarted_host.duel_state.turn == 2 and restarted_guest.duel_state.turn == 2, "both app processes resume commit reveal and resolve the interrupted turn")
+	_expect(host_store.load_pending_commitment().is_empty() and guest_store.load_pending_commitment().is_empty(), "resolved restarted turn clears both pending checkpoints")
+	host_store.clear()
+	guest_store.clear()
+	run_store.clear()
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:

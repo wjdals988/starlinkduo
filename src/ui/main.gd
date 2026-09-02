@@ -412,7 +412,7 @@ func _start_bluetooth_host() -> void:
 	if bluetooth_transport.start_host(SERVICE_UUID):
 		local_slot = 0
 		if cooperative_session == null or cooperative_session.role != CooperativeSession.Role.HOST:
-			cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state, run_coordinator)
+			cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state, run_coordinator, duel_save_store)
 			cooperative_session.session_error.connect(_on_session_error)
 			if game_mode == "duel" and duel_state != null:
 				cooperative_session.game_mode = "duel"
@@ -428,7 +428,7 @@ func _join_bluetooth_host(address: String) -> void:
 	if bluetooth_transport.connect_to(address, SERVICE_UUID):
 		local_slot = 1
 		if cooperative_session == null or cooperative_session.role != CooperativeSession.Role.GUEST:
-			cooperative_session = CooperativeSession.new(CooperativeSession.Role.GUEST, bluetooth_transport)
+			cooperative_session = CooperativeSession.new(CooperativeSession.Role.GUEST, bluetooth_transport, null, null, null, duel_save_store)
 			cooperative_session.snapshot_received.connect(_on_remote_snapshot)
 			cooperative_session.run_snapshot_received.connect(_on_remote_run_snapshot)
 			cooperative_session.duel_snapshot_received.connect(_on_remote_duel_snapshot)
