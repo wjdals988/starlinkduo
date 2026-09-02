@@ -1,5 +1,7 @@
 extends SceneTree
 
+const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
+
 var failures: Array[String] = []
 
 func _init() -> void:
@@ -381,6 +383,17 @@ func _test_full_run_content_catalog() -> void:
 		_expect(stage.elites.size() == 2, "each stage has two elites")
 		_expect(not stage.boss.id.is_empty(), "each stage has one boss")
 	_expect(content.true_boss.health > content.stages[-1].boss.health, "true boss exceeds final stage boss health")
+	var visual_tiers: Array[String] = []
+	visual_tiers.append(EnemyVisuals.profile(&"training_drone", []).tier)
+	visual_tiers.append(EnemyVisuals.profile(&"s1_normal_1", ["combat"]).tier)
+	visual_tiers.append(EnemyVisuals.profile(&"s1_elite_1", ["elite"]).tier)
+	visual_tiers.append(EnemyVisuals.profile(&"s1_boss", ["boss"]).tier)
+	visual_tiers.append(EnemyVisuals.profile(&"true_boss_star_eater", ["true_boss"]).tier)
+	_expect(visual_tiers == ["training", "standard", "elite", "boss", "true_boss"], "five encounter tiers map to five distinct enemy visual profiles")
+	var visual_textures := {}
+	for profile in [EnemyVisuals.TRAINING, EnemyVisuals.STANDARD, EnemyVisuals.ELITE, EnemyVisuals.BOSS, EnemyVisuals.TRUE_BOSS]:
+		visual_textures[profile.texture] = true
+	_expect(visual_textures.size() == 5, "each encounter tier uses a distinct enemy texture")
 
 func _test_route_selection_and_key_gate() -> void:
 	var store := RunSaveStore.new("user://route_test.json")

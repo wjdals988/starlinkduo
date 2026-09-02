@@ -11,6 +11,7 @@ const COLOR_ORANGE := Color("#ffac5f")
 const COLOR_RED := Color("#ff667d")
 const COLOR_YELLOW := Color("#ffd45f")
 const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
+const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
 
 var engine: CombatEngine
 var state: CombatState
@@ -396,6 +397,7 @@ func _build_enemy_panel() -> Control:
 
 	encounter_label = Label.new()
 	encounter_label.text = "일반 전투  ·  훈련 구역 01"
+	encounter_label.accessibility_name = "조우 정보"
 	encounter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	encounter_label.add_theme_font_size_override("font_size", 13)
 	encounter_label.add_theme_color_override("font_color", COLOR_MUTED)
@@ -403,6 +405,7 @@ func _build_enemy_panel() -> Control:
 
 	enemy_name_label = Label.new()
 	enemy_name_label.text = "훈련 드론"
+	enemy_name_label.accessibility_name = "전투 상대"
 	enemy_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	enemy_name_label.add_theme_font_size_override("font_size", 23)
 	enemy_name_label.add_theme_color_override("font_color", COLOR_TEXT)
@@ -1584,6 +1587,7 @@ func _refresh() -> void:
 	enemy_health_bar.max_value = enemy.max_health
 	enemy_health_bar.value = enemy.health
 	if enemy_art != null:
+		_apply_enemy_visual(enemy)
 		enemy_art.modulate = Color("#ffb8c5") if enemy.health <= ceili(enemy.max_health * 0.25) else Color.WHITE
 	for slot in state.players.size():
 		var player: CombatantState = state.players[slot]
@@ -1600,6 +1604,17 @@ func _refresh() -> void:
 	_rebuild_hand()
 	_sync_android_accessibility.call_deferred()
 	queue_redraw()
+
+func _apply_enemy_visual(enemy: EnemyState) -> void:
+	var profile: Dictionary = EnemyVisuals.profile(enemy.id, active_route_types)
+	var padding: Vector2 = profile["padding"]
+	enemy_art.texture = load(String(profile["texture"]))
+	enemy_art.offset_left = -padding.x
+	enemy_art.offset_top = -padding.y
+	enemy_art.offset_right = padding.x
+	enemy_art.offset_bottom = padding.y
+	enemy_art.accessibility_name = "%s · %s" % [enemy.display_name, _encounter_kind()]
+	enemy_art.accessibility_description = String(profile["description"])
 
 func _refresh_duel() -> void:
 	turn_label.text = "DUEL %02d" % duel_state.turn
