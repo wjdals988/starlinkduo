@@ -24,8 +24,9 @@ func _init() -> void:
 	_test_collaborative_event_resolution()
 	_test_consumable_effects_and_sync()
 	_test_relic_lifecycle_triggers()
+	_test_character_selection_and_scope()
 	if failures.is_empty():
-		print("PASS: 21 core, content, run, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 22 core, content, run, character, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -220,6 +221,11 @@ func _test_host_authoritative_route_session() -> void:
 	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
 	var received_runs: Array[Dictionary] = []
 	guest.run_snapshot_received.connect(func(snapshot: Dictionary) -> void: received_runs.append(snapshot))
+	_expect(guest.select_character(1, &"hacker").ok, "guest sends character selection intent")
+	host.poll()
+	guest.poll()
+	_expect(run.characters[1] == &"hacker" and run.decks[1].has("hacker_card_01"), "host validates guest character and rebuilds its starter deck")
+	_expect(not received_runs.is_empty() and received_runs[-1].characters[1] == "hacker", "guest receives authoritative character selection snapshot")
 	var guest_node := String(run.map.stages[0].steps[0].lanes[1].options[0].id)
 	_expect(guest.select_route(1, guest_node).ok, "guest sends route intent without mutating run")
 	host.poll()
@@ -423,6 +429,22 @@ func _test_relic_lifecycle_triggers() -> void:
 	_expect(finishing.phase == CombatState.Phase.WON and finishing.team_health == 41, "combat end relic heals after victory")
 	RunSaveStore.new("user://relic_test.json").clear()
 	RunSaveStore.new("user://relic_finish_test.json").clear()
+
+func _test_character_selection_and_scope() -> void:
+	var catalog := FullCardCatalog.build()
+	var store := RunSaveStore.new("user://character_selection_test.json")
+	store.clear()
+	var coordinator := RunCoordinator.new(catalog, store)
+	var run := coordinator.start_new(7788)
+	_expect(coordinator.select_character(1, &"hacker").ok, "second player can select hacker before route choice")
+	_expect(run.characters[1] == &"hacker" and run.decks[1].has("hacker_card_04"), "hacker selection installs hacker starter deck")
+	_expect(not coordinator.select_character(0, &"hacker").ok, "same character cannot be selected by both players")
+	run.pending_card_rewards[1] = true
+	var rewards := coordinator.current_card_reward(1)
+	_expect(rewards.size() == 3 and catalog[rewards[0]].owner_scope == CardData.Scope.HACKER and catalog[rewards[1]].owner_scope == CardData.Scope.HACKER and catalog[rewards[2]].owner_scope == CardData.Scope.NEUTRAL, "character reward contains two class cards and one neutral card")
+	var route_id := String(run.map.stages[0].steps[0].lanes[0].options[0].id)
+	_expect(coordinator.choose_route(0, route_id).ok and not coordinator.select_character(0, &"assault").ok, "character selection closes after route commitment")
+	store.clear()
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:

@@ -30,6 +30,9 @@ var team_health_bar: ProgressBar
 var enemy_health_label: Label
 var enemy_health_bar: ProgressBar
 var player_detail_labels: Array[Label] = []
+var player_title_labels: Array[Label] = []
+var player_role_labels: Array[Label] = []
+var player_portraits: Array[TextureRect] = []
 var hand_container: HBoxContainer
 var status_label: Label
 var ready_button: Button
@@ -120,7 +123,7 @@ func _build_top_bar() -> Control:
 	turn_label.add_theme_color_override("font_color", COLOR_MUTED)
 	row.add_child(turn_label)
 
-	for item in [["연결", _show_connection], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop], ["아이템", _show_consumables]]:
+	for item in [["연결", _show_connection], ["편성", _show_roster], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop], ["아이템", _show_consumables]]:
 		var navigation := Button.new()
 		navigation.text = item[0]
 		navigation.custom_minimum_size = Vector2(88, 42)
@@ -160,12 +163,14 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	title_label.add_theme_font_size_override("font_size", 22)
 	title_label.add_theme_color_override("font_color", accent)
 	column.add_child(title_label)
+	player_title_labels.append(title_label)
 
 	var role := Label.new()
 	role.text = "전방 방어 · 아군 엄호" if slot == 0 else "에너지 지원 · 장치 제어"
 	role.add_theme_font_size_override("font_size", 15)
 	role.add_theme_color_override("font_color", COLOR_MUTED)
 	column.add_child(role)
+	player_role_labels.append(role)
 
 	var portrait := TextureRect.new()
 	portrait.custom_minimum_size.y = 170
@@ -175,6 +180,7 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	column.add_child(portrait)
+	player_portraits.append(portrait)
 
 	var detail := Label.new()
 	detail.add_theme_font_size_override("font_size", 18)
@@ -413,6 +419,10 @@ func _on_remote_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
 func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
 	var was_event_pending := not run_coordinator.run.pending_event.is_empty()
 	run_coordinator.run = RunState.from_snapshot(snapshot)
+	_refresh_character_identity()
+	if overlay.visible and overlay_title.text == "승무원 편성":
+		_show_roster()
+		return
 	if not run_coordinator.run.pending_event.is_empty():
 		_show_event()
 		return
@@ -427,6 +437,76 @@ func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
 
 func _on_session_error(code: String, detail: String) -> void:
 	log_label.text = "연결 오류 · %s (%s)" % [code, detail]
+
+func _show_roster() -> void:
+	_clear_overlay()
+	overlay_title.text = "승무원 편성"
+	var selection_open := run_coordinator.can_select_characters()
+	overlay_subtitle.text = "서로 다른 직업 2개를 선택하세요 · 항로 선택 전까지만 변경할 수 있습니다." if selection_open else "현재 런의 편성이 확정되었습니다 · 새 런의 첫 항로 선택 전에 변경할 수 있습니다."
+	for slot in 2:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var slot_label := Label.new()
+		slot_label.custom_minimum_size.x = 170
+		slot_label.text = "P%d  %s" % [slot + 1, _character_name(run_coordinator.run.characters[slot])]
+		slot_label.add_theme_font_size_override("font_size", 19)
+		slot_label.add_theme_color_override("font_color", COLOR_BLUE if slot == 0 else COLOR_ORANGE)
+		row.add_child(slot_label)
+		var can_edit := cooperative_session == null or slot == local_slot
+		for character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
+			var button := Button.new()
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.custom_minimum_size.y = 62
+			button.text = "%s\n%s" % [_character_name(character_id), _character_role(character_id)]
+			button.disabled = not selection_open or not can_edit or run_coordinator.run.characters[slot] == character_id or run_coordinator.run.characters[1 - slot] == character_id
+			button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, _character_color(character_id), 2))
+			button.pressed.connect(_select_character.bind(slot, character_id))
+			row.add_child(button)
+		overlay_content.add_child(row)
+
+func _select_character(slot: int, character_id: StringName) -> void:
+	var is_guest := cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST
+	var result := cooperative_session.select_character(slot, character_id) if cooperative_session != null else run_coordinator.select_character(slot, character_id)
+	if not result.ok:
+		overlay_subtitle.text = "편성을 변경할 수 없습니다: %s" % result.get("error", "unknown")
+		return
+	if is_guest:
+		overlay_subtitle.text = "호스트의 편성 확정을 기다리는 중입니다."
+		return
+	_refresh_character_identity()
+	_show_roster()
+
+func _refresh_character_identity() -> void:
+	if player_title_labels.size() < 2:
+		return
+	for slot in 2:
+		var character_id: StringName = run_coordinator.run.characters[slot]
+		player_title_labels[slot].text = "P%d  %s" % [slot + 1, _character_name(character_id)]
+		player_title_labels[slot].add_theme_color_override("font_color", _character_color(character_id))
+		player_role_labels[slot].text = _character_role(character_id)
+		player_portraits[slot].texture = load(_character_portrait(character_id))
+
+func _character_name(character_id: StringName) -> String:
+	return {&"guardian": "수호자", &"engineer": "기술자", &"hacker": "해커", &"assault": "강습병"}.get(character_id, String(character_id))
+
+func _character_role(character_id: StringName) -> String:
+	return {
+		&"guardian": "전방 방어 · 아군 엄호",
+		&"engineer": "에너지 지원 · 장치 제어",
+		&"hacker": "적 약화 · 행동 교란",
+		&"assault": "집중 화력 · 마무리 공격",
+	}.get(character_id, "미확인 역할")
+
+func _character_portrait(character_id: StringName) -> String:
+	return "res://assets/art/%s-portrait.png" % String(character_id)
+
+func _character_color(character_id: StringName) -> Color:
+	return {
+		&"guardian": COLOR_BLUE,
+		&"engineer": COLOR_ORANGE,
+		&"hacker": Color("#bc8cff"),
+		&"assault": COLOR_RED,
+	}.get(character_id, COLOR_CYAN)
 
 func _show_map() -> void:
 	_clear_overlay()
@@ -775,6 +855,7 @@ func _node_label(type: String) -> String:
 	return {"combat": "전투", "event": "이벤트", "shop": "상점", "rest": "휴식", "elite": "엘리트", "key_challenge": "열쇠 도전"}.get(type, type)
 
 func _refresh() -> void:
+	_refresh_character_identity()
 	turn_label.text = "TURN %02d" % state.turn
 	team_health_label.text = "팀 내구도   %d / %d" % [state.team_health, state.team_max_health]
 	team_health_bar.max_value = state.team_max_health

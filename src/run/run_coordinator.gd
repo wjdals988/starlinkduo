@@ -21,6 +21,21 @@ func start_new(seed: int) -> RunState:
 	checkpoint("new_run")
 	return run
 
+func select_character(player_slot: int, character_id: StringName) -> Dictionary:
+	if not _valid_slot(player_slot) or not can_select_characters():
+		return {"ok": false, "error": "character_selection_closed"}
+	if not character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
+		return {"ok": false, "error": "unknown_character"}
+	if run.characters[1 - player_slot] == character_id:
+		return {"ok": false, "error": "character_already_taken"}
+	run.characters[player_slot] = character_id
+	run.decks[player_slot] = _starter_deck(character_id)
+	checkpoint("character_selected")
+	return {"ok": true, "character_id": String(character_id)}
+
+func can_select_characters() -> bool:
+	return run != null and run.phase == "traversal" and run.stage == 1 and run.step == 0 and run.pending_routes.is_empty()
+
 func resume_or_start(seed: int) -> RunState:
 	run = save_store.load_active()
 	return run if run != null else start_new(seed)
@@ -259,7 +274,24 @@ func _content_seed(player_slot: int, salt: int) -> int:
 	return run.seed + run.stage * 100_003 + run.step * 1_009 + player_slot * 97 + salt
 
 func _scope_for_slot(player_slot: int) -> CardData.Scope:
-	return CardData.Scope.GUARDIAN if player_slot == 0 else CardData.Scope.ENGINEER
+	return {
+		&"guardian": CardData.Scope.GUARDIAN,
+		&"engineer": CardData.Scope.ENGINEER,
+		&"hacker": CardData.Scope.HACKER,
+		&"assault": CardData.Scope.ASSAULT,
+	}.get(run.characters[player_slot], CardData.Scope.NEUTRAL)
+
+func _starter_deck(character_id: StringName) -> Array:
+	if character_id == &"guardian":
+		return ["guardian_strike", "guardian_guard", "guardian_cover", "neutral_pulse", "guardian_strike", "guardian_guard", "neutral_barrier", "neutral_pulse"]
+	if character_id == &"engineer":
+		return ["engineer_bolt", "engineer_charge", "engineer_patch", "neutral_barrier", "engineer_bolt", "engineer_charge", "neutral_link", "neutral_pulse"]
+	var prefix := String(character_id)
+	return [
+		"%s_card_01" % prefix, "%s_card_02" % prefix, "%s_card_03" % prefix,
+		"%s_card_04" % prefix, "%s_card_01" % prefix, "%s_card_02" % prefix,
+		"neutral_pulse", "neutral_barrier",
+	]
 
 func _valid_slot(player_slot: int) -> bool:
 	return run != null and player_slot >= 0 and player_slot < 2

@@ -61,6 +61,18 @@ func select_route(slot: int, node_id: String) -> Dictionary:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("route_select", {"slot": slot, "node_id": node_id})}
 
+func select_character(slot: int, character_id: StringName) -> Dictionary:
+	if role == Role.HOST:
+		if run_coordinator == null:
+			return _error("host_run_missing")
+		var result := run_coordinator.select_character(slot, character_id)
+		if result.ok:
+			_publish_run_snapshot("character_selected")
+		return result
+	if slot != 1:
+		return _error("guest_slot_forbidden")
+	return {"ok": _send("character_select", {"slot": slot, "character_id": String(character_id)})}
+
 func submit_event_choice(slot: int, choice_index: int) -> Dictionary:
 	if role == Role.HOST:
 		if run_coordinator == null:
@@ -121,6 +133,15 @@ func _on_transport_state_changed(next_state: String) -> void:
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"character_select":
+			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
+				_send_rejection("guest_character_forbidden")
+				return
+			var character_result := run_coordinator.select_character(1, StringName(payload.get("character_id", "")))
+			if not character_result.ok:
+				_send_rejection(character_result.error)
+				return
+			_publish_run_snapshot("character_selected")
 		"use_consumable":
 			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
 				_send_rejection("guest_consumable_forbidden")
