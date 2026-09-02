@@ -7,12 +7,19 @@ var effect_kind := "utility"
 var effect_accent := Color("#8fa0bc")
 var primary_tag := "전술"
 
+const EFFECT_ART := {
+	"damage": preload("res://assets/art/card-effect-damage-v1.png"),
+	"block": preload("res://assets/art/card-effect-block-v1.png"),
+	"heal": preload("res://assets/art/card-effect-heal-v1.png"),
+	"energy": preload("res://assets/art/card-effect-energy-v1.png"),
+}
+
 func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "") -> void:
 	accent = accent_color
 	selected = is_selected
 	seed_value = String(card.id).hash()
 	primary_tag = String(card.tags[0]) if not card.tags.is_empty() else "전술"
-	effect_kind = String(card.effects[0].get("type", "utility")) if not card.effects.is_empty() else "utility"
+	effect_kind = _primary_effect_kind(card)
 	effect_accent = _effect_color(effect_kind)
 	# Visual copy uses child labels. Android exposes the canvas as one SurfaceView,
 	# so a hidden native button caption would not improve TalkBack and can cause duplicate rendering.
@@ -34,8 +41,8 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	inset.add_theme_constant_override("margin_left", 11)
 	inset.add_theme_constant_override("margin_right", 11)
-	inset.add_theme_constant_override("margin_top", 8)
-	inset.add_theme_constant_override("margin_bottom", 8)
+	inset.add_theme_constant_override("margin_top", 5)
+	inset.add_theme_constant_override("margin_bottom", 3)
 	add_child(inset)
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -49,11 +56,15 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	rarity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	rarity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	meta.add_child(rarity)
-	var art_space := Control.new()
-	art_space.custom_minimum_size.y = 32 if is_selected else 24
-	art_space.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(art_space)
-	var name_label := _label(String(card.display_name), 15, Color.WHITE)
+	var art := TextureRect.new()
+	art.custom_minimum_size.y = 34 if is_selected else 26
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.texture = EFFECT_ART.get(effect_kind, EFFECT_ART["energy"])
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	column.add_child(art)
+	var name_label := _label(String(card.display_name), 14, Color.WHITE)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	column.add_child(name_label)
@@ -61,11 +72,11 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	divider.add_theme_constant_override("separation", 2)
 	column.add_child(divider)
-	var effect := _label("%s · %s" % [primary_tag, effect_text], 12, Color("#dce6f7"))
+	var effect := _label("%s · %s" % [primary_tag, effect_text], 11, Color("#dce6f7"))
 	effect.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(effect)
 	var resolved_footer := footer_text if not footer_text.is_empty() else ("◆ 선택됨" if is_selected else "탭하여 선택")
-	var state_label := _label(resolved_footer, 11, accent if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
+	var state_label := _label(resolved_footer, 10, accent if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	state_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	state_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
@@ -82,32 +93,15 @@ func _label(value: String, font_size: int, color: Color) -> Label:
 
 func _draw() -> void:
 	var width := size.x
-	var y := 42.0
-	draw_rect(Rect2(10, y, width - 20, 30 if selected else 23), Color(accent, 0.10), true)
-	var center := Vector2(width * 0.5, y + 14)
-	draw_circle(center, 13, Color(effect_accent, 0.12))
-	match effect_kind:
-		"damage":
-			draw_arc(center, 11, 0, TAU, 24, effect_accent, 2, true)
-			draw_line(center + Vector2(-14, 0), center + Vector2(14, 0), effect_accent, 2, true)
-			draw_line(center + Vector2(-8, 9), center + Vector2(9, -8), Color.WHITE, 3, true)
-		"block":
-			var shield := PackedVector2Array([center + Vector2(0, -12), center + Vector2(11, -6), center + Vector2(8, 7), center + Vector2(0, 13), center + Vector2(-8, 7), center + Vector2(-11, -6)])
-			draw_colored_polygon(shield, Color(effect_accent, 0.30))
-			draw_polyline(shield, effect_accent, 2, true)
-		"heal":
-			draw_circle(center, 11, Color(effect_accent, 0.22))
-			draw_line(center + Vector2(-7, 0), center + Vector2(7, 0), Color.WHITE, 4, true)
-			draw_line(center + Vector2(0, -7), center + Vector2(0, 7), Color.WHITE, 4, true)
-		"energy":
-			var bolt := PackedVector2Array([center + Vector2(2, -13), center + Vector2(-8, 2), center + Vector2(-1, 2), center + Vector2(-4, 13), center + Vector2(9, -4), center + Vector2(2, -4)])
-			draw_colored_polygon(bolt, effect_accent)
-		_:
-			draw_circle(center + Vector2(-7, 0), 7, Color(effect_accent, 0.28))
-			draw_circle(center + Vector2(7, 0), 7, Color(accent, 0.28))
-			draw_line(center + Vector2(-3, 0), center + Vector2(3, 0), Color.WHITE, 2, true)
 	if selected:
 		draw_line(Vector2(18, 4), Vector2(width - 18, 4), Color("#ffffff"), 2, true)
+
+func _primary_effect_kind(card: CardData) -> String:
+	for priority in ["damage", "block", "heal", "energy"]:
+		for effect in card.effects:
+			if String(effect.get("type", "")) == priority:
+				return priority
+	return "energy"
 
 func _effect_color(kind: String) -> Color:
 	return {
