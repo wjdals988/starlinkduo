@@ -54,8 +54,13 @@ var encounter_label: Label
 var enemy_name_label: Label
 var intent_label: Label
 var energy_label: Label
+var background_focus_modes: Dictionary = {}
+var previous_focus_owner: Control
+var handling_back_request := false
 
 func _ready() -> void:
+	get_tree().set_auto_accept_quit(false)
+	get_window().go_back_requested.connect(_on_go_back_requested)
 	_load_accessibility_settings()
 	catalog = FullCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
@@ -86,6 +91,19 @@ func _exit_tree() -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), COLOR_VOID)
+
+func _on_go_back_requested() -> void:
+	if handling_back_request:
+		return
+	handling_back_request = true
+	_reset_back_request_guard.call_deferred()
+	if overlay != null and overlay.visible:
+		_close_overlay()
+	else:
+		get_tree().quit()
+
+func _reset_back_request_guard() -> void:
+	handling_back_request = false
 
 func _process(_delta: float) -> void:
 	if bluetooth_transport == null:
@@ -168,6 +186,7 @@ func _build_top_bar() -> Control:
 	menu.add_theme_font_size_override("font_size", 16)
 	menu.add_theme_stylebox_override("normal", _panel_style(Color("#14213ddf"), 12, Color("#8aa5d144"), 1, 16, 8))
 	menu.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 12, COLOR_CYAN, 1, 16, 8))
+	menu.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 12))
 	menu.pressed.connect(_show_hub)
 	row.add_child(menu)
 	return panel
@@ -382,6 +401,7 @@ func _build_hand_section() -> Control:
 	ready_button.add_theme_stylebox_override("normal", _panel_style(COLOR_CYAN, 26, Color("#d9fffb"), 2, 16, 8))
 	ready_button.add_theme_stylebox_override("hover", _panel_style(Color("#76f4e8"), 26, Color.WHITE, 2, 16, 8))
 	ready_button.add_theme_stylebox_override("disabled", _panel_style(Color("#34445c"), 26, Color("#77869d"), 1, 16, 8))
+	ready_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 26))
 	ready_button.add_theme_color_override("font_color", COLOR_VOID)
 	ready_button.pressed.connect(_on_ready_pressed)
 	status_row.add_child(ready_button)
@@ -440,7 +460,8 @@ func _build_overlay() -> void:
 	close.text = "×  닫기"
 	close.custom_minimum_size = Vector2(104, 48)
 	close.add_theme_stylebox_override("normal", _panel_style(Color("#192541"), 24, Color("#91a5c655"), 1, 16, 8))
-	close.pressed.connect(func() -> void: overlay.hide())
+	close.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 24))
+	close.pressed.connect(_close_overlay)
 	header.add_child(close)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -495,13 +516,52 @@ func _activate_mode(mode: String) -> void:
 	selected_hand_indices.clear()
 	selected_plays.clear()
 	selected_energy = 0
-	overlay.hide()
+	_close_overlay()
 	_refresh()
 
 func _clear_overlay() -> void:
+	if not overlay.visible:
+		previous_focus_owner = get_viewport().gui_get_focus_owner()
+		background_focus_modes.clear()
+		_set_background_focus_enabled(self, false)
 	for child in overlay_content.get_children():
 		child.queue_free()
 	overlay.show()
+	_focus_first_overlay_control.call_deferred()
+
+func _close_overlay() -> void:
+	overlay.hide()
+	for control in background_focus_modes:
+		if is_instance_valid(control):
+			control.focus_mode = background_focus_modes[control]
+	background_focus_modes.clear()
+	if is_instance_valid(previous_focus_owner) and previous_focus_owner.is_visible_in_tree():
+		previous_focus_owner.grab_focus()
+	previous_focus_owner = null
+
+func _set_background_focus_enabled(node: Node, enabled: bool) -> void:
+	for child in node.get_children():
+		if child == overlay:
+			continue
+		if child is Control:
+			var control := child as Control
+			if enabled:
+				if background_focus_modes.has(control):
+					control.focus_mode = background_focus_modes[control]
+			elif control.focus_mode != Control.FOCUS_NONE:
+				background_focus_modes[control] = control.focus_mode
+				control.focus_mode = Control.FOCUS_NONE
+		_set_background_focus_enabled(child, enabled)
+
+func _focus_first_overlay_control() -> void:
+	if not overlay.visible:
+		return
+	var controls := overlay.find_children("*", "Button", true, false)
+	for candidate in controls:
+		var button := candidate as Button
+		if button != null and button.visible and not button.disabled:
+			button.grab_focus()
+			return
 
 func _show_connection() -> void:
 	_clear_overlay()
@@ -589,6 +649,7 @@ func _action_button(text: String, callback: Callable, accent: Color, height: int
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 16, accent, 3))
 	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.28), 16, Color.WHITE, 3))
 	button.add_theme_stylebox_override("disabled", _panel_style(Color("#111827"), 16, Color("#526077"), 1))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 16))
 	button.add_theme_color_override("font_disabled_color", Color("#718099"))
 	button.pressed.connect(callback)
 	return button
@@ -881,7 +942,7 @@ func _enter_selected_routes() -> void:
 		selected_hand_indices.clear()
 		selected_plays.clear()
 		selected_energy = 0
-		overlay.hide()
+		_close_overlay()
 		log_label.text = "%s 조우 시작 · 승리해야 항로가 진행됩니다." % " + ".join(types.map(func(type: String) -> String: return _node_label(type)))
 		_refresh()
 		return
@@ -908,7 +969,7 @@ func _start_boss_encounter(true_boss: bool) -> void:
 	selected_hand_indices.clear()
 	selected_plays.clear()
 	selected_energy = 0
-	overlay.hide()
+	_close_overlay()
 	log_label.text = "%s 시작 · 승리 전에는 진행되지 않습니다." % _encounter_kind()
 	_refresh()
 
@@ -1298,6 +1359,7 @@ func _shop_item_button(text: String, accent: Color, disabled: bool) -> Button:
 	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, accent, 2))
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 12, accent, 3))
 	button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 12, Color("#4d5a71"), 1))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 12))
 	return button
 
 func _route_chip(text: String, accent: Color) -> PanelContainer:
@@ -1326,6 +1388,7 @@ func _route_button(text: String, accent: Color, callback: Callable) -> Button:
 	button.add_theme_font_size_override("font_size", 16)
 	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 24, accent, 2, 12, 6))
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.20), 24, accent, 3, 12, 6))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 24))
 	button.pressed.connect(callback)
 	return button
 
@@ -1571,3 +1634,6 @@ func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPA
 	style.content_margin_top = vertical_margin
 	style.content_margin_bottom = vertical_margin
 	return style
+
+func _focus_style(accent: Color, radius: int) -> StyleBoxFlat:
+	return _panel_style(Color(accent, 0.22), radius, Color.WHITE, 4, 18, 14)
