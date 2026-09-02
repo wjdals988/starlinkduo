@@ -20,8 +20,9 @@ func _init() -> void:
 	_test_full_run_content_catalog()
 	_test_route_selection_and_key_gate()
 	_test_run_combat_completion_gate()
+	_test_boss_and_run_completion_flow()
 	if failures.is_empty():
-		print("PASS: 17 core, content, run, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 18 core, content, run, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -274,7 +275,9 @@ func _test_route_selection_and_key_gate() -> void:
 	run.step = MapGenerator.TRAVERSAL_STEPS - 1
 	run.pending_routes = {0: "a", 1: "b"}
 	coordinator.complete_routes(["combat", "combat"])
-	_expect(run.stage == 2 and not run.keys[0], "stage completion does not grant a free key")
+	_expect(run.stage == 1 and run.step == MapGenerator.TRAVERSAL_STEPS and run.phase == "stage_boss" and not run.keys[0], "stage traversal ends at boss without granting a free key")
+	run.phase = "traversal"
+	run.step = 0
 	run.stage = 1
 	run.pending_routes = {0: "a", 1: "b"}
 	coordinator.complete_routes(["key_challenge", "combat"])
@@ -287,6 +290,7 @@ func _test_run_combat_completion_gate() -> void:
 	var catalog := FullCardCatalog.build()
 	var coordinator := RunCoordinator.new(catalog, store)
 	var run := coordinator.start_new(8080)
+	run.team_health = 50
 	run.pending_routes = {0: "a", 1: "b"}
 	var engine := CombatEngine.new(catalog)
 	var combat := engine.create_run_combat(run, ["key_challenge", "rest"], RunContentCatalog.build())
@@ -297,6 +301,36 @@ func _test_run_combat_completion_gate() -> void:
 	var completion := coordinator.complete_combat(combat, ["key_challenge", "rest"])
 	_expect(completion.ok and completion.gold == 45, "key challenge victory grants elite reward")
 	_expect(run.keys[0] and run.gold[0] == before_gold + 45 and run.step == 1, "victory updates key gold and route exactly once")
+	_expect(run.team_health == 62 and completion.summary == ["팀 내구도 +12"], "mixed rest benefit resolves after combat victory")
+	store.clear()
+
+func _test_boss_and_run_completion_flow() -> void:
+	var store := RunSaveStore.new("user://boss_flow_test.json")
+	store.clear()
+	var catalog := FullCardCatalog.build()
+	var coordinator := RunCoordinator.new(catalog, store)
+	var run := coordinator.start_new(7007)
+	var engine := CombatEngine.new(catalog)
+	run.step = MapGenerator.TRAVERSAL_STEPS
+	run.phase = "stage_boss"
+	var stage_boss := engine.create_run_combat(run, ["boss"], RunContentCatalog.build())
+	_expect(not coordinator.complete_boss_combat(stage_boss).ok, "unfinished stage boss cannot advance")
+	stage_boss.phase = CombatState.Phase.WON
+	var stage_result := coordinator.complete_boss_combat(stage_boss)
+	_expect(stage_result.stage_advanced and run.stage == 2 and run.step == 0 and run.phase == "traversal", "stage boss victory advances to next traversal")
+	run.stage = 3
+	run.step = MapGenerator.TRAVERSAL_STEPS
+	run.phase = "stage_boss"
+	run.keys = [true, true, true]
+	var final_stage_boss := engine.create_run_combat(run, ["boss"], RunContentCatalog.build())
+	final_stage_boss.phase = CombatState.Phase.WON
+	var unlock := coordinator.complete_boss_combat(final_stage_boss)
+	_expect(unlock.true_boss_unlocked and run.phase == "true_boss", "three keys unlock true boss after stage three boss")
+	var true_boss := engine.create_run_combat(run, ["true_boss"], RunContentCatalog.build())
+	_expect(true_boss.enemies[0].id == &"true_boss_star_eater", "true boss encounter uses final catalog enemy")
+	true_boss.phase = CombatState.Phase.WON
+	var finish := coordinator.complete_boss_combat(true_boss, true)
+	_expect(finish.run_completed and run.phase == "completed" and run.checkpoint_reason == "run_completed", "true boss victory completes and saves the run")
 	store.clear()
 
 func _expect(condition: bool, label: String) -> void:

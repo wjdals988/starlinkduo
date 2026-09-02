@@ -78,7 +78,7 @@ func buy_consumable(player_slot: int, entry: Dictionary) -> bool:
 func choose_route(player_slot: int, node_id: String) -> Dictionary:
 	if not _valid_slot(player_slot):
 		return {"ok": false, "error": "invalid_slot"}
-	if run.step < 0 or run.step >= MapGenerator.TRAVERSAL_STEPS:
+	if run.phase != "traversal" or run.step < 0 or run.step >= MapGenerator.TRAVERSAL_STEPS:
 		return {"ok": false, "error": "route_unavailable"}
 	var step_data: Dictionary = run.map.stages[run.stage - 1].steps[run.step]
 	if step_data.kind == "common":
@@ -116,27 +116,44 @@ func complete_combat(combat: CombatState, completed_types: Array[String]) -> Dic
 	var gold_reward := 45 if completed_types.has("elite") or completed_types.has("key_challenge") else 25
 	for slot in 2:
 		run.gold[slot] += gold_reward
+	var node_summary := _apply_noncombat_effects(completed_types)
 	var result := complete_routes(completed_types)
 	if result.ok:
 		checkpoint("combat_reward")
-	return {"ok": result.ok, "gold": gold_reward}
+	return {"ok": result.ok, "gold": gold_reward, "summary": node_summary}
+
+func complete_boss_combat(combat: CombatState, true_boss: bool = false) -> Dictionary:
+	var expected_phase := "true_boss" if true_boss else "stage_boss"
+	if run.phase != expected_phase:
+		return {"ok": false, "error": "boss_unavailable"}
+	if combat.phase != CombatState.Phase.WON:
+		return {"ok": false, "error": "combat_not_won"}
+	run.team_health = combat.team_health
+	var reward := 100 if true_boss else 60
+	for slot in 2:
+		run.gold[slot] += reward
+	if true_boss:
+		run.phase = "completed"
+		checkpoint("run_completed")
+		return {"ok": true, "gold": reward, "run_completed": true}
+	if run.stage < 3:
+		run.stage += 1
+		run.step = 0
+		run.phase = "traversal"
+		checkpoint("stage_complete")
+		return {"ok": true, "gold": reward, "stage_advanced": true}
+	if run.can_enter_true_boss():
+		run.phase = "true_boss"
+		checkpoint("true_boss_unlocked")
+		return {"ok": true, "gold": reward, "true_boss_unlocked": true}
+	run.phase = "failed"
+	checkpoint("run_failed_missing_keys")
+	return {"ok": true, "gold": reward, "run_failed": true}
 
 func resolve_noncombat(completed_types: Array[String]) -> Dictionary:
 	if run.pending_routes.size() != 2:
 		return {"ok": false, "error": "routes_not_ready"}
-	var summary: Array[String] = []
-	for node_type in completed_types:
-		match node_type:
-			"rest":
-				var before := run.team_health
-				run.team_health = mini(run.team_max_health, run.team_health + 12)
-				summary.append("팀 내구도 +%d" % (run.team_health - before))
-			"event":
-				for slot in 2:
-					run.gold[slot] += 12
-				summary.append("각 플레이어 +12 C")
-			"shop": summary.append("상점 방문 가능")
-			_: summary.append(_node_summary(node_type))
+	var summary := _apply_noncombat_effects(completed_types)
 	var result := complete_routes(completed_types)
 	return {"ok": result.ok, "summary": summary}
 
@@ -156,8 +173,8 @@ func selected_route_types() -> Array[String]:
 func advance_step() -> void:
 	run.step += 1
 	if run.step >= MapGenerator.TRAVERSAL_STEPS:
-		run.stage = mini(run.stage + 1, 3)
-		run.step = 0
+		run.step = MapGenerator.TRAVERSAL_STEPS
+		run.phase = "stage_boss"
 	checkpoint("step_complete")
 
 func checkpoint(reason: String) -> Error:
@@ -181,3 +198,18 @@ func _valid_shop_entry(player_slot: int, entry: Dictionary) -> bool:
 
 func _node_summary(node_type: String) -> String:
 	return {"combat": "전투", "elite": "엘리트", "key_challenge": "열쇠 도전"}.get(node_type, node_type)
+
+func _apply_noncombat_effects(completed_types: Array[String]) -> Array[String]:
+	var summary: Array[String] = []
+	for node_type in completed_types:
+		match node_type:
+			"rest":
+				var before := run.team_health
+				run.team_health = mini(run.team_max_health, run.team_health + 12)
+				summary.append("팀 내구도 +%d" % (run.team_health - before))
+			"event":
+				for slot in 2:
+					run.gold[slot] += 12
+				summary.append("각 플레이어 +12 C")
+			"shop": summary.append("상점 방문 가능")
+	return summary

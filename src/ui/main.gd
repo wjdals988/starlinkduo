@@ -421,6 +421,19 @@ func _show_map() -> void:
 	var run := run_coordinator.run
 	overlay_title.text = "항로 선택 · STAGE %d" % run.stage
 	overlay_subtitle.text = "진행 %d / 8   ·   열쇠 %d / 3   ·   런 %s" % [run.step, run.keys.count(true), run.run_id]
+	if run.phase == "stage_boss":
+		overlay_title.text = "스테이지 보스 · STAGE %d" % run.stage
+		overlay_subtitle.text = "8개 항로 완료 · 보스를 격파해야 다음 스테이지로 이동합니다."
+		_add_connection_action("스테이지 보스 진입", _start_boss_encounter.bind(false), COLOR_RED)
+		return
+	if run.phase == "true_boss":
+		overlay_title.text = "진 최종 보스 해금"
+		overlay_subtitle.text = "3개 열쇠 확보 완료 · 마지막 협동 전투입니다."
+		_add_connection_action("별을 삼키는 자에게 도전", _start_boss_encounter.bind(true), COLOR_YELLOW)
+		return
+	if run.phase == "completed" or run.phase == "failed":
+		_show_run_outcome(run.phase == "completed")
+		return
 	if run.pending_routes.size() == 2:
 		_add_connection_action("선택 완료 · 노드 진입", _enter_selected_routes, COLOR_CYAN)
 	var stage: Dictionary = run.map.stages[run.stage - 1]
@@ -492,15 +505,43 @@ func _enter_selected_routes() -> void:
 		state.team_health = run_coordinator.run.team_health
 		_show_route_result("노드 해결 완료", " · ".join(result.summary))
 
+func _start_boss_encounter(true_boss: bool) -> void:
+	if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST:
+		overlay_subtitle.text = "호스트가 보스전을 시작할 때까지 기다려 주세요."
+		return
+	active_route_types.clear()
+	active_route_types.append("true_boss" if true_boss else "boss")
+	active_route_combat = true
+	state = engine.create_run_combat(run_coordinator.run, active_route_types, RunContentCatalog.build())
+	if cooperative_session != null:
+		cooperative_session.replace_combat_state(state)
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	overlay.hide()
+	log_label.text = "%s 시작 · 승리 전에는 진행되지 않습니다." % _encounter_kind()
+	_refresh()
+
 func _finish_route_combat() -> void:
 	active_route_combat = false
-	var result := run_coordinator.complete_combat(state, active_route_types)
+	var is_true_boss := active_route_types.has("true_boss")
+	var is_boss := active_route_types.has("boss") or is_true_boss
+	var result := run_coordinator.complete_boss_combat(state, is_true_boss) if is_boss else run_coordinator.complete_combat(state, active_route_types)
 	if not result.ok:
 		log_label.text = "전투 보상을 저장하지 못했습니다: %s" % result.get("error", "unknown")
 		return
 	if cooperative_session != null:
 		cooperative_session.publish_run_state("combat_reward")
-	_show_route_result("항로 전투 승리", "각 플레이어 +%d C · 진행 상황 자동 저장" % result.gold)
+	if result.get("run_completed", false):
+		_show_run_outcome(true)
+	elif result.get("run_failed", false):
+		_show_run_outcome(false)
+	elif result.get("true_boss_unlocked", false):
+		_show_route_result("세 번째 보스 격파", "열쇠 3개 확인 · 진 최종 보스가 해금됐습니다.")
+	elif result.get("stage_advanced", false):
+		_show_route_result("스테이지 보스 격파", "각 플레이어 +%d C · STAGE %d 진입" % [result.gold, run_coordinator.run.stage])
+	else:
+		_show_route_result("항로 전투 승리", "각 플레이어 +%d C · 진행 상황 자동 저장" % result.gold)
 	active_route_types.clear()
 
 func _show_route_result(title: String, summary: String) -> void:
@@ -508,6 +549,12 @@ func _show_route_result(title: String, summary: String) -> void:
 	overlay_title.text = title
 	overlay_subtitle.text = summary
 	_add_connection_action("다음 항로 선택", _show_map, COLOR_CYAN)
+
+func _show_run_outcome(victory: bool) -> void:
+	_clear_overlay()
+	overlay_title.text = "런 완주 · 두 별의 승리" if victory else "런 종료 · 열쇠 부족"
+	overlay_subtitle.text = "별을 삼키는 자를 격파했습니다. 최종 기록이 저장되었습니다." if victory else "3개 열쇠를 모두 확보하지 못해 진 최종 보스에 진입할 수 없습니다."
+	_add_connection_notice("최종 팀 내구도 %d / %d   ·   보유 열쇠 %d / 3" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health, run_coordinator.run.keys.count(true)], COLOR_CYAN if victory else COLOR_RED)
 
 func _show_reward() -> void:
 	_clear_overlay()
@@ -637,6 +684,7 @@ func _refresh() -> void:
 	queue_redraw()
 
 func _encounter_kind() -> String:
+	if active_route_types.has("true_boss"): return "진 최종 보스"
 	if active_route_types.has("key_challenge"): return "열쇠 도전"
 	if active_route_types.has("boss"): return "보스 전투"
 	if active_route_types.has("elite"): return "엘리트 전투"

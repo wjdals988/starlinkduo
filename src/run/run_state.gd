@@ -16,6 +16,7 @@ var consumables: Array[Array] = [[], []]
 var map: Dictionary = {}
 var pending_routes: Dictionary = {}
 var checkpoint_reason := "new_run"
+var phase := "traversal"
 
 func _init(seed_value: int = 1) -> void:
 	seed = seed_value
@@ -45,6 +46,7 @@ func to_snapshot() -> Dictionary:
 		"map": map.duplicate(true),
 		"pending_routes": pending_routes.duplicate(true),
 		"checkpoint_reason": checkpoint_reason,
+		"phase": phase,
 	}
 
 static func from_snapshot(snapshot: Dictionary) -> RunState:
@@ -63,6 +65,7 @@ static func from_snapshot(snapshot: Dictionary) -> RunState:
 	result.map = _normalize_json_numbers(snapshot.map)
 	result.pending_routes = _normalize_json_numbers(snapshot.get("pending_routes", {}))
 	result.checkpoint_reason = snapshot.checkpoint_reason
+	result.phase = String(snapshot.get("phase", "traversal"))
 	return result
 
 static func _normalize_json_numbers(value: Variant) -> Variant:

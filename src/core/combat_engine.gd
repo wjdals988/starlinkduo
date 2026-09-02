@@ -39,7 +39,9 @@ func create_run_combat(run: RunState, route_types: Array[String], content: Dicti
 		state.players.append(player)
 	var stage_content: Dictionary = content.stages[run.stage - 1]
 	var encounter: Dictionary
-	if route_types.has("boss"):
+	if route_types.has("true_boss"):
+		encounter = content.true_boss
+	elif route_types.has("boss"):
 		encounter = stage_content.boss
 	elif route_types.has("key_challenge"):
 		encounter = stage_content.elites[(run.seed + run.step) % stage_content.elites.size()].duplicate(true)
