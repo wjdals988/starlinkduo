@@ -1851,18 +1851,16 @@ func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_d
 	for child in battle_fx_layer.get_children():
 		child.queue_free()
 	battle_fx_layer.visible = true
-	var spatial_effect: CombatEffectVisual
-	if not reduce_motion:
-		spatial_effect = preload("res://src/ui/combat_effect_visual.gd").new()
-		spatial_effect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		spatial_effect.configure(_primary_effect_type(cards), source_slot)
-		battle_fx_layer.add_child(spatial_effect)
+	var spatial_effect: CombatEffectVisual = preload("res://src/ui/combat_effect_visual.gd").new()
+	spatial_effect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	spatial_effect.configure(_primary_effect_type(cards), source_slot, reduce_motion)
+	battle_fx_layer.add_child(spatial_effect)
 	var stack := VBoxContainer.new()
 	stack.set_anchors_preset(Control.PRESET_CENTER)
 	stack.offset_left = -250
 	stack.offset_right = 250
-	stack.offset_top = -80
-	stack.offset_bottom = 80
+	stack.offset_top = -150
+	stack.offset_bottom = 10
 	stack.alignment = BoxContainer.ALIGNMENT_CENTER
 	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	battle_fx_layer.add_child(stack)
@@ -1885,7 +1883,7 @@ func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_d
 	result.add_theme_color_override("font_color", COLOR_TEXT)
 	result.text = _resolution_result_text(cards, enemy_damage, team_delta)
 	stack.add_child(result)
-	battle_fx_layer.accessibility_description = "%s. %s" % [action.text.strip_edges(), result.text]
+	battle_fx_layer.accessibility_description = "%s. %s. %s" % [action.text.strip_edges(), spatial_effect.effect_description(), result.text]
 	if reduce_motion:
 		await get_tree().create_timer(0.55).timeout
 	else:

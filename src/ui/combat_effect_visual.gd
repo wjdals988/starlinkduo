@@ -3,15 +3,27 @@ extends Control
 
 var effect_type := "damage"
 var source_slot := 0
+var static_mode := false
 var progress := 0.0:
 	set(value):
 		progress = clampf(value, 0.0, 1.0)
 		queue_redraw()
 
-func configure(type: String, slot: int) -> void:
+func configure(type: String, slot: int, reduced_motion: bool = false) -> void:
 	effect_type = type
 	source_slot = slot
+	static_mode = reduced_motion
+	if static_mode:
+		progress = 0.82
 	queue_redraw()
+
+func effect_description() -> String:
+	return {
+		"damage": "공격 궤적과 적중 표식",
+		"block": "플레이어를 감싸는 육각 방패",
+		"heal": "팀 중앙에서 퍼지는 회복 링과 십자",
+		"energy": "두 플레이어를 잇는 에너지 링크",
+	}.get(effect_type, "전투 효과")
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -47,7 +59,8 @@ func _draw_damage() -> void:
 		for ray_index in 8:
 			var angle := TAU * float(ray_index) / 8.0
 			var ray := Vector2(cos(angle), sin(angle))
-			draw_line(finish + ray * 18.0, finish + ray * (34.0 + 34.0 * burst), Color(1.0, 0.3, 0.45, 1.0 - burst), 4.0, true)
+			var burst_alpha := 0.82 if static_mode else 1.0 - burst
+			draw_line(finish + ray * 18.0, finish + ray * (34.0 + 34.0 * burst), Color(1.0, 0.3, 0.45, burst_alpha), 4.0, true)
 
 func _draw_block() -> void:
 	var center := _player_center(source_slot) + Vector2(0, 16)

@@ -33,13 +33,22 @@ func _init() -> void:
 	_test_duel_save_round_trip()
 	_test_duel_commitment_tamper_rejected()
 	_test_duel_commitment_process_restart_recovery()
+	_test_reduced_motion_effect_cues()
 	if failures.is_empty():
-		print("PASS: 28 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 29 core, content, run, character, duel, relic, item, event, boss, encounter, route, accessibility, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
 			push_error(failure)
 		quit(1)
+
+func _test_reduced_motion_effect_cues() -> void:
+	var visual := CombatEffectVisual.new()
+	for effect_type in ["damage", "block", "heal", "energy"]:
+		visual.configure(effect_type, 0, true)
+		_expect(visual.static_mode and is_equal_approx(visual.progress, 0.82), "reduced motion keeps a stable spatial cue for %s" % effect_type)
+		_expect(not visual.effect_description().is_empty(), "effect %s has a non-color accessibility description" % effect_type)
+	visual.free()
 
 func _test_initial_state() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())
