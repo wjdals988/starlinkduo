@@ -95,6 +95,9 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     @UsedByGodot
     fun pollAccessibilityAction(): Int = accessibilityActions.poll() ?: -1
 
+    @UsedByGodot
+    fun getSystemFontScale(): Float = activity?.resources?.configuration?.fontScale ?: 1.0f
+
     private fun adapter(): BluetoothAdapter? {
         val manager = activity?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         return manager?.adapter

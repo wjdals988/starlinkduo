@@ -86,6 +86,15 @@ func _test_initial_state() -> void:
 	_expect(state.players.size() == 2, "demo combat has two players")
 	_expect(state.players[0].hand.size() == 5, "guardian draws five cards")
 	_expect(state.team_health == 70, "team health starts full")
+	var main_script: Variant = load("res://src/ui/main.gd").new()
+	main_script.system_font_scale = 1.0
+	main_script.large_text_enabled = false
+	_expect(is_equal_approx(main_script._effective_text_scale(), 1.0), "default system text uses one hundred percent scale")
+	main_script.large_text_enabled = true
+	_expect(is_equal_approx(main_script._effective_text_scale(), 1.15), "app large text uses one hundred fifteen percent scale")
+	main_script.system_font_scale = 2.0
+	_expect(is_equal_approx(main_script._effective_text_scale(), 1.30), "two hundred percent Android text preference activates the safe one hundred thirty percent HUD")
+	main_script.free()
 
 func _test_simultaneous_resolution() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())

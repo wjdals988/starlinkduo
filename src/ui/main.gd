@@ -34,6 +34,7 @@ var reduce_motion := false
 var haptics_enabled := true
 var glow_enabled := true
 var large_text_enabled := false
+var system_font_scale := 1.0
 
 var team_health_label: Label
 var team_health_bar: ProgressBar
@@ -76,6 +77,7 @@ func _ready() -> void:
 	accessibility_name = "스타링크 듀오 전투 화면"
 	accessibility_description = "두 명이 협동하거나 대전하는 오프라인 카드 게임"
 	_load_accessibility_settings()
+	_read_system_font_scale()
 	catalog = FullCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
 	run_coordinator.resume_or_start(20260902)
@@ -234,10 +236,11 @@ func _show_settings() -> void:
 	_clear_overlay()
 	overlay_title.text = "화면 · 조작 설정"
 	overlay_subtitle.text = "연출 강도와 진동을 기기별로 조절합니다. 변경 사항은 이 기기에 자동 저장됩니다."
-	_add_setting_toggle("큰 글씨", "핵심 문구와 버튼 글자를 115%로 확대합니다.", large_text_enabled, _set_large_text)
+	_add_setting_toggle("큰 글씨", "앱 기본 확대 115%를 사용합니다. 시스템 글자 크기가 더 크면 안전 레이아웃이 우선합니다.", large_text_enabled, _set_large_text)
 	_add_setting_toggle("모션 줄이기", "카드 선택 전환을 즉시 표시해 화면 움직임을 줄입니다.", reduce_motion, _set_reduce_motion)
 	_add_setting_toggle("진동 피드백", "카드를 선택하거나 취소할 때 짧은 햅틱 신호를 사용합니다.", haptics_enabled, _set_haptics)
 	_add_setting_toggle("선택 카드 발광", "선택 카드의 강조 테두리 강도를 높입니다.", glow_enabled, _set_glow)
+	_info_panel("글자 크기 연동", "Android 시스템 %d%% 감지 · 게임 HUD %d%% 적용" % [roundi(system_font_scale * 100.0), roundi(_effective_text_scale() * 100.0)], COLOR_CYAN)
 	_info_panel("접근성 기준", "주요 터치 영역 48dp 이상 · 상태를 색상과 문자로 함께 표시 · 모달 외부 전투 입력 차단", COLOR_CYAN)
 
 func _add_setting_toggle(title: String, description: String, value: bool, callback: Callable) -> void:
@@ -292,6 +295,15 @@ func _load_accessibility_settings() -> void:
 	glow_enabled = bool(config.get_value("presentation", "glow", true))
 	large_text_enabled = bool(config.get_value("presentation", "large_text", false))
 
+func _read_system_font_scale() -> void:
+	system_font_scale = 1.0
+	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
+		return
+	var plugin := Engine.get_singleton(AndroidBluetoothTransport.PLUGIN_NAME)
+	if plugin != null:
+		system_font_scale = clampf(float(plugin.getSystemFontScale()), 1.0, 2.0)
+		print("STARLINK_FONT system=%.2f applied=%.2f" % [system_font_scale, _effective_text_scale()])
+
 func _save_accessibility_settings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("presentation", "reduce_motion", reduce_motion)
@@ -301,7 +313,7 @@ func _save_accessibility_settings() -> void:
 	config.save("user://accessibility.cfg")
 
 func _apply_text_scale_tree(node: Node) -> void:
-	var scale_factor := 1.15 if large_text_enabled else 1.0
+	var scale_factor := _effective_text_scale()
 	if node is Label or node is Button:
 		var control := node as Control
 		if not control.has_meta("base_font_size"):
@@ -310,6 +322,17 @@ func _apply_text_scale_tree(node: Node) -> void:
 		control.add_theme_font_size_override("font_size", maxi(1, roundi(base_size * scale_factor)))
 	for child in node.get_children():
 		_apply_text_scale_tree(child)
+
+func _effective_text_scale() -> float:
+	var app_scale := 1.15 if large_text_enabled else 1.0
+	var system_safe_scale := 1.0
+	if system_font_scale >= 1.75:
+		system_safe_scale = 1.30
+	elif system_font_scale >= 1.30:
+		system_safe_scale = 1.20
+	elif system_font_scale > 1.0:
+		system_safe_scale = 1.10
+	return maxf(app_scale, system_safe_scale)
 
 func _build_battlefield() -> Control:
 	var row := HBoxContainer.new()
