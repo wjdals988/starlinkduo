@@ -4,6 +4,7 @@ const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
 const EnemyAura := preload("res://src/ui/enemy_visual.gd")
 const CardFrames := preload("res://src/ui/card_frame_visual.gd")
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
+const CardIdentity := preload("res://src/ui/card_identity_visual.gd")
 
 var failures: Array[String] = []
 
@@ -398,6 +399,10 @@ func _test_combat_snapshot_round_trip() -> void:
 func _test_full_card_catalog() -> void:
 	var catalog := FullCardCatalog.build()
 	_expect(catalog.size() == 144, "full catalog contains exactly 144 cards")
+	var identity_signatures := {}
+	for card in catalog.values():
+		identity_signatures[CardIdentity.geometry_signature(card.id)] = true
+	_expect(identity_signatures.size() == 144, "all 144 cards use distinct deterministic visual identity signatures")
 	var fingerprint := GameCompatibility.fingerprint()
 	_expect(fingerprint.length() == 64 and fingerprint == GameCompatibility.fingerprint(), "complete game content produces one stable SHA-256 compatibility fingerprint")
 	_expect(GameCompatibility.code().length() == 12 and fingerprint.begins_with(GameCompatibility.code().to_lower()), "connection screen exposes a stable 12-character compatibility code")

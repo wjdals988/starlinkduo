@@ -8,6 +8,7 @@ var effect_accent := Color("#8fa0bc")
 var primary_tag := "전술"
 
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
+const CardIdentity := preload("res://src/ui/card_identity_visual.gd")
 
 func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "") -> void:
 	accent = accent_color
@@ -63,6 +64,10 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	column.add_child(art)
+	var identity := CardIdentity.new()
+	identity.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	identity.configure(card.id, accent)
+	art.add_child(identity)
 	var name_label := _label(String(card.display_name), 14, Color.WHITE)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
