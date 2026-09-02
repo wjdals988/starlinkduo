@@ -1744,7 +1744,7 @@ func _on_ready_pressed() -> void:
 	log_label.text = "%s · 상태 해시 %s…" % [result_label, StateHasher.hash_snapshot(state.to_snapshot()).left(8)]
 	if resolved:
 		interaction_locked = true
-		await _play_resolution_feedback(committed_cards, previous_enemy_health - state.enemies[0].health, state.team_health - previous_team_health)
+		await _play_resolution_feedback(committed_cards, previous_enemy_health - state.enemies[0].health, state.team_health - previous_team_health, local_slot)
 		interaction_locked = false
 	_refresh()
 
@@ -1774,7 +1774,7 @@ func _on_duel_ready_pressed() -> void:
 			log_label.text = "동시 행동 해결 완료 · 상태 해시 %s…" % StateHasher.hash_snapshot(duel_state.to_snapshot()).left(8)
 			interaction_locked = true
 			var target_slot := 1 - acting_slot
-			await _play_resolution_feedback(committed_cards, int(previous_health[target_slot]) - int(duel_state.health[target_slot]), int(duel_state.health[acting_slot]) - int(previous_health[acting_slot]))
+			await _play_resolution_feedback(committed_cards, int(previous_health[target_slot]) - int(duel_state.health[target_slot]), int(duel_state.health[acting_slot]) - int(previous_health[acting_slot]), acting_slot)
 			interaction_locked = false
 	else:
 		log_label.text = "상대 행동 확정을 기다리는 중입니다."
@@ -1787,12 +1787,18 @@ func _cards_for_plays(plays: Array[Dictionary]) -> Array[CardData]:
 			result.append(catalog[play.card_id])
 	return result
 
-func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_delta: int) -> void:
+func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_delta: int, source_slot: int) -> void:
 	if cards.is_empty() or battle_fx_layer == null:
 		return
 	for child in battle_fx_layer.get_children():
 		child.queue_free()
 	battle_fx_layer.visible = true
+	var spatial_effect: CombatEffectVisual
+	if not reduce_motion:
+		spatial_effect = preload("res://src/ui/combat_effect_visual.gd").new()
+		spatial_effect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		spatial_effect.configure(_primary_effect_type(cards), source_slot)
+		battle_fx_layer.add_child(spatial_effect)
 	var stack := VBoxContainer.new()
 	stack.set_anchors_preset(Control.PRESET_CENTER)
 	stack.offset_left = -250
@@ -1831,6 +1837,7 @@ func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_d
 		var reveal := create_tween().set_parallel(true)
 		reveal.tween_property(stack, "modulate", Color.WHITE, 0.18)
 		reveal.tween_property(stack, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		create_tween().tween_property(spatial_effect, "progress", 1.0, 0.58).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 		if enemy_damage > 0 and enemy_art != null:
 			var origin := enemy_art.position
 			var hit := create_tween()
@@ -1846,6 +1853,14 @@ func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_d
 		dismiss.tween_property(stack, "modulate", Color(1, 1, 1, 0), 0.18)
 		await dismiss.finished
 	battle_fx_layer.visible = false
+
+func _primary_effect_type(cards: Array[CardData]) -> String:
+	for priority in ["damage", "block", "heal", "energy"]:
+		for card in cards:
+			for effect in card.effects:
+				if String(effect.get("type", "")) == priority:
+					return priority
+	return "damage"
 
 func _resolution_color(cards: Array[CardData]) -> Color:
 	for card in cards:
