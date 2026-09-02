@@ -1,0 +1,9 @@
+.godot/
+.gradle/
+android/build/
+android/plugin/build/
+builds/
+*.apk
+*.aab
+local.properties
+
