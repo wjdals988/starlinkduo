@@ -55,6 +55,7 @@ var connection_label: Label
 var encounter_label: Label
 var enemy_name_label: Label
 var intent_label: Label
+var intent_panel: PanelContainer
 var energy_label: Label
 var background_focus_modes: Dictionary = {}
 var previous_focus_owner: Control
@@ -391,18 +392,39 @@ func _build_enemy_panel() -> Control:
 	enemy_health_bar.add_theme_stylebox_override("background", _panel_style(Color("#171e38"), 9))
 	enemy_health_bar.add_theme_stylebox_override("fill", _panel_style(COLOR_RED, 9))
 	column.add_child(enemy_health_bar)
-	enemy_art = preload("res://src/ui/enemy_visual.gd").new()
-	enemy_art.custom_minimum_size = Vector2(260, 92)
-	enemy_art.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(enemy_art)
+	var enemy_stage := Control.new()
+	enemy_stage.custom_minimum_size = Vector2(300, 128)
+	enemy_stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	enemy_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(enemy_stage)
+	var enemy_aura := preload("res://src/ui/enemy_visual.gd").new()
+	enemy_aura.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	enemy_stage.add_child(enemy_aura)
+	enemy_art = TextureRect.new()
+	enemy_art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	enemy_art.offset_left = -34
+	enemy_art.offset_top = -22
+	enemy_art.offset_right = 34
+	enemy_art.offset_bottom = 22
+	enemy_art.texture = load("res://assets/art/rift-sentinel-enemy-v1.png")
+	enemy_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	enemy_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	enemy_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	enemy_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	enemy_art.accessibility_name = "적 캐릭터"
+	enemy_art.accessibility_description = "자홍색 코어와 네 개의 칼날을 지닌 부유 전투체"
+	enemy_stage.add_child(enemy_art)
 
+	intent_panel = PanelContainer.new()
+	intent_panel.add_theme_stylebox_override("panel", _panel_style(Color("#241221df"), 18, Color("#ff667d88"), 2, 14, 7))
+	column.add_child(intent_panel)
 	intent_label = Label.new()
 	intent_label.accessibility_name = "적의 다음 행동"
 	intent_label.text = "⚠  다음 행동 · 팀에 9 피해"
 	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	intent_label.add_theme_font_size_override("font_size", 16)
 	intent_label.add_theme_color_override("font_color", COLOR_YELLOW)
-	column.add_child(intent_label)
+	intent_panel.add_child(intent_label)
 	return panel
 
 func _build_hand_section() -> Control:
@@ -1527,9 +1549,14 @@ func _refresh() -> void:
 	enemy_name_label.text = enemy.display_name
 	encounter_label.text = "%s  ·  STAGE %d-%02d" % [_encounter_kind(), run_coordinator.run.stage, run_coordinator.run.step + 1]
 	intent_label.text = "⚠  다음 행동 · 팀에 %d 피해" % enemy.intent_damage
+	var danger_color := COLOR_RED if enemy.intent_damage >= 18 else COLOR_YELLOW
+	intent_label.add_theme_color_override("font_color", danger_color)
+	intent_panel.add_theme_stylebox_override("panel", _panel_style(Color("#241221df"), 18, Color(danger_color, 0.62), 2, 14, 7))
 	enemy_health_label.text = "%d / %d" % [enemy.health, enemy.max_health]
 	enemy_health_bar.max_value = enemy.max_health
 	enemy_health_bar.value = enemy.health
+	if enemy_art != null:
+		enemy_art.modulate = Color("#ffb8c5") if enemy.health <= ceili(enemy.max_health * 0.25) else Color.WHITE
 	for slot in state.players.size():
 		var player: CombatantState = state.players[slot]
 		var remaining := player.energy - selected_energy if slot == local_slot else player.energy
