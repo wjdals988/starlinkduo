@@ -26,23 +26,26 @@ func resume_or_start(seed: int) -> RunState:
 	return run if run != null else start_new(seed)
 
 func current_card_reward(player_slot: int, encounter_type: String = "combat") -> Array[StringName]:
+	if not _valid_slot(player_slot) or not run.pending_card_rewards[player_slot]:
+		return []
 	return reward_generator.card_reward(_content_seed(player_slot, 17), _scope_for_slot(player_slot), encounter_type)
 
 func current_shop(player_slot: int) -> Dictionary:
 	return reward_generator.shop_inventory(_content_seed(player_slot, 31), _scope_for_slot(player_slot))
 
 func claim_card(player_slot: int, card_id: StringName) -> bool:
-	if not _valid_slot(player_slot) or not catalog.has(card_id):
+	if not _valid_slot(player_slot) or not run.pending_card_rewards[player_slot] or not catalog.has(card_id):
 		return false
 	var card: CardData = catalog[card_id]
 	if card.owner_scope != _scope_for_slot(player_slot) and card.owner_scope != CardData.Scope.NEUTRAL:
 		return false
 	run.decks[player_slot].append(String(card_id))
+	run.pending_card_rewards[player_slot] = false
 	checkpoint("card_reward")
 	return true
 
 func buy_card(player_slot: int, entry: Dictionary) -> bool:
-	if not _valid_slot(player_slot) or not entry.has("card_id") or not entry.has("price"):
+	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or not entry.has("card_id") or not entry.has("price"):
 		return false
 	var card_id := StringName(entry.card_id)
 	var price := int(entry.price)
@@ -57,7 +60,7 @@ func buy_card(player_slot: int, entry: Dictionary) -> bool:
 	return true
 
 func buy_relic(player_slot: int, entry: Dictionary) -> bool:
-	if not _valid_shop_entry(player_slot, entry):
+	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or not _valid_shop_entry(player_slot, entry):
 		return false
 	var relic_id := String(entry.id)
 	if run.relics[player_slot].has(relic_id):
@@ -68,7 +71,7 @@ func buy_relic(player_slot: int, entry: Dictionary) -> bool:
 	return true
 
 func buy_consumable(player_slot: int, entry: Dictionary) -> bool:
-	if not _valid_shop_entry(player_slot, entry) or run.consumables[player_slot].size() >= 3:
+	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or not _valid_shop_entry(player_slot, entry) or run.consumables[player_slot].size() >= 3:
 		return false
 	run.gold[player_slot] -= int(entry.price)
 	run.consumables[player_slot].append(String(entry.id))
@@ -116,6 +119,8 @@ func complete_combat(combat: CombatState, completed_types: Array[String]) -> Dic
 	var gold_reward := 45 if completed_types.has("elite") or completed_types.has("key_challenge") else 25
 	for slot in 2:
 		run.gold[slot] += gold_reward
+		run.pending_card_rewards[slot] = true
+	_set_shop_access(completed_types)
 	var node_summary := _apply_noncombat_effects(completed_types)
 	var result := complete_routes(completed_types)
 	if result.ok:
@@ -132,6 +137,7 @@ func complete_boss_combat(combat: CombatState, true_boss: bool = false) -> Dicti
 	var reward := 100 if true_boss else 60
 	for slot in 2:
 		run.gold[slot] += reward
+		run.pending_card_rewards[slot] = true
 	if true_boss:
 		run.phase = "completed"
 		checkpoint("run_completed")
@@ -153,6 +159,7 @@ func complete_boss_combat(combat: CombatState, true_boss: bool = false) -> Dicti
 func resolve_noncombat(completed_types: Array[String]) -> Dictionary:
 	if run.pending_routes.size() != 2:
 		return {"ok": false, "error": "routes_not_ready"}
+	_set_shop_access(completed_types)
 	var summary := _apply_noncombat_effects(completed_types)
 	var result := complete_routes(completed_types)
 	return {"ok": result.ok, "summary": summary}
@@ -213,3 +220,7 @@ func _apply_noncombat_effects(completed_types: Array[String]) -> Array[String]:
 				summary.append("각 플레이어 +12 C")
 			"shop": summary.append("상점 방문 가능")
 	return summary
+
+func _set_shop_access(completed_types: Array[String]) -> void:
+	for slot in 2:
+		run.shop_open[slot] = slot < completed_types.size() and completed_types[slot] == "shop"

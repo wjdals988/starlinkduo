@@ -560,11 +560,16 @@ func _show_reward() -> void:
 	_clear_overlay()
 	overlay_title.text = "전투 보상"
 	overlay_subtitle.text = "전용 카드 2장 + 공용 카드 1장 · 선택 즉시 덱과 체크포인트에 반영"
+	var rewards := run_coordinator.current_card_reward(local_slot)
+	if rewards.is_empty():
+		overlay_subtitle.text = "받을 수 있는 카드 보상이 없습니다. 전투에서 승리하면 보상이 해금됩니다."
+		_add_connection_notice("보상은 플레이어별로 전투당 1회만 선택할 수 있습니다.", COLOR_MUTED)
+		return
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 18)
 	overlay_content.add_child(row)
-	for card_id in run_coordinator.current_card_reward(local_slot):
+	for card_id in rewards:
 		var card: CardData = catalog[card_id]
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(260, 220)
@@ -580,8 +585,12 @@ func _claim_reward(card_id: StringName) -> void:
 
 func _show_shop() -> void:
 	_clear_overlay()
-	var inventory := run_coordinator.current_shop(local_slot)
 	overlay_title.text = "궤도 정거장 상점"
+	if not run_coordinator.run.shop_open[local_slot]:
+		overlay_subtitle.text = "현재 항로에서는 상점을 이용할 수 없습니다."
+		_add_connection_notice("상점 노드를 선택해 도착한 플레이어만 구매할 수 있습니다.", COLOR_MUTED)
+		return
+	var inventory := run_coordinator.current_shop(local_slot)
 	overlay_subtitle.text = "P%d 보유 크레딧 %d · 공용 카드는 희소성 때문에 10%% 할증" % [local_slot + 1, run_coordinator.run.gold[local_slot]]
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER

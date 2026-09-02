@@ -152,13 +152,18 @@ func _test_run_coordinator_economy() -> void:
 	store.clear()
 	var coordinator := RunCoordinator.new(DemoCardCatalog.build(), store)
 	var run := coordinator.start_new(4242)
+	_expect(coordinator.current_card_reward(0).is_empty(), "card reward is locked before combat victory")
+	run.pending_card_rewards[0] = true
 	var reward := coordinator.current_card_reward(0)
 	var previous_deck_size: int = run.decks[0].size()
 	_expect(coordinator.claim_card(0, reward[2]), "neutral reward can be claimed")
 	_expect(run.decks[0].size() == previous_deck_size + 1, "claimed reward joins the player deck")
+	_expect(not coordinator.claim_card(0, reward[0]), "claimed combat reward cannot be taken twice")
 	var shop := coordinator.current_shop(0)
 	var affordable: Dictionary = shop.cards[0]
 	run.gold[0] = int(affordable.price)
+	_expect(not coordinator.buy_card(0, affordable), "shop purchase is locked outside a shop node")
+	run.shop_open[0] = true
 	_expect(coordinator.buy_card(0, affordable), "affordable shop card can be purchased")
 	_expect(run.gold[0] == 0, "shop purchase deducts exact gold")
 	_expect(not coordinator.buy_card(0, affordable), "shop rejects purchase without enough gold")
@@ -302,6 +307,7 @@ func _test_run_combat_completion_gate() -> void:
 	_expect(completion.ok and completion.gold == 45, "key challenge victory grants elite reward")
 	_expect(run.keys[0] and run.gold[0] == before_gold + 45 and run.step == 1, "victory updates key gold and route exactly once")
 	_expect(run.team_health == 62 and completion.summary == ["팀 내구도 +12"], "mixed rest benefit resolves after combat victory")
+	_expect(run.pending_card_rewards == [true, true] and not run.shop_open[0] and not run.shop_open[1], "combat unlocks one reward per player without opening shop")
 	store.clear()
 
 func _test_boss_and_run_completion_flow() -> void:

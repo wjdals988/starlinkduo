@@ -15,6 +15,8 @@ var relics: Array[Array] = [[], []]
 var consumables: Array[Array] = [[], []]
 var map: Dictionary = {}
 var pending_routes: Dictionary = {}
+var pending_card_rewards: Array[bool] = [false, false]
+var shop_open: Array[bool] = [false, false]
 var checkpoint_reason := "new_run"
 var phase := "traversal"
 
@@ -45,6 +47,8 @@ func to_snapshot() -> Dictionary:
 		"consumables": consumables.duplicate(true),
 		"map": map.duplicate(true),
 		"pending_routes": pending_routes.duplicate(true),
+		"pending_card_rewards": pending_card_rewards.duplicate(),
+		"shop_open": shop_open.duplicate(),
 		"checkpoint_reason": checkpoint_reason,
 		"phase": phase,
 	}
@@ -64,6 +68,8 @@ static func from_snapshot(snapshot: Dictionary) -> RunState:
 	result.consumables.assign(snapshot.consumables)
 	result.map = _normalize_json_numbers(snapshot.map)
 	result.pending_routes = _normalize_json_numbers(snapshot.get("pending_routes", {}))
+	result.pending_card_rewards.assign(snapshot.get("pending_card_rewards", [false, false]))
+	result.shop_open.assign(snapshot.get("shop_open", [false, false]))
 	result.checkpoint_reason = snapshot.checkpoint_reason
 	result.phase = String(snapshot.get("phase", "traversal"))
 	return result
