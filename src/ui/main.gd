@@ -42,6 +42,9 @@ var player_detail_labels: Array[Label] = []
 var player_title_labels: Array[Label] = []
 var player_role_labels: Array[Label] = []
 var player_portraits: Array[TextureRect] = []
+var player_panels: Array[PanelContainer] = []
+var player_status_visuals: Array[PlayerStatusVisual] = []
+var player_status_badges: Array[Label] = []
 var hand_container: HBoxContainer
 var status_label: Label
 var ready_button: Button
@@ -320,6 +323,7 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	panel.custom_minimum_size = Vector2(260, 238)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _panel_style(Color("#07101f66"), 22, Color(accent, 0.45), 1, 14, 10))
+	player_panels.append(panel)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 2)
 	panel.add_child(column)
@@ -338,15 +342,38 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	column.add_child(role)
 	player_role_labels.append(role)
 
+	var player_stage := Control.new()
+	player_stage.custom_minimum_size.y = 128
+	player_stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	player_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(player_stage)
+	var status_visual := preload("res://src/ui/player_status_visual.gd").new()
+	status_visual.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	status_visual.configure(accent)
+	player_stage.add_child(status_visual)
+	player_status_visuals.append(status_visual)
 	var portrait := TextureRect.new()
-	portrait.custom_minimum_size.y = 128
-	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	portrait.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	portrait.texture = load("res://assets/art/guardian-portrait.png" if slot == 0 else "res://assets/art/engineer-portrait.png")
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	column.add_child(portrait)
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_stage.add_child(portrait)
 	player_portraits.append(portrait)
+	var status_badge := Label.new()
+	status_badge.set_anchor(SIDE_LEFT, 0.18)
+	status_badge.set_anchor(SIDE_TOP, 0.78)
+	status_badge.set_anchor(SIDE_RIGHT, 0.82)
+	status_badge.set_anchor(SIDE_BOTTOM, 0.98)
+	status_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_badge.add_theme_font_size_override("font_size", 11)
+	status_badge.add_theme_color_override("font_color", Color.WHITE)
+	status_badge.add_theme_stylebox_override("normal", _panel_style(Color("#07101fe8"), 14, accent, 2, 8, 3))
+	status_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_stage.add_child(status_badge)
+	player_status_badges.append(status_badge)
 
 	var detail := Label.new()
 	detail.accessibility_name = "P%d 상태" % (slot + 1)
@@ -952,6 +979,7 @@ func _refresh_character_identity() -> void:
 		player_title_labels[slot].add_theme_color_override("font_color", _character_color(character_id))
 		player_role_labels[slot].text = _character_role(character_id)
 		player_portraits[slot].texture = load(_character_portrait(character_id))
+		player_status_visuals[slot].configure(_character_color(character_id))
 
 func _character_name(character_id: StringName) -> String:
 	return {&"guardian": "수호자", &"engineer": "기술자", &"hacker": "해커", &"assault": "강습병"}.get(character_id, String(character_id))
@@ -1563,6 +1591,7 @@ func _refresh() -> void:
 		var readiness := "준비 완료" if player.ready else ("내 캐릭터" if slot == local_slot else "선택 중")
 		player_detail_labels[slot].text = "에너지  %d / %d   ·   방어 %d   ·   유물 %d\n상태  %s" % [remaining, player.max_energy, player.block, state.relics[slot].size(), readiness]
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
+		_update_player_readiness(slot, player.ready, slot == local_slot, selected_plays.size() if slot == local_slot else 0)
 	status_label.text = _plan_summary(false)
 	energy_label.text = "⚡ %d" % maxi(0, state.players[local_slot].energy - selected_energy)
 	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
@@ -1589,6 +1618,7 @@ func _refresh_duel() -> void:
 		var readiness := "행동 확정" if player.ready else ("내 차례" if slot == local_slot else "선택 중")
 		player_detail_labels[slot].text = "내구도 %d / %d   ·   에너지 %d / %d\n방어 %d   ·   상태 %s" % [duel_state.health[slot], duel_state.max_health[slot], remaining, player.max_energy, player.block, readiness]
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
+		_update_player_readiness(slot, player.ready, slot == local_slot, selected_plays.size() if slot == local_slot else 0)
 	status_label.text = _plan_summary(true)
 	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
 	_set_button_accessibility(ready_button, "행동 확정", "선택한 카드 %d장, 예상 비용 %d. %s" % [selected_plays.size(), selected_energy, "카드를 먼저 선택해야 합니다" if selected_plays.is_empty() else "상대에게 공개하지 않고 계획을 확정합니다"])
@@ -1602,6 +1632,19 @@ func _refresh_duel() -> void:
 	_rebuild_hand()
 	_sync_android_accessibility.call_deferred()
 	queue_redraw()
+
+func _update_player_readiness(slot: int, is_ready: bool, is_local: bool, planned_cards: int) -> void:
+	if player_status_visuals.size() <= slot or player_status_badges.size() <= slot:
+		return
+	var character_id: StringName = duel_state.players[slot].character_id if game_mode == "duel" and duel_state != null else run_coordinator.run.characters[slot]
+	var accent := _character_color(character_id)
+	var state_name := "ready" if is_ready else ("planning" if is_local and planned_cards > 0 else ("local" if is_local else "waiting"))
+	var badge_text := "확정 완료" if is_ready else ("계획 %d장" % planned_cards if is_local and planned_cards > 0 else ("내 선택" if is_local else "상대 선택 중"))
+	player_status_visuals[slot].configure(accent)
+	player_status_visuals[slot].set_status(state_name)
+	player_status_badges[slot].text = badge_text
+	player_status_badges[slot].add_theme_stylebox_override("normal", _panel_style(Color("#07101fe8"), 14, accent if state_name != "waiting" else Color("#7d8ba8"), 3 if is_ready else 2, 8, 3))
+	player_panels[slot].add_theme_stylebox_override("panel", _panel_style(Color("#07101f66"), 22, Color(accent, 0.88 if is_ready else 0.52), 3 if is_ready else 1, 14, 10))
 
 func _show_duel_outcome() -> void:
 	if game_mode != "duel" or duel_state == null or duel_state.phase != DuelState.Phase.FINISHED:
