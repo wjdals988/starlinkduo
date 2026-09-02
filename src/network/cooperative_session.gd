@@ -36,6 +36,8 @@ func _init(session_role: Role, session_transport: SessionTransport, combat_engin
 		_publish_run_snapshot("session_started")
 
 func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
+	if game_mode != "cooperative":
+		return _error("cooperative_mode_inactive")
 	if role == Role.HOST:
 		if engine == null or combat_state == null:
 			return _error("host_state_missing")
@@ -96,6 +98,8 @@ func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 	return {"ok": _send("duel_plan", {"slot": slot, "turn": _known_duel_turn(), "plays": plays})}
 
 func select_route(slot: int, node_id: String) -> Dictionary:
+	if game_mode != "cooperative":
+		return _error("cooperative_mode_inactive")
 	if role == Role.HOST:
 		if run_coordinator == null:
 			return _error("host_run_missing")
@@ -108,6 +112,8 @@ func select_route(slot: int, node_id: String) -> Dictionary:
 	return {"ok": _send("route_select", {"slot": slot, "node_id": node_id})}
 
 func select_character(slot: int, character_id: StringName) -> Dictionary:
+	if game_mode != "cooperative":
+		return _error("cooperative_mode_inactive")
 	if role == Role.HOST:
 		if run_coordinator == null:
 			return _error("host_run_missing")
@@ -120,6 +126,8 @@ func select_character(slot: int, character_id: StringName) -> Dictionary:
 	return {"ok": _send("character_select", {"slot": slot, "character_id": String(character_id)})}
 
 func submit_event_choice(slot: int, choice_index: int) -> Dictionary:
+	if game_mode != "cooperative":
+		return _error("cooperative_mode_inactive")
 	if role == Role.HOST:
 		if run_coordinator == null:
 			return _error("host_run_missing")
@@ -132,6 +140,8 @@ func submit_event_choice(slot: int, choice_index: int) -> Dictionary:
 	return {"ok": _send("event_choice", {"slot": slot, "choice": choice_index})}
 
 func use_consumable(slot: int, item_index: int) -> Dictionary:
+	if game_mode != "cooperative":
+		return _error("cooperative_mode_inactive")
 	if role == Role.HOST:
 		if run_coordinator == null or engine == null or combat_state == null:
 			return _error("host_state_missing")
@@ -182,6 +192,9 @@ func _on_transport_state_changed(next_state: String) -> void:
 			_publish_run_snapshot("session_started")
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
+	if game_mode == "duel" and message_type not in ["duel_plan", "resync_request"]:
+		_send_rejection("cooperative_mode_inactive")
+		return
 	match message_type:
 		"duel_plan":
 			if game_mode != "duel" or duel_state == null or int(payload.get("slot", -1)) != 1:

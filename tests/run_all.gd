@@ -482,6 +482,7 @@ func _test_host_authoritative_duel_session() -> void:
 	var received_duels: Array[Dictionary] = []
 	guest.duel_snapshot_received.connect(func(snapshot: Dictionary, _hash: String) -> void: received_duels.append(snapshot))
 	_expect(host.set_game_mode("duel").ok, "host starts duel mode on the shared session")
+	_expect(not host.select_route(0, "forbidden").ok and not host.submit_plan(0, []).ok, "duel mode rejects cooperative route and combat commands")
 	guest.poll()
 	_expect(guest.game_mode == "duel" and guest.duel_state != null, "guest receives duel mode and initial authoritative snapshot")
 	var guest_card: StringName = guest.duel_state.players[1].hand[0]
