@@ -1,4 +1,5 @@
 .godot/
+.DS_Store
 .gradle/
 android/build/
 android/plugin/build/

@@ -517,8 +517,31 @@ func _test_duel_save_round_trip() -> void:
 	])
 	engine.submit_plan(duel, 0, [{"card_id": duel.players[0].hand[0]}])
 	_expect(store.save(duel) == OK, "duel checkpoint saves after one hidden plan")
+	var backed_up_health := duel.health[0]
+	duel.health[0] -= 1
+	_expect(store.save(duel) == OK, "second duel checkpoint rotates the previous valid save to backup")
+	var absolute_save := ProjectSettings.globalize_path(store.save_path)
+	var absolute_temp := ProjectSettings.globalize_path(store.save_path + DuelSaveStore.TEMP_SUFFIX)
+	_expect(DirAccess.rename_absolute(absolute_save, absolute_temp) == OK, "test simulates interruption after staging but before promotion")
+	var staged_restore := store.load_active()
+	_expect(staged_restore != null and staged_restore.health[0] == duel.health[0], "valid staged checkpoint takes priority over the older backup")
+	DirAccess.rename_absolute(absolute_temp, absolute_save)
+	var corrupt_file := FileAccess.open(store.save_path, FileAccess.WRITE)
+	if corrupt_file != null:
+		corrupt_file.store_string("{interrupted")
+		corrupt_file.close()
 	var restored := store.load_active()
 	_expect(restored != null and restored.duel_id == duel.duel_id and restored.plans.has(0) and restored.players[0].ready, "duel checkpoint restores id, plan, and readiness")
+	_expect(restored != null and restored.health[0] == backed_up_health, "corrupt primary duel checkpoint falls back to the previous checksummed backup")
+	var first_pending := {"role": "guest", "duel_id": String(duel.duel_id), "turn": 1, "commitment": "a".repeat(64)}
+	var second_pending := {"role": "guest", "duel_id": String(duel.duel_id), "turn": 2, "commitment": "b".repeat(64)}
+	store.save_pending_commitment(first_pending)
+	store.save_pending_commitment(second_pending)
+	var corrupt_pending := FileAccess.open(store.save_path + DuelSaveStore.PENDING_SUFFIX, FileAccess.WRITE)
+	if corrupt_pending != null:
+		corrupt_pending.store_string("corrupt")
+		corrupt_pending.close()
+	_expect(store.load_pending_commitment().get("commitment", "") == first_pending.commitment, "corrupt pending commitment falls back to its checksummed backup")
 	store.clear()
 
 func _test_duel_commitment_tamper_rejected() -> void:
