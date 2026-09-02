@@ -1443,8 +1443,9 @@ func _refresh() -> void:
 		var readiness := "준비 완료" if player.ready else ("내 캐릭터" if slot == local_slot else "선택 중")
 		player_detail_labels[slot].text = "에너지  %d / %d   ·   방어 %d   ·   유물 %d\n상태  %s" % [remaining, player.max_energy, player.block, state.relics[slot].size(), readiness]
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
-	status_label.text = "선택 카드 %d장  ·  예상 비용 %d  ·  지원 카드 최대 1장" % [selected_plays.size(), selected_energy]
+	status_label.text = _plan_summary(false)
 	energy_label.text = "⚡ %d" % maxi(0, state.players[local_slot].energy - selected_energy)
+	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
 	ready_button.disabled = selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING
 	_rebuild_hand()
 	queue_redraw()
@@ -1466,8 +1467,8 @@ func _refresh_duel() -> void:
 		var readiness := "행동 확정" if player.ready else ("내 차례" if slot == local_slot else "선택 중")
 		player_detail_labels[slot].text = "내구도 %d / %d   ·   에너지 %d / %d\n방어 %d   ·   상태 %s" % [duel_state.health[slot], duel_state.max_health[slot], remaining, player.max_energy, player.block, readiness]
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
-	status_label.text = "P%d 행동 · 선택 카드 %d장 · 예상 비용 %d · 상대 계획은 공개되지 않음" % [local_slot + 1, selected_plays.size(), selected_energy]
-	ready_button.text = "✓  행동 확정"
+	status_label.text = _plan_summary(true)
+	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
 	energy_label.text = "⚡ %d" % maxi(0, duel_state.players[local_slot].energy - selected_energy)
 	ready_button.disabled = selected_plays.is_empty() or duel_state.phase != DuelState.Phase.PLANNING or duel_state.players[local_slot].ready
 	if duel_state.phase == DuelState.Phase.FINISHED:
@@ -1550,7 +1551,7 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 		selected_hand_indices.remove_at(selected_position)
 		selected_plays.remove_at(selected_position)
 		selected_energy -= card.energy_cost
-		log_label.text = "%s 선택 취소" % card.display_name
+		log_label.text = "%s 선택 취소 · %s" % [card.display_name, "행동 큐가 비었습니다." if selected_plays.is_empty() else "%d장 남음" % selected_plays.size()]
 		_refresh()
 		return
 	var available_energy := duel_state.players[local_slot].energy if game_mode == "duel" and duel_state != null else state.players[local_slot].energy
@@ -1566,8 +1567,26 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 	selected_hand_indices.append(hand_index)
 	selected_plays.append({"card_id": card.id, "target": 0})
 	selected_energy += card.energy_cost
-	log_label.text = "%s 선택 · 준비 완료 전까지 변경할 수 있습니다." % card.display_name
+	log_label.text = "%d번 · %s · %s · %s · 속도 %d" % [selected_plays.size(), card.display_name, _card_target_label(card, game_mode == "duel"), _effect_summary(card), card.speed]
 	_refresh()
+
+func _plan_summary(duel: bool) -> String:
+	if selected_plays.is_empty():
+		return "P%d 비공개 행동을 선택하세요 · 상대 계획은 확정 전 공개되지 않음" % (local_slot + 1) if duel else "카드를 선택해 행동 큐를 만드세요 · 지원 카드 최대 1장"
+	var entries: Array[String] = []
+	var support_count := 0
+	for index in selected_plays.size():
+		var card: CardData = catalog[selected_plays[index].card_id]
+		entries.append("%d. %s→%s" % [index + 1, card.display_name, _card_target_label(card, duel)])
+		if card.is_support():
+			support_count += 1
+	var privacy := " · 상대에게 비공개" if duel else " · 지원 %d/1" % support_count
+	return "행동 큐  %s · 비용 %d%s" % ["  →  ".join(entries), selected_energy, privacy]
+
+func _card_target_label(card: CardData, duel: bool) -> String:
+	if duel:
+		return "상대" if card.target == CardData.Target.ENEMY else "나"
+	return ["나", "동료", "적", "팀"][card.target]
 
 func _on_ready_pressed() -> void:
 	if game_mode == "duel" and duel_state != null:
