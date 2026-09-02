@@ -60,6 +60,9 @@ var background_focus_modes: Dictionary = {}
 var previous_focus_owner: Control
 var handling_back_request := false
 var accessibility_sync_pending := false
+var interaction_locked := false
+var battle_fx_layer: Control
+var enemy_art: Control
 
 func _ready() -> void:
 	get_tree().set_auto_accept_quit(false)
@@ -122,7 +125,7 @@ func _process(_delta: float) -> void:
 		cooperative_session.poll()
 	else:
 		bluetooth_transport.poll()
-	if active_route_combat and state.phase == CombatState.Phase.WON:
+	if active_route_combat and not interaction_locked and state.phase == CombatState.Phase.WON:
 		if cooperative_session == null or cooperative_session.role == CooperativeSession.Role.HOST:
 			_finish_route_combat()
 	if connection_label != null:
@@ -157,7 +160,17 @@ func _build_interface() -> void:
 	root.add_child(_build_top_bar())
 	root.add_child(_build_battlefield())
 	root.add_child(_build_hand_section())
+	_build_battle_fx_layer()
 	_build_overlay()
+
+func _build_battle_fx_layer() -> void:
+	battle_fx_layer = Control.new()
+	battle_fx_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	battle_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	battle_fx_layer.accessibility_name = "전투 결과 연출"
+	battle_fx_layer.accessibility_live = AccessibilityServer.LIVE_ASSERTIVE
+	battle_fx_layer.visible = false
+	add_child(battle_fx_layer)
 
 func _build_top_bar() -> Control:
 	var panel := PanelContainer.new()
@@ -378,7 +391,7 @@ func _build_enemy_panel() -> Control:
 	enemy_health_bar.add_theme_stylebox_override("background", _panel_style(Color("#171e38"), 9))
 	enemy_health_bar.add_theme_stylebox_override("fill", _panel_style(COLOR_RED, 9))
 	column.add_child(enemy_health_bar)
-	var enemy_art := preload("res://src/ui/enemy_visual.gd").new()
+	enemy_art = preload("res://src/ui/enemy_visual.gd").new()
 	enemy_art.custom_minimum_size = Vector2(260, 92)
 	enemy_art.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(enemy_art)
@@ -1526,7 +1539,7 @@ func _refresh() -> void:
 	status_label.text = _plan_summary(false)
 	energy_label.text = "⚡ %d" % maxi(0, state.players[local_slot].energy - selected_energy)
 	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
-	ready_button.disabled = selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING
+	ready_button.disabled = interaction_locked or selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING
 	_set_button_accessibility(ready_button, "행동 확정", "선택한 카드 %d장, 예상 비용 %d. %s" % [selected_plays.size(), selected_energy, "카드를 먼저 선택해야 합니다" if selected_plays.is_empty() else "두 번 탭하여 실행을 확정합니다"])
 	_rebuild_hand()
 	_sync_android_accessibility.call_deferred()
@@ -1553,7 +1566,7 @@ func _refresh_duel() -> void:
 	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
 	_set_button_accessibility(ready_button, "행동 확정", "선택한 카드 %d장, 예상 비용 %d. %s" % [selected_plays.size(), selected_energy, "카드를 먼저 선택해야 합니다" if selected_plays.is_empty() else "상대에게 공개하지 않고 계획을 확정합니다"])
 	energy_label.text = "⚡ %d" % maxi(0, duel_state.players[local_slot].energy - selected_energy)
-	ready_button.disabled = selected_plays.is_empty() or duel_state.phase != DuelState.Phase.PLANNING or duel_state.players[local_slot].ready
+	ready_button.disabled = interaction_locked or selected_plays.is_empty() or duel_state.phase != DuelState.Phase.PLANNING or duel_state.players[local_slot].ready
 	if duel_state.phase == DuelState.Phase.FINISHED:
 		ready_button.disabled = true
 		status_label.text = "무승부" if duel_state.winner == -1 else "P%d 결투 승리" % (duel_state.winner + 1)
@@ -1628,6 +1641,8 @@ func _rebuild_hand() -> void:
 	_apply_text_scale_tree.call_deferred(hand_container)
 
 func _on_card_pressed(hand_index: int, card: CardData) -> void:
+	if interaction_locked:
+		return
 	if haptics_enabled:
 		Input.vibrate_handheld(28, 0.22)
 	if selected_hand_indices.has(hand_index):
@@ -1673,10 +1688,15 @@ func _card_target_label(card: CardData, duel: bool) -> String:
 	return ["나", "동료", "적", "팀"][card.target]
 
 func _on_ready_pressed() -> void:
+	if interaction_locked:
+		return
 	if game_mode == "duel" and duel_state != null:
 		_on_duel_ready_pressed()
 		return
+	var committed_cards := _cards_for_plays(selected_plays)
 	var previous_turn := state.turn
+	var previous_enemy_health := state.enemies[0].health
+	var previous_team_health := state.team_health
 	var local_result := cooperative_session.submit_plan(local_slot, selected_plays) if cooperative_session != null else engine.submit_plan(state, local_slot, selected_plays)
 	if not local_result.ok:
 		log_label.text = "행동을 확정할 수 없습니다: %s" % local_result.get("error", "unknown")
@@ -1689,14 +1709,24 @@ func _on_ready_pressed() -> void:
 			log_label.text = "동료 행동 오류: %s" % teammate_result.error
 			return
 		engine.resolve_if_ready(state)
+	var resolved := state.turn != previous_turn
 	selected_hand_indices.clear()
 	selected_plays.clear()
 	selected_energy = 0
 	var result_label := "상대 준비 대기 중" if cooperative_session != null and state.turn == previous_turn else "턴 해결 완료"
 	log_label.text = "%s · 상태 해시 %s…" % [result_label, StateHasher.hash_snapshot(state.to_snapshot()).left(8)]
+	if resolved:
+		interaction_locked = true
+		await _play_resolution_feedback(committed_cards, previous_enemy_health - state.enemies[0].health, state.team_health - previous_team_health)
+		interaction_locked = false
 	_refresh()
 
 func _on_duel_ready_pressed() -> void:
+	if interaction_locked:
+		return
+	var committed_cards := _cards_for_plays(selected_plays)
+	var acting_slot := local_slot
+	var previous_health := duel_state.health.duplicate()
 	var result := cooperative_session.submit_duel_plan(local_slot, selected_plays) if cooperative_session != null else duel_engine.submit_plan(duel_state, local_slot, selected_plays)
 	if not result.ok:
 		log_label.text = "결투 행동을 확정할 수 없습니다: %s" % result.get("error", "unknown")
@@ -1715,9 +1745,107 @@ func _on_duel_ready_pressed() -> void:
 			duel_save_store.save(duel_state)
 			local_slot = 0
 			log_label.text = "동시 행동 해결 완료 · 상태 해시 %s…" % StateHasher.hash_snapshot(duel_state.to_snapshot()).left(8)
+			interaction_locked = true
+			var target_slot := 1 - acting_slot
+			await _play_resolution_feedback(committed_cards, int(previous_health[target_slot]) - int(duel_state.health[target_slot]), int(duel_state.health[acting_slot]) - int(previous_health[acting_slot]))
+			interaction_locked = false
 	else:
 		log_label.text = "상대 행동 확정을 기다리는 중입니다."
 	_refresh()
+
+func _cards_for_plays(plays: Array[Dictionary]) -> Array[CardData]:
+	var result: Array[CardData] = []
+	for play in plays:
+		if catalog.has(play.card_id):
+			result.append(catalog[play.card_id])
+	return result
+
+func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_delta: int) -> void:
+	if cards.is_empty() or battle_fx_layer == null:
+		return
+	for child in battle_fx_layer.get_children():
+		child.queue_free()
+	battle_fx_layer.visible = true
+	var stack := VBoxContainer.new()
+	stack.set_anchors_preset(Control.PRESET_CENTER)
+	stack.offset_left = -250
+	stack.offset_right = 250
+	stack.offset_top = -80
+	stack.offset_bottom = 80
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	battle_fx_layer.add_child(stack)
+	var cue := Label.new()
+	cue.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cue.add_theme_font_size_override("font_size", 16)
+	cue.add_theme_color_override("font_color", COLOR_CYAN)
+	cue.text = "ACTION  ·  %d장 연속 실행" % cards.size()
+	stack.add_child(cue)
+	var action := Label.new()
+	action.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	action.add_theme_font_size_override("font_size", 31)
+	action.add_theme_color_override("font_color", _resolution_color(cards))
+	action.add_theme_stylebox_override("normal", _panel_style(Color("#07101ff2"), 22, _resolution_color(cards), 3, 30, 15))
+	action.text = "  %s  " % "  →  ".join(cards.map(func(card: CardData) -> String: return card.display_name))
+	stack.add_child(action)
+	var result := Label.new()
+	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result.add_theme_font_size_override("font_size", 20)
+	result.add_theme_color_override("font_color", COLOR_TEXT)
+	result.text = _resolution_result_text(cards, enemy_damage, team_delta)
+	stack.add_child(result)
+	battle_fx_layer.accessibility_description = "%s. %s" % [action.text.strip_edges(), result.text]
+	if reduce_motion:
+		await get_tree().create_timer(0.55).timeout
+	else:
+		stack.modulate = Color(1, 1, 1, 0)
+		stack.scale = Vector2(0.82, 0.82)
+		stack.pivot_offset = Vector2(250, 80)
+		var reveal := create_tween().set_parallel(true)
+		reveal.tween_property(stack, "modulate", Color.WHITE, 0.18)
+		reveal.tween_property(stack, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		if enemy_damage > 0 and enemy_art != null:
+			var origin := enemy_art.position
+			var hit := create_tween()
+			hit.tween_interval(0.12)
+			hit.tween_property(enemy_art, "position", origin + Vector2(12, 0), 0.05)
+			hit.tween_property(enemy_art, "position", origin - Vector2(9, 0), 0.05)
+			hit.tween_property(enemy_art, "position", origin, 0.07)
+			hit.parallel().tween_property(enemy_art, "modulate", Color("#ff667d"), 0.05)
+			hit.tween_property(enemy_art, "modulate", Color.WHITE, 0.12)
+		await reveal.finished
+		await get_tree().create_timer(0.62).timeout
+		var dismiss := create_tween()
+		dismiss.tween_property(stack, "modulate", Color(1, 1, 1, 0), 0.18)
+		await dismiss.finished
+	battle_fx_layer.visible = false
+
+func _resolution_color(cards: Array[CardData]) -> Color:
+	for card in cards:
+		for effect in card.effects:
+			match String(effect.get("type", "")):
+				"damage": return COLOR_RED
+				"block": return COLOR_BLUE
+				"heal": return COLOR_CYAN
+	return COLOR_YELLOW
+
+func _resolution_result_text(cards: Array[CardData], enemy_damage: int, team_delta: int) -> String:
+	var parts: Array[String] = []
+	if enemy_damage > 0:
+		parts.append("적 내구도 −%d" % enemy_damage)
+	if team_delta < 0:
+		parts.append("팀 내구도 −%d" % abs(team_delta))
+	elif team_delta > 0:
+		parts.append("팀 내구도 +%d" % team_delta)
+	var block_total := 0
+	var energy_total := 0
+	for card in cards:
+		for effect in card.effects:
+			if String(effect.get("type", "")) == "block": block_total += int(effect.amount)
+			if String(effect.get("type", "")) == "energy": energy_total += int(effect.amount)
+	if block_total > 0: parts.append("방어 +%d" % block_total)
+	if energy_total > 0: parts.append("에너지 +%d" % energy_total)
+	return "  ·  ".join(parts) if not parts.is_empty() else "행동 해결 완료"
 
 func _effect_summary(card: CardData) -> String:
 	var parts: Array[String] = []
