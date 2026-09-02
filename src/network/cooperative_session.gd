@@ -73,6 +73,19 @@ func submit_event_choice(slot: int, choice_index: int) -> Dictionary:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("event_choice", {"slot": slot, "choice": choice_index})}
 
+func use_consumable(slot: int, item_index: int) -> Dictionary:
+	if role == Role.HOST:
+		if run_coordinator == null or engine == null or combat_state == null:
+			return _error("host_state_missing")
+		var result := run_coordinator.use_consumable(combat_state, slot, item_index, engine)
+		if result.ok:
+			_publish_snapshot("consumable_used")
+			_publish_run_snapshot("consumable_used")
+		return result
+	if slot != 1:
+		return _error("guest_slot_forbidden")
+	return {"ok": _send("use_consumable", {"slot": slot, "index": item_index})}
+
 func replace_combat_state(next_state: CombatState) -> void:
 	combat_state = next_state
 	if role == Role.HOST:
@@ -108,6 +121,16 @@ func _on_transport_state_changed(next_state: String) -> void:
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"use_consumable":
+			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
+				_send_rejection("guest_consumable_forbidden")
+				return
+			var item_result := run_coordinator.use_consumable(combat_state, 1, int(payload.get("index", -1)), engine)
+			if not item_result.ok:
+				_send_rejection(item_result.error)
+				return
+			_publish_snapshot("consumable_used")
+			_publish_run_snapshot("consumable_used")
 		"event_choice":
 			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
 				_send_rejection("guest_event_forbidden")

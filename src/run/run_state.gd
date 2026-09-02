@@ -71,7 +71,10 @@ static func from_snapshot(snapshot: Dictionary) -> RunState:
 	result.relics.assign(snapshot.relics)
 	result.consumables.assign(snapshot.consumables)
 	result.map = _normalize_json_numbers(snapshot.map)
-	result.pending_routes = _normalize_json_numbers(snapshot.get("pending_routes", {}))
+	result.pending_routes.clear()
+	var restored_routes: Dictionary = snapshot.get("pending_routes", {})
+	for slot_key in restored_routes:
+		result.pending_routes[int(slot_key)] = String(restored_routes[slot_key])
 	result.pending_card_rewards.assign(snapshot.get("pending_card_rewards", [false, false]))
 	result.shop_open.assign(snapshot.get("shop_open", [false, false]))
 	result.pending_event = _normalize_json_numbers(snapshot.get("pending_event", {}))

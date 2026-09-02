@@ -120,7 +120,7 @@ func _build_top_bar() -> Control:
 	turn_label.add_theme_color_override("font_color", COLOR_MUTED)
 	row.add_child(turn_label)
 
-	for item in [["연결", _show_connection], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop]]:
+	for item in [["연결", _show_connection], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop], ["아이템", _show_consumables]]:
 		var navigation := Button.new()
 		navigation.text = item[0]
 		navigation.custom_minimum_size = Vector2(88, 42)
@@ -419,6 +419,9 @@ func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
 	if was_event_pending and not run_coordinator.run.last_event_result.is_empty():
 		_show_route_result("이벤트 해결", String(run_coordinator.run.last_event_result.summary))
 		return
+	if overlay.visible and overlay_title.text == "소비 아이템":
+		_show_consumables()
+		return
 	if overlay.visible and overlay_title.text.begins_with("항로 선택"):
 		_show_map()
 
@@ -674,6 +677,50 @@ func _show_shop() -> void:
 	services.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	services.add_theme_color_override("font_color", COLOR_MUTED)
 	overlay_content.add_child(services)
+
+func _show_consumables() -> void:
+	_clear_overlay()
+	overlay_title.text = "소비 아이템"
+	if not active_route_combat or state.phase != CombatState.Phase.PLANNING:
+		overlay_subtitle.text = "소비 아이템은 항로 전투의 행동 선택 단계에서만 사용할 수 있습니다."
+		_add_connection_notice("P%d 소지품 %d / 3" % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()], COLOR_MUTED)
+		return
+	overlay_subtitle.text = "P%d 소지품 %d / 3 · 사용 즉시 소모되고 체크포인트에 저장됩니다." % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()]
+	if run_coordinator.run.consumables[local_slot].is_empty():
+		_add_connection_notice("사용 가능한 소비 아이템이 없습니다.", COLOR_MUTED)
+		return
+	var content := RunContentCatalog.build()
+	for item_index in run_coordinator.run.consumables[local_slot].size():
+		var item_id := String(run_coordinator.run.consumables[local_slot][item_index])
+		for item in content.consumables:
+			if String(item.id) == item_id:
+				_add_connection_action("%s\n%s" % [item.name, _consumable_effect_text(item)], _use_consumable.bind(item_index), COLOR_ORANGE)
+				break
+
+func _use_consumable(item_index: int) -> void:
+	var is_guest := cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST
+	var result := cooperative_session.use_consumable(local_slot, item_index) if cooperative_session != null else run_coordinator.use_consumable(state, local_slot, item_index, engine)
+	if not result.ok:
+		overlay_subtitle.text = "아이템을 사용할 수 없습니다: %s" % result.get("error", "unknown")
+		return
+	if is_guest:
+		overlay_subtitle.text = "호스트의 사용 판정을 기다리는 중입니다."
+		return
+	_show_consumables()
+	overlay_subtitle.text = "%s 사용 · %s" % [result.name, result.summary]
+	_refresh()
+
+func _consumable_effect_text(item: Dictionary) -> String:
+	return {
+		"block": "이번 턴 방어 +%d" % int(item.value),
+		"energy": "이번 턴 에너지 +%d" % int(item.value),
+		"heal": "팀 내구도 +%d" % int(item.value),
+		"damage": "적에게 %d 피해" % int(item.value),
+		"draw": "카드 %d장 드로우" % int(item.value),
+		"duplicate": "첫 손패 1장 임시 복제",
+		"escape": "회피 방벽 +20",
+		"upgrade": "이번 전투 최대 에너지 +%d" % int(item.value),
+	}.get(String(item.effect), String(item.effect))
 
 func _buy_shop_card(entry: Dictionary) -> void:
 	if run_coordinator.buy_card(local_slot, entry):

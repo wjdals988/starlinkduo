@@ -22,8 +22,9 @@ func _init() -> void:
 	_test_run_combat_completion_gate()
 	_test_boss_and_run_completion_flow()
 	_test_collaborative_event_resolution()
+	_test_consumable_effects_and_sync()
 	if failures.is_empty():
-		print("PASS: 19 core, content, run, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 20 core, content, run, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -141,11 +142,17 @@ func _test_run_save_round_trip() -> void:
 	original.stage = 2
 	original.step = 4
 	original.gold[0] = 143
+	var selected_step: Dictionary = original.map.stages[1].steps[4]
+	if selected_step.kind == "parallel":
+		original.pending_routes = {0: selected_step.lanes[0].options[0].id, 1: selected_step.lanes[1].options[0].id}
 	_expect(store.save(original, "test_checkpoint") == OK, "run checkpoint saves")
 	var restored := store.load_active()
 	_expect(restored != null, "saved run loads")
 	if restored != null:
 		_expect(restored.to_snapshot() == original.to_snapshot(), "run save round trip preserves state")
+		var restored_coordinator := RunCoordinator.new(FullCardCatalog.build(), store)
+		restored_coordinator.run = restored
+		_expect(restored.pending_routes.has(0) and restored.pending_routes.has(1) and restored_coordinator.selected_route_types().size() == 2, "restored route keys remain playable integer slots")
 	store.clear()
 
 func _test_run_coordinator_economy() -> void:
@@ -226,6 +233,11 @@ func _test_host_authoritative_route_session() -> void:
 	_expect(host.submit_event_choice(0, 0).ready, "host vote resolves two-player event")
 	guest.poll()
 	_expect(received_runs[-1].pending_event.is_empty() and received_runs[-1].last_event_result.outcome == "compromise", "guest receives resolved event result in run snapshot")
+	run.consumables[1].append("consumable_01")
+	_expect(guest.use_consumable(1, 0).ok, "guest sends consumable intent without mutating combat directly")
+	host.poll()
+	guest.poll()
+	_expect(run.consumables[1].is_empty() and host.combat_state.players[1].block == 12, "host applies and consumes guest item authoritatively")
 	host_store.clear()
 
 func _test_session_rejects_stale_sequence() -> void:
@@ -363,6 +375,22 @@ func _test_collaborative_event_resolution() -> void:
 	var second := coordinator.submit_event_choice(1, 1)
 	_expect(second.ok and second.ready and second.outcome == "compromise", "different choices resolve to deterministic compromise")
 	_expect(run.step == 1 and run.gold == [108, 108] and run.pending_event.is_empty(), "resolved event rewards both players and advances once")
+	store.clear()
+
+func _test_consumable_effects_and_sync() -> void:
+	var store := RunSaveStore.new("user://consumable_test.json")
+	store.clear()
+	var catalog := FullCardCatalog.build()
+	var coordinator := RunCoordinator.new(catalog, store)
+	var content := RunContentCatalog.build()
+	for item in content.consumables:
+		var run := coordinator.start_new(9000 + int(String(item.id).trim_prefix("consumable_")))
+		run.consumables[0] = [String(item.id)]
+		var engine := CombatEngine.new(catalog)
+		var combat := engine.create_run_combat(run, ["combat"], content)
+		var result := coordinator.use_consumable(combat, 0, 0, engine)
+		_expect(result.ok and run.consumables[0].is_empty(), "%s applies once and is consumed" % item.id)
+	_expect(not coordinator.use_consumable(CombatEngine.new(catalog).create_demo_combat(), 0, 0, CombatEngine.new(catalog)).ok, "missing consumable is rejected")
 	store.clear()
 
 func _expect(condition: bool, label: String) -> void:

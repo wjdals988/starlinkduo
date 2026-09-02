@@ -82,6 +82,62 @@ func submit_plan(state: CombatState, slot: int, plays: Array[Dictionary]) -> Dic
 	state.players[slot].ready = true
 	return {"ok": true, "state_hash": StateHasher.hash_snapshot(state.to_snapshot())}
 
+func use_consumable(state: CombatState, run: RunState, slot: int, item_index: int, content: Dictionary) -> Dictionary:
+	if state.phase != CombatState.Phase.PLANNING:
+		return _error("not_planning")
+	if slot < 0 or slot >= state.players.size() or item_index < 0 or item_index >= run.consumables[slot].size():
+		return _error("invalid_consumable")
+	var item_id := String(run.consumables[slot][item_index])
+	var item: Dictionary = {}
+	for candidate in content.consumables:
+		if String(candidate.id) == item_id:
+			item = candidate
+			break
+	if item.is_empty():
+		return _error("unknown_consumable")
+	var player: CombatantState = state.players[slot]
+	var value := int(item.value)
+	var summary := ""
+	match String(item.effect):
+		"block":
+			player.block += value
+			summary = "방어 +%d" % value
+		"energy":
+			player.energy += value
+			summary = "에너지 +%d" % value
+		"heal":
+			var before := state.team_health
+			state.team_health = mini(state.team_max_health, state.team_health + value)
+			summary = "팀 내구도 +%d" % (state.team_health - before)
+		"damage":
+			var living := _living_enemies(state)
+			if living.is_empty():
+				return _error("no_enemy")
+			living[0].health = maxi(0, living[0].health - value)
+			summary = "적에게 %d 피해" % value
+			if _living_enemies(state).is_empty():
+				state.phase = CombatState.Phase.WON
+		"draw":
+			_draw_to_hand(player, player.hand.size() + value)
+			summary = "카드 %d장 드로우" % value
+		"duplicate":
+			if player.hand.is_empty():
+				return _error("empty_hand")
+			player.hand.append(player.hand[0])
+			summary = "첫 손패 1장 임시 복제"
+		"escape":
+			player.block += 20
+			summary = "회피 방벽 +20"
+		"upgrade":
+			player.max_energy += value
+			player.energy += value
+			summary = "이번 전투 최대 에너지 +%d" % value
+		_:
+			return _error("unsupported_consumable")
+	run.consumables[slot].remove_at(item_index)
+	state.event_log.append({"type": "consumable_used", "slot": slot, "item_id": item_id})
+	return {"ok": true, "item_id": item_id, "name": String(item.name), "summary": summary}
+
 func resolve_if_ready(state: CombatState) -> Dictionary:
 	if state.plans.size() != state.players.size():
 		return _error("players_not_ready")

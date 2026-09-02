@@ -78,6 +78,14 @@ func buy_consumable(player_slot: int, entry: Dictionary) -> bool:
 	checkpoint("consumable_purchase")
 	return true
 
+func use_consumable(combat: CombatState, player_slot: int, item_index: int, engine: CombatEngine) -> Dictionary:
+	if not _valid_slot(player_slot):
+		return {"ok": false, "error": "invalid_slot"}
+	var result := engine.use_consumable(combat, run, player_slot, item_index, RunContentCatalog.build())
+	if result.ok:
+		checkpoint("consumable_used")
+	return result
+
 func choose_route(player_slot: int, node_id: String) -> Dictionary:
 	if not _valid_slot(player_slot):
 		return {"ok": false, "error": "invalid_slot"}
