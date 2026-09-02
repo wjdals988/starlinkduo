@@ -37,6 +37,7 @@ func create_run_combat(run: RunState, route_types: Array[String], content: Dicti
 		for card_id in run.decks[slot]:
 			player.draw_pile.append(StringName(card_id))
 		state.players.append(player)
+		state.relics[slot] = run.relics[slot].duplicate()
 	var stage_content: Dictionary = content.stages[run.stage - 1]
 	var encounter: Dictionary
 	if route_types.has("true_boss"):
@@ -56,6 +57,7 @@ func create_run_combat(run: RunState, route_types: Array[String], content: Dicti
 	enemy.intent_damage = int(encounter.intent_damage)
 	state.enemies.append(enemy)
 	begin_turn(state)
+	_apply_relic_trigger(state, "combat_start")
 	return state
 
 func begin_turn(state: CombatState) -> void:
@@ -68,6 +70,7 @@ func begin_turn(state: CombatState) -> void:
 		player.block = 0
 		player.ready = false
 		_draw_to_hand(player, HAND_SIZE)
+	_apply_relic_trigger(state, "turn_start")
 	state.event_log.append({"type": "turn_started", "turn": state.turn})
 
 func submit_plan(state: CombatState, slot: int, plays: Array[Dictionary]) -> Dictionary:
@@ -117,6 +120,7 @@ func use_consumable(state: CombatState, run: RunState, slot: int, item_index: in
 			summary = "적에게 %d 피해" % value
 			if _living_enemies(state).is_empty():
 				state.phase = CombatState.Phase.WON
+				_apply_relic_trigger(state, "combat_end")
 		"draw":
 			_draw_to_hand(player, player.hand.size() + value)
 			summary = "카드 %d장 드로우" % value
@@ -199,9 +203,13 @@ func _resolve_play(state: CombatState, slot: int, play: Dictionary) -> void:
 	for effect in card.effects:
 		_resolve_effect(state, source, card, play, effect)
 	state.event_log.append({"type": "card_played", "slot": slot, "card_id": String(card.id)})
+	_apply_relic_trigger(state, "card_played", slot)
+	if card.is_support():
+		_apply_relic_trigger(state, "support_played", slot)
 	if _living_enemies(state).is_empty():
 		state.phase = CombatState.Phase.WON
 		state.event_log.append({"type": "combat_won", "turn": state.turn})
+		_apply_relic_trigger(state, "combat_end")
 
 func _resolve_effect(state: CombatState, source: CombatantState, card: CardData, play: Dictionary, effect: Dictionary) -> void:
 	var amount: int = effect.get("amount", 0)
@@ -227,15 +235,53 @@ func _recipient_for(state: CombatState, source: CombatantState, card: CardData) 
 
 func _resolve_enemy_turn(state: CombatState) -> void:
 	for enemy in _living_enemies(state):
+		_apply_relic_trigger(state, "damage_taken")
+		if enemy.health <= 0:
+			continue
 		var total_block := 0
 		for player in state.players:
 			total_block += player.block
 		var damage := maxi(0, enemy.intent_damage - total_block)
 		state.team_health = maxi(0, state.team_health - damage)
 		state.event_log.append({"type": "enemy_attack", "enemy_id": String(enemy.id), "damage": damage})
+	if _living_enemies(state).is_empty():
+		state.phase = CombatState.Phase.WON
+		state.event_log.append({"type": "combat_won", "turn": state.turn})
+		_apply_relic_trigger(state, "combat_end")
+		return
 	if state.team_health <= 0:
 		state.phase = CombatState.Phase.LOST
 		state.event_log.append({"type": "combat_lost", "turn": state.turn})
+
+func _apply_relic_trigger(state: CombatState, trigger: String, triggering_slot: int = -1) -> void:
+	var content := RunContentCatalog.build()
+	for slot in state.relics.size():
+		if triggering_slot >= 0 and slot != triggering_slot:
+			continue
+		for relic_id in state.relics[slot]:
+			for relic in content.relics:
+				if String(relic.id) == String(relic_id) and String(relic.trigger) == trigger:
+					_apply_relic_effect(state, slot, relic, trigger)
+					break
+
+func _apply_relic_effect(state: CombatState, slot: int, relic: Dictionary, trigger: String) -> void:
+	var value := int(relic.value)
+	match String(relic.effect):
+		"block": state.players[slot].block += value
+		"energy": state.players[slot].energy += value
+		"damage":
+			var living := _living_enemies(state)
+			if not living.is_empty():
+				living[0].health = maxi(0, living[0].health - value)
+		"heal": state.team_health = mini(state.team_max_health, state.team_health + value)
+	state.event_log.append({
+		"type": "relic_triggered",
+		"slot": slot,
+		"relic_id": String(relic.id),
+		"trigger": trigger,
+		"effect": String(relic.effect),
+		"value": value,
+	})
 
 func _finish_turn(state: CombatState) -> void:
 	if state.phase == CombatState.Phase.WON or state.phase == CombatState.Phase.LOST:

@@ -39,11 +39,12 @@ static func _build_relics() -> Array[Dictionary]:
 	var relics: Array[Dictionary] = []
 	var triggers := ["combat_start", "turn_start", "card_played", "support_played", "damage_taken", "combat_end"]
 	for index in RELIC_NAMES.size():
+		var trigger: String = triggers[index % triggers.size()]
 		relics.append({
 			"id": "relic_%02d" % (index + 1),
 			"name": RELIC_NAMES[index],
-			"trigger": triggers[index % triggers.size()],
-			"effect": ["block", "energy", "damage", "heal"][index % 4],
+			"trigger": trigger,
+			"effect": "heal" if trigger == "combat_end" else ["block", "energy", "damage", "heal"][index % 4],
 			"value": 1 + index / 8,
 		})
 	return relics

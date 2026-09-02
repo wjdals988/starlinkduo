@@ -12,6 +12,7 @@ var players: Array[CombatantState] = []
 var enemies: Array[EnemyState] = []
 var plans: Dictionary = {}
 var event_log: Array[Dictionary] = []
+var relics: Array[Array] = [[], []]
 
 func to_snapshot() -> Dictionary:
 	var player_snapshots: Array[Dictionary] = []
@@ -30,6 +31,7 @@ func to_snapshot() -> Dictionary:
 		"enemies": enemy_snapshots,
 		"plans": plans.duplicate(true),
 		"event_log": event_log.duplicate(true),
+		"relics": relics.duplicate(true),
 	}
 
 static func from_snapshot(snapshot: Dictionary) -> CombatState:
@@ -53,4 +55,5 @@ static func from_snapshot(snapshot: Dictionary) -> CombatState:
 			restored_plays.append(restored_play)
 		result.plans[int(key)] = restored_plays
 	result.event_log.assign(snapshot.event_log)
+	result.relics.assign(snapshot.get("relics", [[], []]))
 	return result

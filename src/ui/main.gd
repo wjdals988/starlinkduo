@@ -681,6 +681,13 @@ func _show_shop() -> void:
 func _show_consumables() -> void:
 	_clear_overlay()
 	overlay_title.text = "소비 아이템"
+	var relic_names: Array[String] = []
+	for relic_id in run_coordinator.run.relics[local_slot]:
+		for relic in RunContentCatalog.build().relics:
+			if String(relic.id) == String(relic_id):
+				relic_names.append(String(relic.name))
+				break
+	_add_connection_notice("활성 유물 %d개%s" % [relic_names.size(), " · " + ", ".join(relic_names) if not relic_names.is_empty() else ""], COLOR_CYAN)
 	if not active_route_combat or state.phase != CombatState.Phase.PLANNING:
 		overlay_subtitle.text = "소비 아이템은 항로 전투의 행동 선택 단계에서만 사용할 수 있습니다."
 		_add_connection_notice("P%d 소지품 %d / 3" % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()], COLOR_MUTED)
@@ -783,7 +790,7 @@ func _refresh() -> void:
 		var player: CombatantState = state.players[slot]
 		var remaining := player.energy - selected_energy if slot == local_slot else player.energy
 		var readiness := "준비 완료" if player.ready else ("내 캐릭터" if slot == local_slot else "선택 중")
-		player_detail_labels[slot].text = "에너지  %d / %d   ·   방어 %d\n상태  %s" % [remaining, player.max_energy, player.block, readiness]
+		player_detail_labels[slot].text = "에너지  %d / %d   ·   방어 %d   ·   유물 %d\n상태  %s" % [remaining, player.max_energy, player.block, state.relics[slot].size(), readiness]
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
 	status_label.text = "선택 카드 %d장  ·  예상 비용 %d  ·  지원 카드 최대 1장" % [selected_plays.size(), selected_energy]
 	ready_button.disabled = selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING

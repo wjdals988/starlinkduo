@@ -23,8 +23,9 @@ func _init() -> void:
 	_test_boss_and_run_completion_flow()
 	_test_collaborative_event_resolution()
 	_test_consumable_effects_and_sync()
+	_test_relic_lifecycle_triggers()
 	if failures.is_empty():
-		print("PASS: 20 core, content, run, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 21 core, content, run, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -392,6 +393,36 @@ func _test_consumable_effects_and_sync() -> void:
 		_expect(result.ok and run.consumables[0].is_empty(), "%s applies once and is consumed" % item.id)
 	_expect(not coordinator.use_consumable(CombatEngine.new(catalog).create_demo_combat(), 0, 0, CombatEngine.new(catalog)).ok, "missing consumable is rejected")
 	store.clear()
+
+func _test_relic_lifecycle_triggers() -> void:
+	var catalog := FullCardCatalog.build()
+	var engine := CombatEngine.new(catalog)
+	var run := RunCoordinator.new(catalog, RunSaveStore.new("user://relic_test.json")).start_new(6060)
+	run.team_health = 50
+	run.relics[0] = ["relic_01", "relic_02", "relic_03", "relic_04", "relic_05"]
+	var combat := engine.create_run_combat(run, ["combat"], RunContentCatalog.build())
+	_expect(combat.players[0].block == 1 and combat.players[0].energy == 4, "combat and turn start relics apply to their owner")
+	_expect(combat.relics[0].size() == 5 and CombatState.from_snapshot(combat.to_snapshot()).relics[0].size() == 5, "relic ownership survives combat snapshot round trip")
+	var guardian_card: StringName = &"guardian_cover" if combat.players[0].hand.has(&"guardian_cover") else combat.players[0].hand[0]
+	engine.submit_plan(combat, 0, [{"card_id": guardian_card, "target": 0}])
+	engine.submit_plan(combat, 1, [{"card_id": combat.players[1].hand[0], "target": 0}])
+	engine.resolve_if_ready(combat)
+	var triggers: Array[String] = []
+	for entry in combat.event_log:
+		if entry.type == "relic_triggered":
+			triggers.append(String(entry.trigger))
+	_expect(triggers.has("card_played") and triggers.has("damage_taken"), "card and incoming damage relic triggers execute during resolution")
+	var finish_run := RunCoordinator.new(catalog, RunSaveStore.new("user://relic_finish_test.json")).start_new(6061)
+	finish_run.team_health = 40
+	finish_run.relics[0] = ["relic_06"]
+	var finishing := engine.create_run_combat(finish_run, ["combat"], RunContentCatalog.build())
+	finishing.enemies[0].health = 1
+	engine.submit_plan(finishing, 0, [{"card_id": finishing.players[0].hand[0], "target": 0}])
+	engine.submit_plan(finishing, 1, [{"card_id": finishing.players[1].hand[0], "target": 0}])
+	engine.resolve_if_ready(finishing)
+	_expect(finishing.phase == CombatState.Phase.WON and finishing.team_health == 41, "combat end relic heals after victory")
+	RunSaveStore.new("user://relic_test.json").clear()
+	RunSaveStore.new("user://relic_finish_test.json").clear()
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:
