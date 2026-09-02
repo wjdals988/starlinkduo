@@ -355,7 +355,7 @@ func _request_bluetooth_permissions() -> void:
 func _start_bluetooth_host() -> void:
 	if bluetooth_transport.start_host(SERVICE_UUID):
 		local_slot = 0
-		cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state)
+		cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state, run_coordinator)
 		cooperative_session.session_error.connect(_on_session_error)
 		overlay_subtitle.text = "참가자를 기다리는 중… 상대 기기에서 이 기기를 선택하세요."
 	else:
@@ -366,6 +366,7 @@ func _join_bluetooth_host(address: String) -> void:
 		local_slot = 1
 		cooperative_session = CooperativeSession.new(CooperativeSession.Role.GUEST, bluetooth_transport)
 		cooperative_session.snapshot_received.connect(_on_remote_snapshot)
+		cooperative_session.run_snapshot_received.connect(_on_remote_run_snapshot)
 		cooperative_session.session_error.connect(_on_session_error)
 		overlay_subtitle.text = "호스트에 연결하는 중…"
 	else:
@@ -406,6 +407,11 @@ func _on_remote_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
 	selected_energy = 0
 	log_label.text = "호스트 상태 동기화 완료 · TURN %d" % state.turn
 	_refresh()
+
+func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
+	run_coordinator.run = RunState.from_snapshot(snapshot)
+	if overlay.visible and overlay_title.text.begins_with("항로 선택"):
+		_show_map()
 
 func _on_session_error(code: String, detail: String) -> void:
 	log_label.text = "연결 오류 · %s (%s)" % [code, detail]
@@ -450,7 +456,7 @@ func _show_map() -> void:
 		overlay_content.add_child(row)
 
 func _choose_route(slot: int, node_id: String) -> void:
-	var result := run_coordinator.choose_route(slot, node_id)
+	var result := cooperative_session.select_route(slot, node_id) if cooperative_session != null else run_coordinator.choose_route(slot, node_id)
 	if not result.ok:
 		overlay_subtitle.text = "항로를 선택하지 못했습니다: %s" % result.error
 		return
@@ -461,6 +467,9 @@ func _choose_route(slot: int, node_id: String) -> void:
 	_show_map()
 
 func _enter_selected_routes() -> void:
+	if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST:
+		overlay_subtitle.text = "호스트가 조우를 시작할 때까지 기다려 주세요."
+		return
 	var types := run_coordinator.selected_route_types()
 	var combat_types := ["combat", "elite", "key_challenge", "boss"]
 	if types.any(func(type: String) -> bool: return combat_types.has(type)):
@@ -468,7 +477,7 @@ func _enter_selected_routes() -> void:
 		active_route_combat = true
 		state = engine.create_run_combat(run_coordinator.run, types, RunContentCatalog.build())
 		if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST:
-			cooperative_session.combat_state = state
+			cooperative_session.replace_combat_state(state)
 		selected_hand_indices.clear()
 		selected_plays.clear()
 		selected_energy = 0
@@ -478,6 +487,8 @@ func _enter_selected_routes() -> void:
 		return
 	var result := run_coordinator.resolve_noncombat(types)
 	if result.ok:
+		if cooperative_session != null:
+			cooperative_session.publish_run_state("node_resolved")
 		state.team_health = run_coordinator.run.team_health
 		_show_route_result("노드 해결 완료", " · ".join(result.summary))
 
@@ -487,6 +498,8 @@ func _finish_route_combat() -> void:
 	if not result.ok:
 		log_label.text = "전투 보상을 저장하지 못했습니다: %s" % result.get("error", "unknown")
 		return
+	if cooperative_session != null:
+		cooperative_session.publish_run_state("combat_reward")
 	_show_route_result("항로 전투 승리", "각 플레이어 +%d C · 진행 상황 자동 저장" % result.gold)
 	active_route_types.clear()
 

@@ -13,6 +13,7 @@ func _init() -> void:
 	_test_run_save_round_trip()
 	_test_run_coordinator_economy()
 	_test_host_authoritative_session()
+	_test_host_authoritative_route_session()
 	_test_session_rejects_stale_sequence()
 	_test_combat_snapshot_round_trip()
 	_test_full_card_catalog()
@@ -20,7 +21,7 @@ func _init() -> void:
 	_test_route_selection_and_key_gate()
 	_test_run_combat_completion_gate()
 	if failures.is_empty():
-		print("PASS: 16 core, content, run, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 17 core, content, run, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -190,6 +191,27 @@ func _test_host_authoritative_session() -> void:
 	guest.poll()
 	_expect(state.turn == 2 and state.enemies[0].health == 31, "host alone resolves simultaneous turn")
 	_expect(not hashes.is_empty() and hashes[-1] == StateHasher.hash_snapshot(state.to_snapshot()), "guest receives verified authoritative snapshot")
+
+func _test_host_authoritative_route_session() -> void:
+	var transports := LoopbackTransport.pair()
+	transports[0].start_host("test")
+	transports[1].connect_to("loopback", "test")
+	var host_store := RunSaveStore.new("user://host_route_session.json")
+	host_store.clear()
+	var coordinator := RunCoordinator.new(FullCardCatalog.build(), host_store)
+	var run := coordinator.start_new(20260902)
+	var engine := CombatEngine.new(DemoCardCatalog.build())
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, engine.create_demo_combat(), coordinator)
+	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
+	var received_runs: Array[Dictionary] = []
+	guest.run_snapshot_received.connect(func(snapshot: Dictionary) -> void: received_runs.append(snapshot))
+	var guest_node := String(run.map.stages[0].steps[0].lanes[1].options[0].id)
+	_expect(guest.select_route(1, guest_node).ok, "guest sends route intent without mutating run")
+	host.poll()
+	guest.poll()
+	_expect(run.pending_routes.get(1, "") == guest_node, "host validates and records guest route")
+	_expect(not received_runs.is_empty() and received_runs[-1].pending_routes.get("1", "") == guest_node, "guest receives authoritative run snapshot")
+	host_store.clear()
 
 func _test_session_rejects_stale_sequence() -> void:
 	var transports := LoopbackTransport.pair()

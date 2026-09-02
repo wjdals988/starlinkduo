@@ -4,6 +4,7 @@ extends RefCounted
 enum Role { HOST, GUEST }
 
 signal snapshot_received(snapshot: Dictionary, state_hash: String)
+signal run_snapshot_received(snapshot: Dictionary)
 signal session_error(code: String, detail: String)
 signal peer_ready(slot: int, ready: bool)
 
@@ -11,20 +12,23 @@ var role: Role
 var transport: SessionTransport
 var engine: CombatEngine
 var combat_state: CombatState
+var run_coordinator: RunCoordinator
 var remote_snapshot: Dictionary = {}
 var outgoing_sequence := 0
 var incoming_sequence := 0
 
-func _init(session_role: Role, session_transport: SessionTransport, combat_engine: CombatEngine = null, initial_state: CombatState = null) -> void:
+func _init(session_role: Role, session_transport: SessionTransport, combat_engine: CombatEngine = null, initial_state: CombatState = null, coordinator: RunCoordinator = null) -> void:
 	role = session_role
 	transport = session_transport
 	engine = combat_engine
 	combat_state = initial_state
+	run_coordinator = coordinator
 	transport.message_received.connect(_on_message)
 	transport.transport_error.connect(func(code: String, detail: String) -> void: session_error.emit(code, detail))
 	transport.state_changed.connect(_on_transport_state_changed)
 	if role == Role.HOST and transport.get_state() == "connected":
 		_publish_snapshot("session_started")
+		_publish_run_snapshot("session_started")
 
 func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 	if role == Role.HOST:
@@ -44,6 +48,26 @@ func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 
 func request_resync() -> bool:
 	return _send("resync_request", {"last_seq": incoming_sequence})
+
+func select_route(slot: int, node_id: String) -> Dictionary:
+	if role == Role.HOST:
+		if run_coordinator == null:
+			return _error("host_run_missing")
+		var result := run_coordinator.choose_route(slot, node_id)
+		if result.ok:
+			_publish_run_snapshot("route_selected")
+		return result
+	if slot != 1:
+		return _error("guest_slot_forbidden")
+	return {"ok": _send("route_select", {"slot": slot, "node_id": node_id})}
+
+func replace_combat_state(next_state: CombatState) -> void:
+	combat_state = next_state
+	if role == Role.HOST:
+		_publish_snapshot("encounter_started")
+
+func publish_run_state(reason: String) -> bool:
+	return _publish_run_snapshot(reason)
 
 func poll() -> void:
 	transport.poll()
@@ -68,9 +92,19 @@ func _on_message(raw: String) -> void:
 func _on_transport_state_changed(next_state: String) -> void:
 	if next_state == "connected" and role == Role.HOST:
 		_publish_snapshot("session_started")
+		_publish_run_snapshot("session_started")
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"route_select":
+			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
+				_send_rejection("guest_route_forbidden")
+				return
+			var result := run_coordinator.choose_route(1, String(payload.get("node_id", "")))
+			if not result.ok:
+				_send_rejection(result.error)
+				return
+			_publish_run_snapshot("route_selected")
 		"plan":
 			if int(payload.get("slot", -1)) != 1:
 				_send_rejection("guest_slot_forbidden")
@@ -92,11 +126,18 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 			_resolve_if_ready()
 		"resync_request":
 			_publish_snapshot("resync")
+			_publish_run_snapshot("resync")
 		_:
 			_send_rejection("host_message_forbidden")
 
 func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"run_snapshot":
+			var run_snapshot: Variant = payload.get("state", null)
+			if not run_snapshot is Dictionary:
+				session_error.emit("invalid_run_snapshot", "missing state")
+				return
+			run_snapshot_received.emit(RunState._normalize_json_numbers(run_snapshot))
 		"snapshot":
 			var snapshot: Variant = payload.get("state", null)
 			var expected_hash := String(payload.get("state_hash", ""))
@@ -131,6 +172,11 @@ func _publish_snapshot(reason: String) -> bool:
 		"state": snapshot,
 		"state_hash": StateHasher.hash_snapshot(snapshot),
 	})
+
+func _publish_run_snapshot(reason: String) -> bool:
+	if role != Role.HOST or run_coordinator == null or run_coordinator.run == null:
+		return false
+	return _send("run_snapshot", {"reason": reason, "state": run_coordinator.run.to_snapshot()})
 
 func _send_rejection(code: String) -> void:
 	_send("reject", {"code": code})
