@@ -153,13 +153,33 @@ func _test_run_save_round_trip() -> void:
 	if selected_step.kind == "parallel":
 		original.pending_routes = {0: selected_step.lanes[0].options[0].id, 1: selected_step.lanes[1].options[0].id}
 	_expect(store.save(original, "test_checkpoint") == OK, "run checkpoint saves")
+	var first_snapshot := original.to_snapshot()
+	original.gold[0] += 1
+	_expect(store.save(original, "newer_checkpoint") == OK, "newer run checkpoint rotates the prior valid save")
+	var absolute_save := ProjectSettings.globalize_path(store.save_path)
+	var absolute_temp := ProjectSettings.globalize_path(store.save_path + CheckedJsonStore.TEMP_SUFFIX)
+	DirAccess.rename_absolute(absolute_save, absolute_temp)
+	var staged_run := store.load_active()
+	_expect(staged_run != null and staged_run.gold[0] == original.gold[0], "interrupted run promotion restores the newer staged checkpoint")
+	DirAccess.rename_absolute(absolute_temp, absolute_save)
+	var corrupt_file := FileAccess.open(store.save_path, FileAccess.WRITE)
+	if corrupt_file != null:
+		corrupt_file.store_string("{}")
+		corrupt_file.close()
 	var restored := store.load_active()
 	_expect(restored != null, "saved run loads")
 	if restored != null:
-		_expect(restored.to_snapshot() == original.to_snapshot(), "run save round trip preserves state")
+		_expect(restored.to_snapshot() == first_snapshot, "structurally incomplete run checkpoint falls back to the previous checksummed state")
 		var restored_coordinator := RunCoordinator.new(FullCardCatalog.build(), store)
 		restored_coordinator.run = restored
 		_expect(restored.pending_routes.has(0) and restored.pending_routes.has(1) and restored_coordinator.selected_route_types().size() == 2, "restored route keys remain playable integer slots")
+	store.clear()
+	var legacy_file := FileAccess.open(store.save_path, FileAccess.WRITE)
+	if legacy_file != null:
+		legacy_file.store_string(JSON.stringify(first_snapshot))
+		legacy_file.close()
+	var legacy_restored := store.load_active()
+	_expect(legacy_restored != null and legacy_restored.to_snapshot() == first_snapshot, "legacy unenveloped run snapshots remain readable")
 	store.clear()
 
 func _test_run_coordinator_economy() -> void:

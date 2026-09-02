@@ -10,26 +10,13 @@ func _init(path: String = SAVE_PATH) -> void:
 
 func save(run: RunState, reason: String) -> Error:
 	run.checkpoint_reason = reason
-	var file := FileAccess.open(save_path, FileAccess.WRITE)
-	if file == null:
-		return FileAccess.get_open_error()
-	file.store_string(JSON.stringify(run.to_snapshot()))
-	file.close()
-	return OK
+	return CheckedJsonStore.save_payload(save_path, run.to_snapshot())
 
 func load_active() -> RunState:
-	if not FileAccess.file_exists(save_path):
-		return null
-	var file := FileAccess.open(save_path, FileAccess.READ)
-	if file == null:
-		return null
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	file.close()
+	var parsed: Variant = CheckedJsonStore.load_payload(save_path, ["run_id", "seed", "stage", "step", "team_health", "team_max_health", "keys", "gold", "characters", "decks", "relics", "consumables", "map", "checkpoint_reason"])
 	if not parsed is Dictionary:
 		return null
 	return RunState.from_snapshot(parsed)
 
 func clear() -> Error:
-	if not FileAccess.file_exists(save_path):
-		return OK
-	return DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
+	return CheckedJsonStore.clear(save_path)
