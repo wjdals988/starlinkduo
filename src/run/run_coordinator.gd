@@ -64,32 +64,38 @@ func buy_card(player_slot: int, entry: Dictionary) -> bool:
 		return false
 	var card_id := StringName(entry.card_id)
 	var price := int(entry.price)
-	if price < 0 or run.gold[player_slot] < price or not catalog.has(card_id):
+	var purchase_key := "card:%s" % card_id
+	if price < 0 or run.gold[player_slot] < price or not catalog.has(card_id) or run.shop_purchases[player_slot].has(purchase_key):
 		return false
 	var card: CardData = catalog[card_id]
 	if card.owner_scope != _scope_for_slot(player_slot) and card.owner_scope != CardData.Scope.NEUTRAL:
 		return false
 	run.gold[player_slot] -= price
 	run.decks[player_slot].append(String(card_id))
+	run.shop_purchases[player_slot].append(purchase_key)
 	checkpoint("shop_purchase")
 	return true
 
 func buy_relic(player_slot: int, entry: Dictionary) -> bool:
-	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or not _valid_shop_entry(player_slot, entry):
+	var purchase_key := "relic:%s" % String(entry.get("id", ""))
+	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or not _valid_shop_entry(player_slot, entry) or run.shop_purchases[player_slot].has(purchase_key):
 		return false
 	var relic_id := String(entry.id)
 	if run.relics[player_slot].has(relic_id):
 		return false
 	run.gold[player_slot] -= int(entry.price)
 	run.relics[player_slot].append(relic_id)
+	run.shop_purchases[player_slot].append(purchase_key)
 	checkpoint("relic_purchase")
 	return true
 
 func buy_consumable(player_slot: int, entry: Dictionary) -> bool:
-	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or not _valid_shop_entry(player_slot, entry) or run.consumables[player_slot].size() >= 3:
+	var purchase_key := "consumable:%s" % String(entry.get("id", ""))
+	if not _valid_slot(player_slot) or not run.shop_open[player_slot] or not _valid_shop_entry(player_slot, entry) or run.consumables[player_slot].size() >= 3 or run.shop_purchases[player_slot].has(purchase_key):
 		return false
 	run.gold[player_slot] -= int(entry.price)
 	run.consumables[player_slot].append(String(entry.id))
+	run.shop_purchases[player_slot].append(purchase_key)
 	checkpoint("consumable_purchase")
 	return true
 

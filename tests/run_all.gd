@@ -214,6 +214,9 @@ func _test_run_coordinator_economy() -> void:
 	run.shop_open[0] = true
 	_expect(coordinator.buy_card(0, affordable), "affordable shop card can be purchased")
 	_expect(run.gold[0] == 0, "shop purchase deducts exact gold")
+	run.gold[0] = int(affordable.price)
+	_expect(not coordinator.buy_card(0, affordable), "sold shop card cannot be purchased twice")
+	run.gold[0] = 0
 	_expect(not coordinator.buy_card(0, affordable), "shop rejects purchase without enough gold")
 	var stocked := coordinator.current_shop(0)
 	var relic: Dictionary = stocked.relics[0]
@@ -223,6 +226,8 @@ func _test_run_coordinator_economy() -> void:
 	var consumable: Dictionary = stocked.consumables[0]
 	run.gold[0] = int(consumable.price)
 	_expect(coordinator.buy_consumable(0, consumable), "consumable purchase adds carried item")
+	run.gold[0] = int(consumable.price)
+	_expect(not coordinator.buy_consumable(0, consumable), "sold consumable cannot be purchased twice")
 	var restored := store.load_active()
 	_expect(restored != null and restored.decks[0] == run.decks[0], "economy mutations persist at checkpoints")
 	store.clear()

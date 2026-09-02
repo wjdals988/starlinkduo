@@ -790,11 +790,13 @@ func _show_map() -> void:
 	if run.phase == "stage_boss":
 		overlay_title.text = "스테이지 보스 · STAGE %d" % run.stage
 		overlay_subtitle.text = "8개 항로 완료 · 보스를 격파해야 다음 스테이지로 이동합니다."
+		_show_boss_briefing(false)
 		_add_connection_action("스테이지 보스 진입", _start_boss_encounter.bind(false), COLOR_RED)
 		return
 	if run.phase == "true_boss":
 		overlay_title.text = "진 최종 보스 해금"
 		overlay_subtitle.text = "3개 열쇠 확보 완료 · 마지막 협동 전투입니다."
+		_show_boss_briefing(true)
 		_add_connection_action("별을 삼키는 자에게 도전", _start_boss_encounter.bind(true), COLOR_YELLOW)
 		return
 	if run.phase == "completed" or run.phase == "failed":
@@ -834,6 +836,24 @@ func _show_map() -> void:
 					var prefix := "선택됨" if is_current and run.pending_routes.has(slot) else "P%d" % (slot + 1)
 					row.add_child(_route_chip("%s  %s" % [prefix, " / ".join(option_texts)], accent))
 		overlay_content.add_child(row)
+
+func _show_boss_briefing(true_boss: bool) -> void:
+	var run := run_coordinator.run
+	var accent := COLOR_YELLOW if true_boss else COLOR_RED
+	var emblem := Label.new()
+	emblem.text = "✦" if true_boss else "◆"
+	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emblem.add_theme_font_size_override("font_size", 68)
+	emblem.add_theme_color_override("font_color", accent)
+	overlay_content.add_child(emblem)
+	var metrics := HBoxContainer.new()
+	metrics.add_theme_constant_override("separation", 12)
+	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_CYAN))
+	metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
+	metrics.add_child(_metric_card("보유 크레딧", "%d + %d C" % [run.gold[0], run.gold[1]], COLOR_BLUE))
+	overlay_content.add_child(metrics)
+	var warning := "승리하면 런을 완주합니다. 패배 시 현재 체크포인트에서 다시 준비할 수 있습니다." if true_boss else "승리하면 다음 스테이지가 열립니다. 진입 전 덱·유물·소비품을 점검하세요."
+	_info_panel("최종 교전 브리핑" if true_boss else "보스 교전 브리핑", warning, accent)
 
 func _choose_route(slot: int, node_id: String) -> void:
 	var result := cooperative_session.select_route(slot, node_id) if cooperative_session != null else run_coordinator.choose_route(slot, node_id)
@@ -1106,11 +1126,12 @@ func _show_shop() -> void:
 	overlay_content.add_child(row)
 	for entry in inventory.cards:
 		var card: CardData = catalog[StringName(entry.card_id)]
+		var sold := run_coordinator.run.shop_purchases[local_slot].has("card:%s" % String(entry.card_id))
 		var button := preload("res://src/ui/card_button.gd").new()
 		button.custom_minimum_size = Vector2(200, 190)
 		var accent := _scope_color(card.owner_scope)
-		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "%d C  ·  구매" % entry.price)
-		button.disabled = run_coordinator.run.gold[local_slot] < int(entry.price)
+		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "✓ 판매 완료" if sold else "%d C  ·  구매" % entry.price)
+		button.disabled = sold or run_coordinator.run.gold[local_slot] < int(entry.price)
 		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, accent, 2, 12, 8))
 		button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 16, accent, 3, 12, 8))
 		button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 16, Color("#4d5a71"), 1, 12, 8))
@@ -1120,11 +1141,13 @@ func _show_shop() -> void:
 	item_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	item_row.add_theme_constant_override("separation", 10)
 	for relic in inventory.relics:
-		var relic_button := _shop_item_button("유물 · %s\n%d C" % [relic.name, relic.price], COLOR_BLUE, run_coordinator.run.gold[local_slot] < int(relic.price))
+		var relic_sold := run_coordinator.run.shop_purchases[local_slot].has("relic:%s" % String(relic.id))
+		var relic_button := _shop_item_button("유물 · %s\n%s" % [relic.name, "✓ 판매 완료" if relic_sold else "%d C" % relic.price], COLOR_BLUE, relic_sold or run_coordinator.run.gold[local_slot] < int(relic.price))
 		relic_button.pressed.connect(_buy_shop_relic.bind(relic))
 		item_row.add_child(relic_button)
 	for consumable in inventory.consumables:
-		var consumable_button := _shop_item_button("소비품 · %s\n%d C" % [consumable.name, consumable.price], COLOR_ORANGE, run_coordinator.run.gold[local_slot] < int(consumable.price))
+		var consumable_sold := run_coordinator.run.shop_purchases[local_slot].has("consumable:%s" % String(consumable.id))
+		var consumable_button := _shop_item_button("소비품 · %s\n%s" % [consumable.name, "✓ 판매 완료" if consumable_sold else "%d C" % consumable.price], COLOR_ORANGE, consumable_sold or run_coordinator.run.gold[local_slot] < int(consumable.price))
 		consumable_button.pressed.connect(_buy_shop_consumable.bind(consumable))
 		item_row.add_child(consumable_button)
 	overlay_content.add_child(item_row)
