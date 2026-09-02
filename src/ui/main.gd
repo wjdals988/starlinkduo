@@ -1,8 +1,8 @@
 extends Control
 
-const COLOR_VOID := Color("#10182f")
-const COLOR_PANEL := Color("#202b4f")
-const COLOR_PANEL_SOFT := Color("#2c3961")
+const COLOR_VOID := Color("#07101f")
+const COLOR_PANEL := Color("#111a31e8")
+const COLOR_PANEL_SOFT := Color("#1a2848ee")
 const COLOR_TEXT := Color("#f6f8ff")
 const COLOR_MUTED := Color("#aab5d6")
 const COLOR_CYAN := Color("#43dfd0")
@@ -50,6 +50,7 @@ var connection_label: Label
 var encounter_label: Label
 var enemy_name_label: Label
 var intent_label: Label
+var energy_label: Label
 
 func _ready() -> void:
 	catalog = FullCardCatalog.build()
@@ -81,10 +82,6 @@ func _exit_tree() -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), COLOR_VOID)
-	for index in range(8):
-		var radius := 2.0 + float(index % 3)
-		var point := Vector2(size.x * (0.09 + index * 0.125), size.y * (0.12 + (index % 2) * 0.28))
-		draw_circle(point, radius, Color(0.55, 0.76, 1.0, 0.28))
 
 func _process(_delta: float) -> void:
 	if bluetooth_transport == null:
@@ -102,16 +99,28 @@ func _process(_delta: float) -> void:
 			connection_label.text = next_text
 
 func _build_interface() -> void:
+	var backdrop := TextureRect.new()
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.texture = load("res://assets/art/orbital-battlefield-v2.png")
+	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(backdrop)
+	var shade := ColorRect.new()
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color("#03101d35")
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(shade)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_bottom", 20)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 14)
+	margin.add_theme_constant_override("margin_bottom", 12)
 	add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 14)
+	root.add_theme_constant_override("separation", 8)
 	margin.add_child(root)
 	root.add_child(_build_top_bar())
 	root.add_child(_build_battlefield())
@@ -120,45 +129,56 @@ func _build_interface() -> void:
 
 func _build_top_bar() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size.y = 76
-	panel.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL, 18, COLOR_BLUE, 1))
+	panel.custom_minimum_size.y = 58
+	panel.add_theme_stylebox_override("panel", _panel_style(Color("#081326c9"), 16, Color("#5fe8dd44"), 1, 12, 8))
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 22)
+	row.add_theme_constant_override("separation", 14)
 	panel.add_child(row)
 
 	var brand := Label.new()
-	brand.text = "STARLINK  DUO"
-	brand.add_theme_font_size_override("font_size", 22)
+	brand.text = "✦  STARLINK DUO"
+	brand.add_theme_font_size_override("font_size", 20)
 	brand.add_theme_color_override("font_color", COLOR_CYAN)
-	brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(brand)
+	var mission := Label.new()
+	mission.text = "ORBITAL EXPEDITION"
+	mission.add_theme_font_size_override("font_size", 12)
+	mission.add_theme_color_override("font_color", COLOR_MUTED)
+	mission.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(mission)
 
 	turn_label = Label.new()
-	turn_label.add_theme_font_size_override("font_size", 18)
+	turn_label.add_theme_font_size_override("font_size", 16)
 	turn_label.add_theme_color_override("font_color", COLOR_MUTED)
 	row.add_child(turn_label)
-
-	for item in [["플레이", _show_mode], ["편성", _show_roster], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop], ["아이템", _show_consumables]]:
-		var navigation := Button.new()
-		navigation.text = item[0]
-		navigation.custom_minimum_size = Vector2(88, 48)
-		navigation.add_theme_font_size_override("font_size", 16)
-		navigation.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL_SOFT, 12))
-		navigation.pressed.connect(item[1])
-		row.add_child(navigation)
 
 	connection_label = Label.new()
 	connection_label.text = _connection_status_text()
 	connection_label.tooltip_text = "Android Bluetooth 플러그인 감지됨" if Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME) else "에디터/에뮬레이터 로컬 모드"
-	connection_label.add_theme_font_size_override("font_size", 17)
+	connection_label.add_theme_font_size_override("font_size", 14)
 	connection_label.add_theme_color_override("font_color", COLOR_CYAN)
 	row.add_child(connection_label)
+	var menu := Button.new()
+	menu.text = "☰  메뉴"
+	menu.custom_minimum_size = Vector2(104, 48)
+	menu.add_theme_font_size_override("font_size", 16)
+	menu.add_theme_stylebox_override("normal", _panel_style(Color("#14213ddf"), 12, Color("#8aa5d144"), 1, 16, 8))
+	menu.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 12, COLOR_CYAN, 1, 16, 8))
+	menu.pressed.connect(_show_hub)
+	row.add_child(menu)
 	return panel
+
+func _show_hub() -> void:
+	_clear_overlay()
+	overlay_title.text = "함선 메뉴"
+	overlay_subtitle.text = "원정 정보와 장비를 확인합니다. 전투 진행 상태는 유지됩니다."
+	for item in [["◈  플레이 모드", _show_mode, COLOR_CYAN], ["◆  대원 편성", _show_roster, COLOR_BLUE], ["⌁  항로 지도", _show_map, COLOR_CYAN], ["✦  전투 보상", _show_reward, COLOR_YELLOW], ["▣  궤도 상점", _show_shop, COLOR_ORANGE], ["＋  유물 · 소비품", _show_consumables, Color("#bc8cff")]]:
+		_add_connection_action(item[0], item[1], item[2])
 
 func _build_battlefield() -> Control:
 	var row := HBoxContainer.new()
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", 20)
 	row.add_child(_build_player_panel("P1  수호자", COLOR_BLUE, 0))
 	row.add_child(_build_enemy_panel())
 	row.add_child(_build_player_panel("P2  기술자", COLOR_ORANGE, 1))
@@ -166,29 +186,29 @@ func _build_battlefield() -> Control:
 
 func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(250, 280)
+	panel.custom_minimum_size = Vector2(260, 238)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL, 20, accent, 2))
+	panel.add_theme_stylebox_override("panel", _panel_style(Color("#07101f66"), 22, Color(accent, 0.45), 1, 14, 10))
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
+	column.add_theme_constant_override("separation", 2)
 	panel.add_child(column)
 
 	var title_label := Label.new()
 	title_label.text = title
-	title_label.add_theme_font_size_override("font_size", 22)
+	title_label.add_theme_font_size_override("font_size", 19)
 	title_label.add_theme_color_override("font_color", accent)
 	column.add_child(title_label)
 	player_title_labels.append(title_label)
 
 	var role := Label.new()
 	role.text = "전방 방어 · 아군 엄호" if slot == 0 else "에너지 지원 · 장치 제어"
-	role.add_theme_font_size_override("font_size", 15)
+	role.add_theme_font_size_override("font_size", 13)
 	role.add_theme_color_override("font_color", COLOR_MUTED)
 	column.add_child(role)
 	player_role_labels.append(role)
 
 	var portrait := TextureRect.new()
-	portrait.custom_minimum_size.y = 170
+	portrait.custom_minimum_size.y = 128
 	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	portrait.texture = load("res://assets/art/guardian-portrait.png" if slot == 0 else "res://assets/art/engineer-portrait.png")
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -198,7 +218,8 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	player_portraits.append(portrait)
 
 	var detail := Label.new()
-	detail.add_theme_font_size_override("font_size", 18)
+	detail.add_theme_font_size_override("font_size", 14)
+	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
 	column.add_child(detail)
 	player_detail_labels.append(detail)
@@ -206,65 +227,70 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 
 func _build_enemy_panel() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(390, 280)
+	panel.custom_minimum_size = Vector2(430, 238)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL_SOFT, 20, COLOR_RED, 2))
+	panel.add_theme_stylebox_override("panel", _panel_style(Color("#07101f24"), 24, Color("#ff667d33"), 1, 16, 8))
 	var column := VBoxContainer.new()
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_theme_constant_override("separation", 12)
+	column.add_theme_constant_override("separation", 2)
 	panel.add_child(column)
 
 	encounter_label = Label.new()
 	encounter_label.text = "일반 전투  ·  훈련 구역 01"
 	encounter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	encounter_label.add_theme_font_size_override("font_size", 16)
+	encounter_label.add_theme_font_size_override("font_size", 13)
 	encounter_label.add_theme_color_override("font_color", COLOR_MUTED)
 	column.add_child(encounter_label)
 
 	enemy_name_label = Label.new()
 	enemy_name_label.text = "훈련 드론"
 	enemy_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	enemy_name_label.add_theme_font_size_override("font_size", 29)
+	enemy_name_label.add_theme_font_size_override("font_size", 23)
 	enemy_name_label.add_theme_color_override("font_color", COLOR_TEXT)
 	column.add_child(enemy_name_label)
 
 	enemy_health_label = Label.new()
 	enemy_health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	enemy_health_label.add_theme_font_size_override("font_size", 17)
+	enemy_health_label.add_theme_font_size_override("font_size", 14)
 	column.add_child(enemy_health_label)
 	enemy_health_bar = ProgressBar.new()
-	enemy_health_bar.custom_minimum_size.y = 18
+	enemy_health_bar.custom_minimum_size.y = 12
 	enemy_health_bar.show_percentage = false
 	enemy_health_bar.add_theme_stylebox_override("background", _panel_style(Color("#171e38"), 9))
 	enemy_health_bar.add_theme_stylebox_override("fill", _panel_style(COLOR_RED, 9))
 	column.add_child(enemy_health_bar)
+	var enemy_art := preload("res://src/ui/enemy_visual.gd").new()
+	enemy_art.custom_minimum_size = Vector2(260, 92)
+	enemy_art.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(enemy_art)
 
 	intent_label = Label.new()
-	intent_label.text = "다음 행동\n⚠  팀에 9 피해"
+	intent_label.text = "⚠  다음 행동 · 팀에 9 피해"
 	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	intent_label.add_theme_font_size_override("font_size", 21)
+	intent_label.add_theme_font_size_override("font_size", 16)
 	intent_label.add_theme_color_override("font_color", COLOR_YELLOW)
 	column.add_child(intent_label)
 	return panel
 
 func _build_hand_section() -> Control:
 	var section := VBoxContainer.new()
-	section.add_theme_constant_override("separation", 10)
+	section.custom_minimum_size.y = 225
+	section.add_theme_constant_override("separation", 5)
 
 	var status_panel := PanelContainer.new()
-	status_panel.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL, 16))
+	status_panel.add_theme_stylebox_override("panel", _panel_style(Color("#081326dc"), 16, Color("#64e9dd33"), 1, 14, 7))
 	var status_row := HBoxContainer.new()
 	status_row.add_theme_constant_override("separation", 18)
 	status_panel.add_child(status_row)
 
 	var health_box := VBoxContainer.new()
-	health_box.custom_minimum_size.x = 260
+	health_box.custom_minimum_size.x = 225
 	team_health_label = Label.new()
-	team_health_label.add_theme_font_size_override("font_size", 18)
+	team_health_label.add_theme_font_size_override("font_size", 14)
 	team_health_label.add_theme_color_override("font_color", COLOR_TEXT)
 	health_box.add_child(team_health_label)
 	team_health_bar = ProgressBar.new()
-	team_health_bar.custom_minimum_size.y = 16
+	team_health_bar.custom_minimum_size.y = 10
 	team_health_bar.show_percentage = false
 	team_health_bar.add_theme_stylebox_override("background", _panel_style(Color("#171e38"), 8))
 	team_health_bar.add_theme_stylebox_override("fill", _panel_style(COLOR_CYAN, 8))
@@ -274,16 +300,24 @@ func _build_hand_section() -> Control:
 	status_label = Label.new()
 	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size", 17)
+	status_label.add_theme_font_size_override("font_size", 14)
 	status_label.add_theme_color_override("font_color", COLOR_MUTED)
 	status_row.add_child(status_label)
 
 	ready_button = Button.new()
-	ready_button.custom_minimum_size = Vector2(180, 52)
-	ready_button.text = "준비 완료"
-	ready_button.add_theme_font_size_override("font_size", 19)
-	ready_button.add_theme_stylebox_override("normal", _panel_style(COLOR_CYAN, 14))
-	ready_button.add_theme_stylebox_override("hover", _panel_style(Color("#6ef3e5"), 14))
+	energy_label = Label.new()
+	energy_label.custom_minimum_size = Vector2(82, 48)
+	energy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	energy_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	energy_label.add_theme_font_size_override("font_size", 25)
+	energy_label.add_theme_color_override("font_color", COLOR_CYAN)
+	status_row.add_child(energy_label)
+	ready_button.custom_minimum_size = Vector2(136, 52)
+	ready_button.text = "✓  행동 확정"
+	ready_button.add_theme_font_size_override("font_size", 17)
+	ready_button.add_theme_stylebox_override("normal", _panel_style(COLOR_CYAN, 26, Color("#d9fffb"), 2, 16, 8))
+	ready_button.add_theme_stylebox_override("hover", _panel_style(Color("#76f4e8"), 26, Color.WHITE, 2, 16, 8))
+	ready_button.add_theme_stylebox_override("disabled", _panel_style(Color("#34445c"), 26, Color("#77869d"), 1, 16, 8))
 	ready_button.add_theme_color_override("font_color", COLOR_VOID)
 	ready_button.pressed.connect(_on_ready_pressed)
 	status_row.add_child(ready_button)
@@ -291,12 +325,12 @@ func _build_hand_section() -> Control:
 
 	hand_container = HBoxContainer.new()
 	hand_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	hand_container.add_theme_constant_override("separation", 10)
+	hand_container.add_theme_constant_override("separation", -5)
 	section.add_child(hand_container)
 
 	log_label = Label.new()
 	log_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	log_label.add_theme_font_size_override("font_size", 15)
+	log_label.add_theme_font_size_override("font_size", 13)
 	log_label.add_theme_color_override("font_color", COLOR_MUTED)
 	section.add_child(log_label)
 	return section
@@ -309,17 +343,17 @@ func _build_overlay() -> void:
 	add_child(overlay)
 	var scrim := ColorRect.new()
 	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	scrim.color = Color("#080d1ca8")
+	scrim.color = Color("#020713c2")
 	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.add_child(scrim)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.offset_left = 90
-	panel.offset_top = 54
-	panel.offset_right = -90
-	panel.offset_bottom = -54
+	panel.offset_left = 150
+	panel.offset_top = 42
+	panel.offset_right = -150
+	panel.offset_bottom = -42
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.add_theme_stylebox_override("panel", _panel_style(Color("#18213eef"), 24, COLOR_CYAN, 2))
+	panel.add_theme_stylebox_override("panel", _panel_style(Color("#0c1730fa"), 28, Color("#55e8dc88"), 1, 28, 22))
 	overlay.add_child(panel)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 16)
@@ -330,7 +364,7 @@ func _build_overlay() -> void:
 	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(titles)
 	overlay_title = Label.new()
-	overlay_title.add_theme_font_size_override("font_size", 30)
+	overlay_title.add_theme_font_size_override("font_size", 28)
 	overlay_title.add_theme_color_override("font_color", COLOR_TEXT)
 	titles.add_child(overlay_title)
 	overlay_subtitle = Label.new()
@@ -338,8 +372,9 @@ func _build_overlay() -> void:
 	overlay_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
 	titles.add_child(overlay_subtitle)
 	var close := Button.new()
-	close.text = "전투로 돌아가기  ×"
-	close.custom_minimum_size = Vector2(190, 48)
+	close.text = "×  닫기"
+	close.custom_minimum_size = Vector2(104, 48)
+	close.add_theme_stylebox_override("normal", _panel_style(Color("#192541"), 24, Color("#91a5c655"), 1, 16, 8))
 	close.pressed.connect(func() -> void: overlay.hide())
 	header.add_child(close)
 	overlay_content = VBoxContainer.new()
@@ -351,8 +386,16 @@ func _show_mode() -> void:
 	_clear_overlay()
 	overlay_title.text = "플레이 모드"
 	overlay_subtitle.text = "하나의 앱에서 협동 원정과 2인 결투를 선택합니다. Bluetooth 연결 시 호스트가 모드를 확정합니다."
-	_add_connection_action("협동 원정\n3개 스테이지 · 공동 체력 · 덱 성장", _activate_mode.bind("cooperative"), COLOR_CYAN)
-	_add_connection_action("2인 결투\n각 36 내구도 · 동시 계획 · 개별 승패", _activate_mode.bind("duel"), COLOR_RED)
+	var mode_row := HBoxContainer.new()
+	mode_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mode_row.add_theme_constant_override("separation", 18)
+	overlay_content.add_child(mode_row)
+	var expedition := _action_button("협동 원정\n\n두 대원이 하나의 항로를 완주합니다\n공동 체력 · 역할 조합 · 덱 성장\n\n3 STAGES  ·  45–60 MIN", _activate_mode.bind("cooperative"), COLOR_CYAN, 220)
+	expedition.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_row.add_child(expedition)
+	var duel := _action_button("2인 결투\n\n같은 조건에서 전술을 겨룹니다\n개별 내구도 · 비공개 동시 계획\n\n36 HP  ·  FAIR DECK", _activate_mode.bind("duel"), COLOR_RED, 220)
+	duel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_row.add_child(duel)
 	var divider := HSeparator.new()
 	overlay_content.add_child(divider)
 	_add_connection_action("Bluetooth 연결 설정", _show_connection, COLOR_BLUE)
@@ -456,13 +499,21 @@ func _join_bluetooth_host(address: String) -> void:
 		overlay_subtitle.text = "연결을 시작하지 못했습니다. 페어링 상태를 확인하세요."
 
 func _add_connection_action(text: String, callback: Callable, accent: Color) -> Button:
+	var button := _action_button(text, callback, accent, 64)
+	overlay_content.add_child(button)
+	return button
+
+func _action_button(text: String, callback: Callable, accent: Color, height: int = 64) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size.y = 64
+	button.custom_minimum_size.y = height
 	button.text = text
 	button.add_theme_font_size_override("font_size", 18)
-	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 14, accent, 2))
+	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, accent, 2))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 16, accent, 3))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.28), 16, Color.WHITE, 3))
+	button.add_theme_stylebox_override("disabled", _panel_style(Color("#111827"), 16, Color("#526077"), 1))
+	button.add_theme_color_override("font_disabled_color", Color("#718099"))
 	button.pressed.connect(callback)
-	overlay_content.add_child(button)
 	return button
 
 func _add_connection_notice(text: String, accent: Color) -> void:
@@ -981,14 +1032,14 @@ func _refresh() -> void:
 		_refresh_duel()
 		return
 	turn_label.text = "TURN %02d" % state.turn
-	ready_button.text = "준비 완료"
+	ready_button.text = "✓  행동 확정"
 	team_health_label.text = "팀 내구도   %d / %d" % [state.team_health, state.team_max_health]
 	team_health_bar.max_value = state.team_max_health
 	team_health_bar.value = state.team_health
 	var enemy: EnemyState = state.enemies[0]
 	enemy_name_label.text = enemy.display_name
 	encounter_label.text = "%s  ·  STAGE %d-%02d" % [_encounter_kind(), run_coordinator.run.stage, run_coordinator.run.step + 1]
-	intent_label.text = "다음 행동\n⚠  팀에 %d 피해" % enemy.intent_damage
+	intent_label.text = "⚠  다음 행동 · 팀에 %d 피해" % enemy.intent_damage
 	enemy_health_label.text = "%d / %d" % [enemy.health, enemy.max_health]
 	enemy_health_bar.max_value = enemy.max_health
 	enemy_health_bar.value = enemy.health
@@ -999,6 +1050,7 @@ func _refresh() -> void:
 		player_detail_labels[slot].text = "에너지  %d / %d   ·   방어 %d   ·   유물 %d\n상태  %s" % [remaining, player.max_energy, player.block, state.relics[slot].size(), readiness]
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
 	status_label.text = "선택 카드 %d장  ·  예상 비용 %d  ·  지원 카드 최대 1장" % [selected_plays.size(), selected_energy]
+	energy_label.text = "⚡ %d" % maxi(0, state.players[local_slot].energy - selected_energy)
 	ready_button.disabled = selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING
 	_rebuild_hand()
 	queue_redraw()
@@ -1021,7 +1073,8 @@ func _refresh_duel() -> void:
 		player_detail_labels[slot].text = "내구도 %d / %d   ·   에너지 %d / %d\n방어 %d   ·   상태 %s" % [duel_state.health[slot], duel_state.max_health[slot], remaining, player.max_energy, player.block, readiness]
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
 	status_label.text = "P%d 행동 · 선택 카드 %d장 · 예상 비용 %d · 상대 계획은 공개되지 않음" % [local_slot + 1, selected_plays.size(), selected_energy]
-	ready_button.text = "행동 확정"
+	ready_button.text = "✓  행동 확정"
+	energy_label.text = "⚡ %d" % maxi(0, duel_state.players[local_slot].energy - selected_energy)
 	ready_button.disabled = selected_plays.is_empty() or duel_state.phase != DuelState.Phase.PLANNING or duel_state.players[local_slot].ready
 	if duel_state.phase == DuelState.Phase.FINISHED:
 		ready_button.disabled = true
@@ -1057,23 +1110,17 @@ func _rebuild_hand() -> void:
 	for hand_index in active_player.hand.size():
 		var card_id: StringName = active_player.hand[hand_index]
 		var card: CardData = catalog[card_id]
-		var card_button := Button.new()
-		card_button.custom_minimum_size = Vector2(186, 126)
-		card_button.text = "%d   %s\n%s\n%s" % [
-			card.energy_cost,
-			_rarity_label(card.rarity),
-			card.display_name,
-			_effect_summary(card),
-		]
-		card_button.tooltip_text = "탭하여 이번 턴 행동에 추가합니다."
-		card_button.add_theme_font_size_override("font_size", 16)
-		var accent := _scope_color(card.owner_scope)
+		var card_button := preload("res://src/ui/card_button.gd").new()
 		var selected := selected_hand_indices.has(hand_index)
+		card_button.custom_minimum_size = Vector2(178 if selected else 166, 148 if selected else 132)
+		var accent := _scope_color(card.owner_scope)
+		card_button.configure(card, _rarity_label(card.rarity), _effect_summary(card), accent, selected)
 		var base_color := COLOR_PANEL_SOFT if selected else COLOR_PANEL
 		var border_width := 4 if selected else 2
-		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 15, accent, border_width))
-		card_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 15, accent, 3))
-		card_button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.28), 15, accent, 4))
+		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 16, accent, border_width, 12, 8))
+		card_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 16, accent, 3, 12, 8))
+		card_button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.30), 16, accent, 4, 12, 8))
+		card_button.add_theme_color_override("font_color", COLOR_TEXT)
 		card_button.pressed.connect(_on_card_pressed.bind(hand_index, card))
 		hand_container.add_child(card_button)
 
@@ -1170,7 +1217,7 @@ func _scope_color(scope: CardData.Scope) -> Color:
 		CardData.Scope.ASSAULT: return COLOR_RED
 		_: return COLOR_CYAN
 
-func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPARENT, border_width: int = 0) -> StyleBoxFlat:
+func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPARENT, border_width: int = 0, horizontal_margin: int = 18, vertical_margin: int = 14) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
 	style.corner_radius_top_left = radius
@@ -1182,8 +1229,8 @@ func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPA
 	style.border_width_right = border_width
 	style.border_width_bottom = border_width
 	style.border_color = border_color
-	style.content_margin_left = 18
-	style.content_margin_right = 18
-	style.content_margin_top = 14
-	style.content_margin_bottom = 14
+	style.content_margin_left = horizontal_margin
+	style.content_margin_right = horizontal_margin
+	style.content_margin_top = vertical_margin
+	style.content_margin_bottom = vertical_margin
 	return style
