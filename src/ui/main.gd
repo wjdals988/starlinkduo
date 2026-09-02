@@ -21,6 +21,7 @@ var game_mode := "cooperative"
 var catalog: Dictionary
 var run_coordinator: RunCoordinator
 var bluetooth_transport: AndroidBluetoothTransport
+var accessibility_bridge: AndroidAccessibilityBridge
 var cooperative_session: CooperativeSession
 var local_slot := 0
 var selected_plays: Array[Dictionary] = []
@@ -58,15 +59,19 @@ var energy_label: Label
 var background_focus_modes: Dictionary = {}
 var previous_focus_owner: Control
 var handling_back_request := false
+var accessibility_sync_pending := false
 
 func _ready() -> void:
 	get_tree().set_auto_accept_quit(false)
 	get_window().go_back_requested.connect(_on_go_back_requested)
+	accessibility_name = "스타링크 듀오 전투 화면"
+	accessibility_description = "두 명이 협동하거나 대전하는 오프라인 카드 게임"
 	_load_accessibility_settings()
 	catalog = FullCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
 	run_coordinator.resume_or_start(20260902)
 	bluetooth_transport = AndroidBluetoothTransport.new()
+	accessibility_bridge = AndroidAccessibilityBridge.new()
 	print("STARLINK_BT singleton=%s available=%s state=%s" % [
 		Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME),
 		bluetooth_transport.is_available(),
@@ -82,6 +87,7 @@ func _ready() -> void:
 	_build_interface()
 	_apply_text_scale_tree(self)
 	_refresh()
+	_sync_android_accessibility.call_deferred()
 	if not run_coordinator.run.pending_event.is_empty():
 		_show_event.call_deferred()
 
@@ -108,6 +114,8 @@ func _reset_back_request_guard() -> void:
 	handling_back_request = false
 
 func _process(_delta: float) -> void:
+	if accessibility_bridge != null:
+		accessibility_bridge.poll_action()
 	if bluetooth_transport == null:
 		return
 	if cooperative_session != null:
@@ -174,6 +182,7 @@ func _build_top_bar() -> Control:
 	turn_label = Label.new()
 	turn_label.add_theme_font_size_override("font_size", 16)
 	turn_label.add_theme_color_override("font_color", COLOR_MUTED)
+	turn_label.accessibility_name = "현재 턴"
 	row.add_child(turn_label)
 
 	connection_label = Label.new()
@@ -181,9 +190,11 @@ func _build_top_bar() -> Control:
 	connection_label.tooltip_text = "Android Bluetooth 플러그인 감지됨" if Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME) else "에디터/에뮬레이터 로컬 모드"
 	connection_label.add_theme_font_size_override("font_size", 14)
 	connection_label.add_theme_color_override("font_color", COLOR_CYAN)
+	connection_label.accessibility_name = "연결 상태"
 	row.add_child(connection_label)
 	var menu := Button.new()
 	menu.text = "☰  메뉴"
+	_set_button_accessibility(menu, "함선 메뉴", "원정 정보, 편성, 항로, 보상, 상점, 설정을 엽니다")
 	menu.custom_minimum_size = Vector2(104, 48)
 	menu.add_theme_font_size_override("font_size", 16)
 	menu.add_theme_stylebox_override("normal", _panel_style(Color("#14213ddf"), 12, Color("#8aa5d144"), 1, 16, 8))
@@ -225,6 +236,8 @@ func _add_setting_toggle(title: String, description: String, value: bool, callba
 	var toggle := CheckButton.new()
 	toggle.text = "켜짐" if value else "꺼짐"
 	toggle.button_pressed = value
+	toggle.accessibility_name = title
+	toggle.accessibility_description = "%s. 두 번 탭하여 설정을 변경합니다" % description
 	toggle.custom_minimum_size = Vector2(120, 48)
 	toggle.toggled.connect(func(enabled: bool) -> void:
 		toggle.text = "켜짐" if enabled else "꺼짐"
@@ -322,6 +335,7 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	player_portraits.append(portrait)
 
 	var detail := Label.new()
+	detail.accessibility_name = "P%d 상태" % (slot + 1)
 	detail.add_theme_font_size_override("font_size", 14)
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
@@ -354,6 +368,7 @@ func _build_enemy_panel() -> Control:
 	column.add_child(enemy_name_label)
 
 	enemy_health_label = Label.new()
+	enemy_health_label.accessibility_name = "적 내구도"
 	enemy_health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	enemy_health_label.add_theme_font_size_override("font_size", 14)
 	column.add_child(enemy_health_label)
@@ -369,6 +384,7 @@ func _build_enemy_panel() -> Control:
 	column.add_child(enemy_art)
 
 	intent_label = Label.new()
+	intent_label.accessibility_name = "적의 다음 행동"
 	intent_label.text = "⚠  다음 행동 · 팀에 9 피해"
 	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	intent_label.add_theme_font_size_override("font_size", 16)
@@ -390,6 +406,7 @@ func _build_hand_section() -> Control:
 	var health_box := VBoxContainer.new()
 	health_box.custom_minimum_size.x = 225
 	team_health_label = Label.new()
+	team_health_label.accessibility_name = "팀 내구도"
 	team_health_label.add_theme_font_size_override("font_size", 14)
 	team_health_label.add_theme_color_override("font_color", COLOR_TEXT)
 	health_box.add_child(team_health_label)
@@ -406,10 +423,13 @@ func _build_hand_section() -> Control:
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_label.add_theme_font_size_override("font_size", 14)
 	status_label.add_theme_color_override("font_color", COLOR_MUTED)
+	status_label.accessibility_name = "행동 계획"
+	status_label.accessibility_live = AccessibilityServer.LIVE_POLITE
 	status_row.add_child(status_label)
 
 	ready_button = Button.new()
 	energy_label = Label.new()
+	energy_label.accessibility_name = "남은 에너지"
 	energy_label.custom_minimum_size = Vector2(82, 48)
 	energy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	energy_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -418,6 +438,7 @@ func _build_hand_section() -> Control:
 	status_row.add_child(energy_label)
 	ready_button.custom_minimum_size = Vector2(136, 52)
 	ready_button.text = "✓  행동 확정"
+	_set_button_accessibility(ready_button, "행동 확정", "선택한 카드의 실행을 확정합니다")
 	ready_button.add_theme_font_size_override("font_size", 17)
 	ready_button.add_theme_stylebox_override("normal", _panel_style(COLOR_CYAN, 26, Color("#d9fffb"), 2, 16, 8))
 	ready_button.add_theme_stylebox_override("hover", _panel_style(Color("#76f4e8"), 26, Color.WHITE, 2, 16, 8))
@@ -437,11 +458,15 @@ func _build_hand_section() -> Control:
 	log_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	log_label.add_theme_font_size_override("font_size", 13)
 	log_label.add_theme_color_override("font_color", COLOR_MUTED)
+	log_label.accessibility_name = "전투 알림"
+	log_label.accessibility_live = AccessibilityServer.LIVE_POLITE
 	section.add_child(log_label)
 	return section
 
 func _build_overlay() -> void:
 	overlay = Control.new()
+	overlay.accessibility_name = "함선 메뉴 대화상자"
+	overlay.accessibility_description = "닫기 버튼 다음에 현재 화면의 행동이 이어집니다"
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.visible = false
@@ -471,14 +496,18 @@ func _build_overlay() -> void:
 	overlay_title = Label.new()
 	overlay_title.add_theme_font_size_override("font_size", 28)
 	overlay_title.add_theme_color_override("font_color", COLOR_TEXT)
+	overlay_title.accessibility_name = "대화상자 제목"
+	overlay_title.accessibility_live = AccessibilityServer.LIVE_ASSERTIVE
 	titles.add_child(overlay_title)
 	overlay_subtitle = Label.new()
 	overlay_subtitle.add_theme_font_size_override("font_size", 16)
 	overlay_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
+	overlay_subtitle.accessibility_name = "대화상자 안내"
 	overlay_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	titles.add_child(overlay_subtitle)
 	var close := Button.new()
 	close.text = "×  닫기"
+	_set_button_accessibility(close, "닫기", "현재 대화상자를 닫고 전투 화면으로 돌아갑니다")
 	close.custom_minimum_size = Vector2(104, 48)
 	close.add_theme_stylebox_override("normal", _panel_style(Color("#192541"), 24, Color("#91a5c655"), 1, 16, 8))
 	close.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 24))
@@ -548,8 +577,10 @@ func _clear_overlay() -> void:
 	for child in overlay_content.get_children():
 		child.queue_free()
 	overlay.show()
+	overlay.queue_accessibility_update()
 	_focus_first_overlay_control.call_deferred()
 	_apply_text_scale_tree.call_deferred(overlay)
+	_sync_android_accessibility.call_deferred()
 
 func _close_overlay() -> void:
 	overlay.hide()
@@ -560,6 +591,16 @@ func _close_overlay() -> void:
 	if is_instance_valid(previous_focus_owner) and previous_focus_owner.is_visible_in_tree():
 		previous_focus_owner.grab_focus()
 	previous_focus_owner = null
+	_sync_android_accessibility.call_deferred()
+
+func _sync_android_accessibility() -> void:
+	if accessibility_bridge == null or accessibility_sync_pending:
+		return
+	accessibility_sync_pending = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+	accessibility_sync_pending = false
+	accessibility_bridge.sync(overlay if overlay != null and overlay.visible else self)
 
 func _set_background_focus_enabled(node: Node, enabled: bool) -> void:
 	for child in node.get_children():
@@ -666,6 +707,7 @@ func _action_button(text: String, callback: Callable, accent: Color, height: int
 	var button := Button.new()
 	button.custom_minimum_size.y = height
 	button.text = text
+	_set_button_accessibility(button, _first_text_line(text), _remaining_text_lines(text))
 	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, accent, 2))
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 16, accent, 3))
@@ -675,6 +717,30 @@ func _action_button(text: String, callback: Callable, accent: Color, height: int
 	button.add_theme_color_override("font_disabled_color", Color("#718099"))
 	button.pressed.connect(callback)
 	return button
+
+func _set_button_accessibility(button: BaseButton, accessible_name: String, description: String = "") -> void:
+	button.accessibility_name = accessible_name.strip_edges()
+	button.accessibility_description = description.strip_edges()
+
+func _first_text_line(value: String) -> String:
+	for line in value.split("\n"):
+		var cleaned := String(line).strip_edges()
+		if not cleaned.is_empty():
+			return cleaned.lstrip("◈◆⌁✦▣＋⚙←✂↻✓×☰ ")
+	return value.strip_edges()
+
+func _remaining_text_lines(value: String) -> String:
+	var lines: Array[String] = []
+	var found_title := false
+	for line in value.split("\n"):
+		var cleaned := String(line).strip_edges()
+		if cleaned.is_empty():
+			continue
+		if not found_title:
+			found_title = true
+			continue
+		lines.append(cleaned)
+	return ". ".join(lines)
 
 func _add_connection_notice(text: String, accent: Color) -> void:
 	var notice := Label.new()
@@ -811,6 +877,7 @@ func _show_roster() -> void:
 			button.custom_minimum_size.y = 100
 			button.text = "%s\n%s" % [_character_name(character_id), _character_role(character_id)]
 			button.disabled = not selection_open or not can_edit or run_coordinator.run.characters[slot] == character_id or run_coordinator.run.characters[1 - slot] == character_id
+			_set_button_accessibility(button, "P%d %s 선택" % [slot + 1, _character_name(character_id)], "%s. %s" % [_character_role(character_id), _disabled_character_reason(slot, character_id, selection_open, can_edit)])
 			button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 14, _character_color(character_id), 2, 8, 6))
 			button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, _character_color(character_id), 3, 8, 6))
 			button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 14, Color("#4d5a71"), 1, 8, 6))
@@ -829,6 +896,17 @@ func _select_character(slot: int, character_id: StringName) -> void:
 		return
 	_refresh_character_identity()
 	_show_roster()
+
+func _disabled_character_reason(slot: int, character_id: StringName, selection_open: bool, can_edit: bool) -> String:
+	if not selection_open:
+		return "현재 원정의 편성이 확정되어 변경할 수 없습니다"
+	if not can_edit:
+		return "상대 플레이어의 슬롯은 변경할 수 없습니다"
+	if run_coordinator.run.characters[slot] == character_id:
+		return "현재 선택된 직업입니다"
+	if run_coordinator.run.characters[1 - slot] == character_id:
+		return "다른 플레이어가 이미 선택한 직업입니다"
+	return "두 번 탭하여 이 직업을 선택합니다"
 
 func _refresh_character_identity() -> void:
 	if player_title_labels.size() < 2:
@@ -1377,6 +1455,7 @@ func _shop_item_button(text: String, accent: Color, disabled: bool) -> Button:
 	button.custom_minimum_size = Vector2(210, 62)
 	button.text = text
 	button.disabled = disabled
+	_set_button_accessibility(button, _first_text_line(text), "%s. %s" % [_remaining_text_lines(text), "판매 완료 또는 구매 조건을 충족하지 못했습니다" if disabled else "두 번 탭하여 구매합니다"])
 	button.add_theme_font_size_override("font_size", 14)
 	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, accent, 2))
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 12, accent, 3))
@@ -1407,6 +1486,7 @@ func _route_button(text: String, accent: Color, callback: Callable) -> Button:
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.custom_minimum_size.y = 48
 	button.text = text
+	_set_button_accessibility(button, _first_text_line(text), "%s. 두 번 탭하여 이 항로를 선택합니다" % _remaining_text_lines(text))
 	button.add_theme_font_size_override("font_size", 16)
 	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 24, accent, 2, 12, 6))
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.20), 24, accent, 3, 12, 6))
@@ -1447,7 +1527,9 @@ func _refresh() -> void:
 	energy_label.text = "⚡ %d" % maxi(0, state.players[local_slot].energy - selected_energy)
 	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
 	ready_button.disabled = selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING
+	_set_button_accessibility(ready_button, "행동 확정", "선택한 카드 %d장, 예상 비용 %d. %s" % [selected_plays.size(), selected_energy, "카드를 먼저 선택해야 합니다" if selected_plays.is_empty() else "두 번 탭하여 실행을 확정합니다"])
 	_rebuild_hand()
+	_sync_android_accessibility.call_deferred()
 	queue_redraw()
 
 func _refresh_duel() -> void:
@@ -1469,6 +1551,7 @@ func _refresh_duel() -> void:
 		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
 	status_label.text = _plan_summary(true)
 	ready_button.text = "✓  %d장 행동 확정" % selected_plays.size() if not selected_plays.is_empty() else "✓  행동 확정"
+	_set_button_accessibility(ready_button, "행동 확정", "선택한 카드 %d장, 예상 비용 %d. %s" % [selected_plays.size(), selected_energy, "카드를 먼저 선택해야 합니다" if selected_plays.is_empty() else "상대에게 공개하지 않고 계획을 확정합니다"])
 	energy_label.text = "⚡ %d" % maxi(0, duel_state.players[local_slot].energy - selected_energy)
 	ready_button.disabled = selected_plays.is_empty() or duel_state.phase != DuelState.Phase.PLANNING or duel_state.players[local_slot].ready
 	if duel_state.phase == DuelState.Phase.FINISHED:
@@ -1477,6 +1560,7 @@ func _refresh_duel() -> void:
 		if not overlay.visible:
 			_show_duel_outcome.call_deferred()
 	_rebuild_hand()
+	_sync_android_accessibility.call_deferred()
 	queue_redraw()
 
 func _show_duel_outcome() -> void:

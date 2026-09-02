@@ -7,6 +7,9 @@ import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Rect
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import org.godotengine.godot.Godot
 import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.UsedByGodot
@@ -33,6 +36,11 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     private val messages = ConcurrentLinkedQueue<String>()
     private val errors = ConcurrentLinkedQueue<String>()
     private val connectionGeneration = AtomicLong(0)
+    private val accessibilityActions = ConcurrentLinkedQueue<Int>()
+    @Volatile private var accessibilityOverlay: AccessibilityOverlayView? = null
+    @Volatile private var accessibilityElements: List<VirtualAccessibilityNode> = emptyList()
+    @Volatile private var accessibilitySourceWidth = 1280
+    @Volatile private var accessibilitySourceHeight = 720
 
     @Volatile private var state = "idle"
     @Volatile private var serverSocket: BluetoothServerSocket? = null
@@ -40,6 +48,52 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     @Volatile private var output: DataOutputStream? = null
 
     override fun getPluginName() = BuildConfig.GODOT_PLUGIN_NAME
+
+    override fun onGodotSetupCompleted() {
+        super.onGodotSetupCompleted()
+        val host = activity ?: return
+        host.runOnUiThread {
+            val root = host.findViewById<ViewGroup>(android.R.id.content) ?: return@runOnUiThread
+            val overlay = AccessibilityOverlayView(host) { id -> accessibilityActions.add(id) }
+            root.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            accessibilityOverlay = overlay
+            overlay.updateNodes(accessibilityElements, accessibilitySourceWidth, accessibilitySourceHeight)
+        }
+    }
+
+    @UsedByGodot
+    fun setAccessibilityElementsJson(payload: String) {
+        try {
+            val root = JSONObject(payload)
+            val width = root.optInt("width", 1280)
+            val height = root.optInt("height", 720)
+            val source = root.optJSONArray("elements") ?: JSONArray()
+            val elements = buildList {
+                for (index in 0 until source.length()) {
+                    val item = source.getJSONObject(index)
+                    add(
+                        VirtualAccessibilityNode(
+                            id = item.getInt("id"),
+                            name = item.optString("name"),
+                            description = item.optString("description"),
+                            sourceRect = Rect(item.getInt("left"), item.getInt("top"), item.getInt("right"), item.getInt("bottom")),
+                            enabled = item.optBoolean("enabled", true),
+                            role = item.optString("role", "button"),
+                        )
+                    )
+                }
+            }
+            accessibilityElements = elements
+            accessibilitySourceWidth = width
+            accessibilitySourceHeight = height
+            runOnUiThread { accessibilityOverlay?.updateNodes(elements, width, height) }
+        } catch (error: Exception) {
+            errors.add("accessibility_payload_invalid:${error.message ?: error.javaClass.simpleName}")
+        }
+    }
+
+    @UsedByGodot
+    fun pollAccessibilityAction(): Int = accessibilityActions.poll() ?: -1
 
     private fun adapter(): BluetoothAdapter? {
         val manager = activity?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -273,6 +327,11 @@ class StarlinkBluetoothPlugin(godot: Godot) : GodotPlugin(godot) {
     }
 
     override fun onMainDestroy() {
+        val overlay = accessibilityOverlay
+        activity?.runOnUiThread { (overlay?.parent as? ViewGroup)?.removeView(overlay) }
+        accessibilityOverlay = null
+        accessibilityElements = emptyList()
+        accessibilityActions.clear()
         closeConnection()
         executor.shutdownNow()
         super.onMainDestroy()

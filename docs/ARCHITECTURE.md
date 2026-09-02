@@ -34,6 +34,13 @@ Godot UI -> RunCoordinator -> CombatEngine
 - 블로킹 accept, connect, read는 UI 스레드가 아닌 전용 executor에서 실행한다.
 - 플러그인 상태와 수신 메시지는 GDScript가 폴링하고 게임 계층의 신호로 변환한다.
 
+## Android 접근성 브리지
+
+- Godot UI는 Android에서 하나의 `SurfaceView`로 렌더링되므로 `AndroidAccessibilityBridge`가 현재 화면의 의미 이름·설명·활성 상태·좌표를 플러그인에 전달한다.
+- 플러그인의 투명 `AccessibilityOverlayView`는 화면을 그리지 않고 Android 가상 버튼·텍스트 노드만 제공하며 일반 터치는 아래 Godot 렌더 뷰로 통과시킨다.
+- 접근성 `ACTION_CLICK`은 정수 ID 큐로 Godot 메인 루프에 돌아와 현재 유효하고 활성화된 `BaseButton`만 실행한다. 화면 전환 후 폐기된 ID는 무시한다.
+- 모달이 열리면 동기화 루트를 모달로 제한해 배경 전투 컨트롤이 TalkBack 탐색 순서에 남지 않도록 한다.
+
 ## 저장 지점
 
 - 노드 진입 전

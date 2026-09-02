@@ -18,6 +18,16 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	# so a hidden native button caption would not improve TalkBack and can cause duplicate rendering.
 	text = ""
 	tooltip_text = "%s · %s · %s · 에너지 %d" % [card.display_name, primary_tag, effect_text, card.energy_cost]
+	accessibility_name = "%s 카드%s" % [card.display_name, ", 선택됨" if is_selected else ""]
+	var action_hint := footer_text if not footer_text.is_empty() else ("누르면 선택을 취소합니다" if is_selected else "누르면 행동 큐에 추가합니다")
+	accessibility_description = "%s, %s, 에너지 %d, %s, 대상 %s. %s" % [
+		rarity_text.lstrip("●◆✦ "),
+		primary_tag,
+		card.energy_cost,
+		effect_text,
+		_target_name(card.target),
+		action_hint,
+	]
 	add_theme_stylebox_override("focus", _focus_style())
 	var inset := MarginContainer.new()
 	inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -106,6 +116,9 @@ func _effect_color(kind: String) -> Color:
 		"heal": Color("#55e5ad"),
 		"energy": Color("#ffd166"),
 	}.get(kind, Color("#bc8cff"))
+
+func _target_name(target: CardData.Target) -> String:
+	return ["자신", "동료", "적", "팀 전체"][target]
 
 func _focus_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
