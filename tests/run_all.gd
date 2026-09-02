@@ -25,8 +25,10 @@ func _init() -> void:
 	_test_consumable_effects_and_sync()
 	_test_relic_lifecycle_triggers()
 	_test_character_selection_and_scope()
+	_test_duel_resolution_and_snapshot()
+	_test_host_authoritative_duel_session()
 	if failures.is_empty():
-		print("PASS: 22 core, content, run, character, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 24 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -444,6 +446,51 @@ func _test_character_selection_and_scope() -> void:
 	_expect(rewards.size() == 3 and catalog[rewards[0]].owner_scope == CardData.Scope.HACKER and catalog[rewards[1]].owner_scope == CardData.Scope.HACKER and catalog[rewards[2]].owner_scope == CardData.Scope.NEUTRAL, "character reward contains two class cards and one neutral card")
 	var route_id := String(run.map.stages[0].steps[0].lanes[0].options[0].id)
 	_expect(coordinator.choose_route(0, route_id).ok and not coordinator.select_character(0, &"assault").ok, "character selection closes after route commitment")
+	store.clear()
+
+func _test_duel_resolution_and_snapshot() -> void:
+	var catalog := FullCardCatalog.build()
+	var engine := DuelEngine.new(catalog)
+	var decks := [
+		["guardian_strike", "guardian_guard", "guardian_cover", "neutral_pulse", "neutral_barrier"],
+		["engineer_bolt", "engineer_charge", "engineer_patch", "neutral_pulse", "neutral_barrier"],
+	]
+	var duel := engine.create_duel(["guardian", "engineer"], decks)
+	_expect(engine.submit_plan(duel, 0, [{"card_id": &"guardian_strike"}]).ok and engine.submit_plan(duel, 1, [{"card_id": &"engineer_bolt"}]).ok, "both duel plans are accepted")
+	_expect(engine.resolve_if_ready(duel).ok and duel.health == [30, 29] and duel.turn == 2, "duel resolves simultaneous damage against opposing players")
+	var restored := DuelState.from_snapshot(duel.to_snapshot())
+	_expect(restored.health == duel.health and restored.turn == duel.turn and restored.players[0].character_id == &"guardian", "duel snapshot round trip preserves authoritative state")
+	var draw_duel := engine.create_duel(["guardian", "engineer"], decks)
+	draw_duel.health = [5, 5]
+	engine.submit_plan(draw_duel, 0, [{"card_id": &"guardian_strike"}])
+	engine.submit_plan(draw_duel, 1, [{"card_id": &"engineer_bolt"}])
+	engine.resolve_if_ready(draw_duel)
+	_expect(draw_duel.phase == DuelState.Phase.FINISHED and draw_duel.winner == -1, "simultaneous lethal damage produces a draw")
+
+func _test_host_authoritative_duel_session() -> void:
+	var transports := LoopbackTransport.pair()
+	transports[0].start_host("duel")
+	transports[1].connect_to("loopback", "duel")
+	var catalog := FullCardCatalog.build()
+	var store := RunSaveStore.new("user://duel_session_test.json")
+	store.clear()
+	var coordinator := RunCoordinator.new(catalog, store)
+	coordinator.start_new(9090)
+	var combat_engine := CombatEngine.new(catalog)
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], combat_engine, combat_engine.create_demo_combat(), coordinator)
+	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
+	var received_duels: Array[Dictionary] = []
+	guest.duel_snapshot_received.connect(func(snapshot: Dictionary, _hash: String) -> void: received_duels.append(snapshot))
+	_expect(host.set_game_mode("duel").ok, "host starts duel mode on the shared session")
+	guest.poll()
+	_expect(guest.game_mode == "duel" and guest.duel_state != null, "guest receives duel mode and initial authoritative snapshot")
+	var guest_card: StringName = guest.duel_state.players[1].hand[0]
+	_expect(guest.submit_duel_plan(1, [{"card_id": guest_card}]).ok, "guest sends duel plan without resolving locally")
+	host.poll()
+	var host_card: StringName = host.duel_state.players[0].hand[0]
+	_expect(host.submit_duel_plan(0, [{"card_id": host_card}]).ok, "host accepts its duel plan and resolves when both are ready")
+	guest.poll()
+	_expect(host.duel_state.turn == 2 and not received_duels.is_empty() and int(received_duels[-1].turn) == 2, "guest receives resolved authoritative duel turn")
 	store.clear()
 
 func _expect(condition: bool, label: String) -> void:

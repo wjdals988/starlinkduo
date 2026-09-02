@@ -29,7 +29,7 @@ func select_character(player_slot: int, character_id: StringName) -> Dictionary:
 	if run.characters[1 - player_slot] == character_id:
 		return {"ok": false, "error": "character_already_taken"}
 	run.characters[player_slot] = character_id
-	run.decks[player_slot] = _starter_deck(character_id)
+	run.decks[player_slot] = starter_deck_for(character_id)
 	checkpoint("character_selected")
 	return {"ok": true, "character_id": String(character_id)}
 
@@ -281,7 +281,7 @@ func _scope_for_slot(player_slot: int) -> CardData.Scope:
 		&"assault": CardData.Scope.ASSAULT,
 	}.get(run.characters[player_slot], CardData.Scope.NEUTRAL)
 
-func _starter_deck(character_id: StringName) -> Array:
+func starter_deck_for(character_id: StringName) -> Array:
 	if character_id == &"guardian":
 		return ["guardian_strike", "guardian_guard", "guardian_cover", "neutral_pulse", "guardian_strike", "guardian_guard", "neutral_barrier", "neutral_pulse"]
 	if character_id == &"engineer":

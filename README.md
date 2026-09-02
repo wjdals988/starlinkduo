@@ -1,6 +1,6 @@
 # Starlink Duo
 
-두 대의 Android 기기를 Bluetooth Classic으로 연결해 플레이하는 2인 협동 덱빌딩 로그라이트입니다.
+두 대의 Android 기기를 Bluetooth Classic으로 연결해 협동 원정 또는 2인 결투를 플레이하는 덱빌딩 게임입니다.
 
 ## 현재 상태
 
@@ -35,7 +35,8 @@ godot --headless --path . --install-android-build-template --export-debug "Andro
 ## 설계 원칙
 
 - 호스트 권한 기반 결정론적 상태 동기화
-- 공유 팀 체력과 플레이어별 덱·손패·에너지
+- 협동의 공유 팀 체력과 결투의 플레이어별 36 내구도를 분리
+- 결투에서는 캐릭터별 표준 8장 덱과 비공개 동시 계획 사용
 - 캐릭터 전용 카드 96장과 공용 카드 48장을 동일 스키마로 관리
 - 일반, 매직, 레어, 전설 등급을 색상뿐 아니라 형태와 문자로 구분
 - 비행기 모드에서 Wi-Fi와 모바일 데이터 없이 Bluetooth만으로 완주 가능

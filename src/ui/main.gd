@@ -14,6 +14,9 @@ const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
 
 var engine: CombatEngine
 var state: CombatState
+var duel_engine: DuelEngine
+var duel_state: DuelState
+var game_mode := "cooperative"
 var catalog: Dictionary
 var run_coordinator: RunCoordinator
 var bluetooth_transport: AndroidBluetoothTransport
@@ -123,7 +126,7 @@ func _build_top_bar() -> Control:
 	turn_label.add_theme_color_override("font_color", COLOR_MUTED)
 	row.add_child(turn_label)
 
-	for item in [["연결", _show_connection], ["편성", _show_roster], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop], ["아이템", _show_consumables]]:
+	for item in [["플레이", _show_mode], ["편성", _show_roster], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop], ["아이템", _show_consumables]]:
 		var navigation := Button.new()
 		navigation.text = item[0]
 		navigation.custom_minimum_size = Vector2(88, 42)
@@ -322,6 +325,43 @@ func _build_overlay() -> void:
 	overlay_content.add_theme_constant_override("separation", 12)
 	column.add_child(overlay_content)
 
+func _show_mode() -> void:
+	_clear_overlay()
+	overlay_title.text = "플레이 모드"
+	overlay_subtitle.text = "하나의 앱에서 협동 원정과 2인 결투를 선택합니다. Bluetooth 연결 시 호스트가 모드를 확정합니다."
+	_add_connection_action("협동 원정\n3개 스테이지 · 공동 체력 · 덱 성장", _activate_mode.bind("cooperative"), COLOR_CYAN)
+	_add_connection_action("2인 결투\n각 36 내구도 · 동시 계획 · 개별 승패", _activate_mode.bind("duel"), COLOR_RED)
+	var divider := HSeparator.new()
+	overlay_content.add_child(divider)
+	_add_connection_action("Bluetooth 연결 설정", _show_connection, COLOR_BLUE)
+
+func _activate_mode(mode: String) -> void:
+	if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST:
+		overlay_subtitle.text = "모드는 호스트가 선택합니다. 호스트의 확정을 기다려 주세요."
+		return
+	game_mode = mode
+	if cooperative_session != null:
+		var network_result := cooperative_session.set_game_mode(mode)
+		if not network_result.ok:
+			overlay_subtitle.text = "모드를 변경하지 못했습니다: %s" % network_result.error
+			return
+	if mode == "duel":
+		duel_engine = DuelEngine.new(catalog)
+		duel_state = cooperative_session.duel_state if cooperative_session != null else duel_engine.create_duel(run_coordinator.run.characters, [
+			run_coordinator.starter_deck_for(run_coordinator.run.characters[0]),
+			run_coordinator.starter_deck_for(run_coordinator.run.characters[1]),
+		])
+		local_slot = 0 if cooperative_session == null else local_slot
+		log_label.text = "2인 결투 시작 · 두 플레이어가 행동을 확정하면 동시에 해결됩니다."
+	else:
+		state = engine.create_demo_combat() if not active_route_combat else state
+		log_label.text = "협동 원정 모드 · 공동 체력과 항로 진행을 공유합니다."
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	overlay.hide()
+	_refresh()
+
 func _clear_overlay() -> void:
 	for child in overlay_content.get_children():
 		child.queue_free()
@@ -329,7 +369,7 @@ func _clear_overlay() -> void:
 
 func _show_connection() -> void:
 	_clear_overlay()
-	overlay_title.text = "근거리 협동 연결"
+	overlay_title.text = "근거리 2인 연결"
 	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
 		overlay_subtitle.text = "현재 환경에는 Android Bluetooth 플러그인이 없어 로컬 데모로 실행 중입니다."
 		_add_connection_notice("APK를 Android 12 이상 갤럭시에서 실행하세요.", COLOR_YELLOW)
@@ -365,6 +405,7 @@ func _start_bluetooth_host() -> void:
 		local_slot = 0
 		cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state, run_coordinator)
 		cooperative_session.session_error.connect(_on_session_error)
+		cooperative_session.set_game_mode(game_mode)
 		overlay_subtitle.text = "참가자를 기다리는 중… 상대 기기에서 이 기기를 선택하세요."
 	else:
 		overlay_subtitle.text = "방을 만들지 못했습니다. 권한과 Bluetooth 상태를 확인하세요."
@@ -375,6 +416,8 @@ func _join_bluetooth_host(address: String) -> void:
 		cooperative_session = CooperativeSession.new(CooperativeSession.Role.GUEST, bluetooth_transport)
 		cooperative_session.snapshot_received.connect(_on_remote_snapshot)
 		cooperative_session.run_snapshot_received.connect(_on_remote_run_snapshot)
+		cooperative_session.duel_snapshot_received.connect(_on_remote_duel_snapshot)
+		cooperative_session.game_mode_changed.connect(_on_remote_game_mode)
 		cooperative_session.session_error.connect(_on_session_error)
 		overlay_subtitle.text = "호스트에 연결하는 중…"
 	else:
@@ -409,12 +452,26 @@ func _connection_status_text() -> String:
 		_: return "●  BLUETOOTH READY" if bluetooth_transport.is_available() else "●  BLUETOOTH OFF"
 
 func _on_remote_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
+	game_mode = "cooperative"
 	state = CombatState.from_snapshot(snapshot)
 	selected_hand_indices.clear()
 	selected_plays.clear()
 	selected_energy = 0
 	log_label.text = "호스트 상태 동기화 완료 · TURN %d" % state.turn
 	_refresh()
+
+func _on_remote_duel_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
+	game_mode = "duel"
+	duel_state = DuelState.from_snapshot(snapshot)
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	log_label.text = "호스트 결투 상태 동기화 완료 · TURN %d" % duel_state.turn
+	_refresh()
+
+func _on_remote_game_mode(mode: String) -> void:
+	game_mode = mode
+	log_label.text = "호스트가 %s 모드를 선택했습니다." % ("2인 결투" if mode == "duel" else "협동 원정")
 
 func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
 	var was_event_pending := not run_coordinator.run.pending_event.is_empty()
@@ -439,6 +496,9 @@ func _on_session_error(code: String, detail: String) -> void:
 	log_label.text = "연결 오류 · %s (%s)" % [code, detail]
 
 func _show_roster() -> void:
+	if game_mode == "duel":
+		_show_mode_locked_notice("편성", "결투를 종료하고 협동 모드에서 다음 결투의 승무원을 편성하세요.")
+		return
 	_clear_overlay()
 	overlay_title.text = "승무원 편성"
 	var selection_open := run_coordinator.can_select_characters()
@@ -509,6 +569,9 @@ func _character_color(character_id: StringName) -> Color:
 	}.get(character_id, COLOR_CYAN)
 
 func _show_map() -> void:
+	if game_mode == "duel":
+		_show_mode_locked_notice("항로", "항로 진행은 협동 원정 전용입니다.")
+		return
 	_clear_overlay()
 	var run := run_coordinator.run
 	overlay_title.text = "항로 선택 · STAGE %d" % run.stage
@@ -691,6 +754,9 @@ func _show_run_outcome(victory: bool) -> void:
 	_add_connection_notice("최종 팀 내구도 %d / %d   ·   보유 열쇠 %d / 3" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health, run_coordinator.run.keys.count(true)], COLOR_CYAN if victory else COLOR_RED)
 
 func _show_reward() -> void:
+	if game_mode == "duel":
+		_show_mode_locked_notice("전투 보상", "결투는 공정한 시작 덱을 사용하며 원정 보상을 소비하지 않습니다.")
+		return
 	_clear_overlay()
 	overlay_title.text = "전투 보상"
 	overlay_subtitle.text = "전용 카드 2장 + 공용 카드 1장 · 선택 즉시 덱과 체크포인트에 반영"
@@ -718,6 +784,9 @@ func _claim_reward(card_id: StringName) -> void:
 		overlay_subtitle.text = "%s 획득 완료 · 현재 덱 %d장 · 자동 저장됨" % [catalog[card_id].display_name, run_coordinator.run.decks[local_slot].size()]
 
 func _show_shop() -> void:
+	if game_mode == "duel":
+		_show_mode_locked_notice("상점", "상점과 크레딧은 협동 원정 전용입니다.")
+		return
 	_clear_overlay()
 	overlay_title.text = "궤도 정거장 상점"
 	if not run_coordinator.run.shop_open[local_slot]:
@@ -759,6 +828,9 @@ func _show_shop() -> void:
 	overlay_content.add_child(services)
 
 func _show_consumables() -> void:
+	if game_mode == "duel":
+		_show_mode_locked_notice("아이템", "유물과 소비 아이템은 결투 밸런스에서 제외됩니다.")
+		return
 	_clear_overlay()
 	overlay_title.text = "소비 아이템"
 	var relic_names: Array[String] = []
@@ -841,6 +913,12 @@ func _route_chip(text: String, accent: Color) -> PanelContainer:
 	chip.add_child(label)
 	return chip
 
+func _show_mode_locked_notice(title: String, message: String) -> void:
+	_clear_overlay()
+	overlay_title.text = title
+	overlay_subtitle.text = message
+	_add_connection_action("플레이 모드로 이동", _show_mode, COLOR_CYAN)
+
 func _route_button(text: String, accent: Color, callback: Callable) -> Button:
 	var button := Button.new()
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -856,7 +934,11 @@ func _node_label(type: String) -> String:
 
 func _refresh() -> void:
 	_refresh_character_identity()
+	if game_mode == "duel" and duel_state != null:
+		_refresh_duel()
+		return
 	turn_label.text = "TURN %02d" % state.turn
+	ready_button.text = "준비 완료"
 	team_health_label.text = "팀 내구도   %d / %d" % [state.team_health, state.team_max_health]
 	team_health_bar.max_value = state.team_max_health
 	team_health_bar.value = state.team_health
@@ -878,6 +960,32 @@ func _refresh() -> void:
 	_rebuild_hand()
 	queue_redraw()
 
+func _refresh_duel() -> void:
+	turn_label.text = "DUEL %02d" % duel_state.turn
+	team_health_label.text = "내구도   P1 %d / %d   ·   P2 %d / %d" % [duel_state.health[0], duel_state.max_health[0], duel_state.health[1], duel_state.max_health[1]]
+	team_health_bar.max_value = duel_state.max_health[local_slot]
+	team_health_bar.value = duel_state.health[local_slot]
+	encounter_label.text = "2인 대전  ·  동시 계획"
+	enemy_name_label.text = "P1   VS   P2"
+	enemy_health_label.text = "먼저 상대 내구도를 0으로 만드세요"
+	enemy_health_bar.max_value = duel_state.max_health[1 - local_slot]
+	enemy_health_bar.value = duel_state.health[1 - local_slot]
+	intent_label.text = "상대 행동 비공개\n양쪽 확정 후 동시 공개"
+	for slot in 2:
+		var player: CombatantState = duel_state.players[slot]
+		var remaining := player.energy - selected_energy if slot == local_slot else player.energy
+		var readiness := "행동 확정" if player.ready else ("내 차례" if slot == local_slot else "선택 중")
+		player_detail_labels[slot].text = "내구도 %d / %d   ·   에너지 %d / %d\n방어 %d   ·   상태 %s" % [duel_state.health[slot], duel_state.max_health[slot], remaining, player.max_energy, player.block, readiness]
+		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
+	status_label.text = "P%d 행동 · 선택 카드 %d장 · 예상 비용 %d · 상대 계획은 공개되지 않음" % [local_slot + 1, selected_plays.size(), selected_energy]
+	ready_button.text = "행동 확정"
+	ready_button.disabled = selected_plays.is_empty() or duel_state.phase != DuelState.Phase.PLANNING or duel_state.players[local_slot].ready
+	if duel_state.phase == DuelState.Phase.FINISHED:
+		ready_button.disabled = true
+		status_label.text = "무승부" if duel_state.winner == -1 else "P%d 결투 승리" % (duel_state.winner + 1)
+	_rebuild_hand()
+	queue_redraw()
+
 func _encounter_kind() -> String:
 	if active_route_types.has("true_boss"): return "진 최종 보스"
 	if active_route_types.has("key_challenge"): return "열쇠 도전"
@@ -888,8 +996,9 @@ func _encounter_kind() -> String:
 func _rebuild_hand() -> void:
 	for child in hand_container.get_children():
 		child.queue_free()
-	for hand_index in state.players[local_slot].hand.size():
-		var card_id: StringName = state.players[local_slot].hand[hand_index]
+	var active_player: CombatantState = duel_state.players[local_slot] if game_mode == "duel" and duel_state != null else state.players[local_slot]
+	for hand_index in active_player.hand.size():
+		var card_id: StringName = active_player.hand[hand_index]
 		var card: CardData = catalog[card_id]
 		var card_button := Button.new()
 		card_button.custom_minimum_size = Vector2(186, 126)
@@ -920,7 +1029,8 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 		log_label.text = "%s 선택 취소" % card.display_name
 		_refresh()
 		return
-	if selected_energy + card.energy_cost > state.players[local_slot].energy:
+	var available_energy := duel_state.players[local_slot].energy if game_mode == "duel" and duel_state != null else state.players[local_slot].energy
+	if selected_energy + card.energy_cost > available_energy:
 		log_label.text = "에너지가 부족합니다."
 		return
 	if card.is_support():
@@ -936,6 +1046,9 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 	_refresh()
 
 func _on_ready_pressed() -> void:
+	if game_mode == "duel" and duel_state != null:
+		_on_duel_ready_pressed()
+		return
 	var previous_turn := state.turn
 	var local_result := cooperative_session.submit_plan(local_slot, selected_plays) if cooperative_session != null else engine.submit_plan(state, local_slot, selected_plays)
 	if not local_result.ok:
@@ -954,6 +1067,26 @@ func _on_ready_pressed() -> void:
 	selected_energy = 0
 	var result_label := "상대 준비 대기 중" if cooperative_session != null and state.turn == previous_turn else "턴 해결 완료"
 	log_label.text = "%s · 상태 해시 %s…" % [result_label, StateHasher.hash_snapshot(state.to_snapshot()).left(8)]
+	_refresh()
+
+func _on_duel_ready_pressed() -> void:
+	var result := cooperative_session.submit_duel_plan(local_slot, selected_plays) if cooperative_session != null else duel_engine.submit_plan(duel_state, local_slot, selected_plays)
+	if not result.ok:
+		log_label.text = "결투 행동을 확정할 수 없습니다: %s" % result.get("error", "unknown")
+		return
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	if cooperative_session == null:
+		if duel_state.plans.size() == 1:
+			local_slot = 1 - local_slot
+			log_label.text = "기기를 상대에게 건네주세요 · P%d 행동 선택" % (local_slot + 1)
+		else:
+			duel_engine.resolve_if_ready(duel_state)
+			local_slot = 0
+			log_label.text = "동시 행동 해결 완료 · 상태 해시 %s…" % StateHasher.hash_snapshot(duel_state.to_snapshot()).left(8)
+	else:
+		log_label.text = "상대 행동 확정을 기다리는 중입니다."
 	_refresh()
 
 func _effect_summary(card: CardData) -> String:

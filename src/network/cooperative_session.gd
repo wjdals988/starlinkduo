@@ -5,6 +5,8 @@ enum Role { HOST, GUEST }
 
 signal snapshot_received(snapshot: Dictionary, state_hash: String)
 signal run_snapshot_received(snapshot: Dictionary)
+signal duel_snapshot_received(snapshot: Dictionary, state_hash: String)
+signal game_mode_changed(mode: String)
 signal session_error(code: String, detail: String)
 signal peer_ready(slot: int, ready: bool)
 
@@ -13,6 +15,9 @@ var transport: SessionTransport
 var engine: CombatEngine
 var combat_state: CombatState
 var run_coordinator: RunCoordinator
+var duel_engine: DuelEngine
+var duel_state: DuelState
+var game_mode := "cooperative"
 var remote_snapshot: Dictionary = {}
 var outgoing_sequence := 0
 var incoming_sequence := 0
@@ -48,6 +53,47 @@ func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 
 func request_resync() -> bool:
 	return _send("resync_request", {"last_seq": incoming_sequence})
+
+func set_game_mode(mode: String) -> Dictionary:
+	if role != Role.HOST:
+		return _error("host_only_mode")
+	if not mode in ["cooperative", "duel"]:
+		return _error("unknown_game_mode")
+	game_mode = mode
+	if mode == "duel":
+		if run_coordinator == null or run_coordinator.run == null:
+			return _error("host_run_missing")
+		duel_engine = DuelEngine.new(FullCardCatalog.build())
+		duel_state = duel_engine.create_duel(run_coordinator.run.characters, [
+			run_coordinator.starter_deck_for(run_coordinator.run.characters[0]),
+			run_coordinator.starter_deck_for(run_coordinator.run.characters[1]),
+		])
+	else:
+		duel_state = null
+		duel_engine = null
+	game_mode_changed.emit(game_mode)
+	_send("game_mode", {"mode": game_mode})
+	if mode == "duel":
+		_publish_duel_snapshot("duel_started")
+	else:
+		_publish_snapshot("cooperative_resumed")
+	return {"ok": true, "mode": game_mode}
+
+func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
+	if game_mode != "duel":
+		return _error("duel_not_active")
+	if role == Role.HOST:
+		if duel_engine == null or duel_state == null:
+			return _error("host_duel_missing")
+		var result := duel_engine.submit_plan(duel_state, slot, plays)
+		if not result.ok:
+			return result
+		_publish_duel_snapshot("duel_plan_accepted")
+		_resolve_duel_if_ready()
+		return result
+	if slot != 1:
+		return _error("guest_slot_forbidden")
+	return {"ok": _send("duel_plan", {"slot": slot, "turn": _known_duel_turn(), "plays": plays})}
 
 func select_route(slot: int, node_id: String) -> Dictionary:
 	if role == Role.HOST:
@@ -128,11 +174,33 @@ func _on_message(raw: String) -> void:
 
 func _on_transport_state_changed(next_state: String) -> void:
 	if next_state == "connected" and role == Role.HOST:
-		_publish_snapshot("session_started")
-		_publish_run_snapshot("session_started")
+		_send("game_mode", {"mode": game_mode})
+		if game_mode == "duel" and duel_state != null:
+			_publish_duel_snapshot("session_started")
+		else:
+			_publish_snapshot("session_started")
+			_publish_run_snapshot("session_started")
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"duel_plan":
+			if game_mode != "duel" or duel_state == null or int(payload.get("slot", -1)) != 1:
+				_send_rejection("guest_duel_forbidden")
+				return
+			if int(payload.get("turn", -1)) != duel_state.turn:
+				_send_rejection("duel_turn_mismatch")
+				_publish_duel_snapshot("duel_resync")
+				return
+			var duel_plays: Array[Dictionary] = []
+			for play in payload.get("plays", []):
+				if play is Dictionary:
+					duel_plays.append(play)
+			var duel_result := duel_engine.submit_plan(duel_state, 1, duel_plays)
+			if not duel_result.ok:
+				_send_rejection(duel_result.error)
+				return
+			_publish_duel_snapshot("duel_plan_accepted")
+			_resolve_duel_if_ready()
 		"character_select":
 			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
 				_send_rejection("guest_character_forbidden")
@@ -190,13 +258,34 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 			_publish_snapshot("plan_accepted")
 			_resolve_if_ready()
 		"resync_request":
-			_publish_snapshot("resync")
-			_publish_run_snapshot("resync")
+			if game_mode == "duel":
+				_publish_duel_snapshot("resync")
+			else:
+				_publish_snapshot("resync")
+				_publish_run_snapshot("resync")
 		_:
 			_send_rejection("host_message_forbidden")
 
 func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"game_mode":
+			var next_mode := String(payload.get("mode", ""))
+			if not next_mode in ["cooperative", "duel"]:
+				session_error.emit("invalid_game_mode", next_mode)
+				return
+			game_mode = next_mode
+			if next_mode == "cooperative":
+				duel_state = null
+			game_mode_changed.emit(game_mode)
+		"duel_snapshot":
+			var duel_snapshot: Variant = payload.get("state", null)
+			var duel_hash := String(payload.get("state_hash", ""))
+			if not duel_snapshot is Dictionary or duel_hash.is_empty() or StateHasher.hash_snapshot(duel_snapshot) != duel_hash:
+				session_error.emit("invalid_duel_snapshot", "missing or mismatched state")
+				return
+			duel_state = DuelState.from_snapshot(duel_snapshot)
+			game_mode = "duel"
+			duel_snapshot_received.emit(duel_state.to_snapshot(), duel_hash)
 		"run_snapshot":
 			var run_snapshot: Variant = payload.get("state", null)
 			if not run_snapshot is Dictionary:
@@ -228,6 +317,19 @@ func _resolve_if_ready() -> void:
 	if result.ok:
 		_publish_snapshot("turn_resolved")
 
+func _resolve_duel_if_ready() -> void:
+	if duel_state == null or duel_state.plans.size() != 2:
+		return
+	var result := duel_engine.resolve_if_ready(duel_state)
+	if result.ok:
+		_publish_duel_snapshot("duel_turn_resolved")
+
+func _publish_duel_snapshot(reason: String) -> bool:
+	if role != Role.HOST or duel_state == null:
+		return false
+	var snapshot := duel_state.to_snapshot()
+	return _send("duel_snapshot", {"reason": reason, "state": snapshot, "state_hash": StateHasher.hash_snapshot(snapshot)})
+
 func _publish_snapshot(reason: String) -> bool:
 	if role != Role.HOST or combat_state == null:
 		return false
@@ -254,6 +356,9 @@ func _known_turn() -> int:
 	if combat_state != null:
 		return combat_state.turn
 	return int(remote_snapshot.get("turn", 1))
+
+func _known_duel_turn() -> int:
+	return duel_state.turn if duel_state != null else 1
 
 static func _error(code: String) -> Dictionary:
 	return {"ok": false, "error": code}
