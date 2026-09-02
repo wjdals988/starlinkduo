@@ -21,6 +21,14 @@ godot --path . --editor
 godot --headless --path . --script res://tests/run_all.gd
 ```
 
+Android Bluetooth 플러그인은 다음과 같이 독립 컴파일합니다.
+
+```bash
+gradle -p android-plugin :plugin:assembleDebug
+```
+
+플러그인은 Android에서만 로드되며 데스크톱 개발 중에는 `LoopbackTransport`로 동일한 메시지 흐름을 검증합니다.
+
 ## 설계 원칙
 
 - 호스트 권한 기반 결정론적 상태 동기화
@@ -28,4 +36,3 @@ godot --headless --path . --script res://tests/run_all.gd
 - 캐릭터 전용 카드 96장과 공용 카드 48장을 동일 스키마로 관리
 - 일반, 매직, 레어, 전설 등급을 색상뿐 아니라 형태와 문자로 구분
 - 비행기 모드에서 Wi-Fi와 모바일 데이터 없이 Bluetooth만으로 완주 가능
-

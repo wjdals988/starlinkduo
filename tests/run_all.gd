@@ -7,8 +7,9 @@ func _init() -> void:
 	_test_simultaneous_resolution()
 	_test_support_limit()
 	_test_deterministic_hash()
+	_test_loopback_transport()
 	if failures.is_empty():
-		print("PASS: 4 combat core tests")
+		print("PASS: 5 core and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -53,7 +54,18 @@ func _test_deterministic_hash() -> void:
 		"equivalent combat states have matching hashes"
 	)
 
+func _test_loopback_transport() -> void:
+	var transports := LoopbackTransport.pair()
+	var host: LoopbackTransport = transports[0]
+	var guest: LoopbackTransport = transports[1]
+	var received: Array[String] = []
+	guest.message_received.connect(func(message: String) -> void: received.append(message))
+	host.start_host("test")
+	guest.connect_to("loopback", "test")
+	_expect(host.send_message("{\"type\":\"ready\"}"), "connected loopback sends a message")
+	guest.poll()
+	_expect(received == ["{\"type\":\"ready\"}"], "loopback delivers the exact payload")
+
 func _expect(condition: bool, label: String) -> void:
 	if not condition:
 		failures.append("FAIL: %s" % label)
-

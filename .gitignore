@@ -2,8 +2,8 @@
 .gradle/
 android/build/
 android/plugin/build/
+android-plugin/plugin/build/
 builds/
 *.apk
 *.aab
 local.properties
-

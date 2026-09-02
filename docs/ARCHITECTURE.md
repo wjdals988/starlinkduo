@@ -24,10 +24,17 @@ Godot UI -> RunCoordinator -> CombatEngine
 - 모든 난수는 런 시드와 명시적인 난수 호출 순서에서 생성한다.
 - 양쪽 상태 해시가 다르면 호스트의 마지막 확정 스냅샷으로 복구한다.
 
+## Android 전송
+
+- Godot Android Plugin v2와 Kotlin을 사용한다.
+- Android 12 이상에서 Bluetooth 스캔, 광고 및 연결 권한을 런타임에 요청한다.
+- 메시지는 4바이트 길이와 최대 1MiB UTF-8 payload로 프레이밍한다.
+- 블로킹 accept, connect, read는 UI 스레드가 아닌 전용 executor에서 실행한다.
+- 플러그인 상태와 수신 메시지는 GDScript가 폴링하고 게임 계층의 신호로 변환한다.
+
 ## 저장 지점
 
 - 노드 진입 전
 - 보상 확정 후
 - 상점 구매 후
 - 전투 턴 시작 시
-
