@@ -229,8 +229,17 @@ func _show_hub() -> void:
 	_clear_overlay()
 	overlay_title.text = "함선 메뉴"
 	overlay_subtitle.text = "원정 정보와 장비를 확인합니다. 전투 진행 상태는 유지됩니다."
-	for item in [["◈  플레이 모드", _show_mode, COLOR_CYAN], ["◆  대원 편성", _show_roster, COLOR_BLUE], ["⌁  항로 지도", _show_map, COLOR_CYAN], ["✦  전투 보상", _show_reward, COLOR_YELLOW], ["▣  궤도 상점", _show_shop, COLOR_ORANGE], ["＋  유물 · 소비품", _show_consumables, Color("#bc8cff")], ["⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED]]:
-		_add_connection_action(item[0], item[1], item[2])
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	overlay_content.add_child(grid)
+	for item in [["◈  플레이 모드", _show_mode, COLOR_CYAN], ["◆  대원 편성", _show_roster, COLOR_BLUE], ["⌁  항로 지도", _show_map, COLOR_CYAN], ["✦  전투 보상", _show_reward, COLOR_YELLOW], ["▣  궤도 상점", _show_shop, COLOR_ORANGE], ["＋  유물 · 소비품", _show_consumables, Color("#bc8cff")]]:
+		var button := _action_button(item[0], item[1], item[2])
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(button)
+	_add_connection_action("⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED)
 
 func _show_settings() -> void:
 	_clear_overlay()
