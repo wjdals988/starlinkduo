@@ -18,8 +18,9 @@ func _init() -> void:
 	_test_full_card_catalog()
 	_test_full_run_content_catalog()
 	_test_route_selection_and_key_gate()
+	_test_run_combat_completion_gate()
 	if failures.is_empty():
-		print("PASS: 15 core, content, run, route, save, economy, protocol, and transport tests")
+		print("PASS: 16 core, content, run, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -256,6 +257,24 @@ func _test_route_selection_and_key_gate() -> void:
 	run.pending_routes = {0: "a", 1: "b"}
 	coordinator.complete_routes(["key_challenge", "combat"])
 	_expect(run.keys[0], "completed key challenge unlocks only its stage key")
+	store.clear()
+
+func _test_run_combat_completion_gate() -> void:
+	var store := RunSaveStore.new("user://encounter_test.json")
+	store.clear()
+	var catalog := FullCardCatalog.build()
+	var coordinator := RunCoordinator.new(catalog, store)
+	var run := coordinator.start_new(8080)
+	run.pending_routes = {0: "a", 1: "b"}
+	var engine := CombatEngine.new(catalog)
+	var combat := engine.create_run_combat(run, ["key_challenge", "rest"], RunContentCatalog.build())
+	_expect(combat.team_health == run.team_health and combat.enemies[0].display_name.begins_with("열쇠 수호자"), "route type creates matching run encounter")
+	_expect(not coordinator.complete_combat(combat, ["key_challenge", "rest"]).ok, "unfinished combat cannot advance route")
+	combat.phase = CombatState.Phase.WON
+	var before_gold := run.gold[0]
+	var completion := coordinator.complete_combat(combat, ["key_challenge", "rest"])
+	_expect(completion.ok and completion.gold == 45, "key challenge victory grants elite reward")
+	_expect(run.keys[0] and run.gold[0] == before_gold + 45 and run.step == 1, "victory updates key gold and route exactly once")
 	store.clear()
 
 func _expect(condition: bool, label: String) -> void:

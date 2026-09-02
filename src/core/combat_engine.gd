@@ -27,6 +27,35 @@ func create_demo_combat() -> CombatState:
 	begin_turn(state)
 	return state
 
+func create_run_combat(run: RunState, route_types: Array[String], content: Dictionary) -> CombatState:
+	var state := CombatState.new()
+	state.combat_id = StringName("run-%s-s%d-r%d" % [run.run_id, run.stage, run.step])
+	state.team_health = run.team_health
+	state.team_max_health = run.team_max_health
+	for slot in 2:
+		var player := CombatantState.new(slot, run.characters[slot])
+		for card_id in run.decks[slot]:
+			player.draw_pile.append(StringName(card_id))
+		state.players.append(player)
+	var stage_content: Dictionary = content.stages[run.stage - 1]
+	var encounter: Dictionary
+	if route_types.has("boss"):
+		encounter = stage_content.boss
+	elif route_types.has("key_challenge"):
+		encounter = stage_content.elites[(run.seed + run.step) % stage_content.elites.size()].duplicate(true)
+		encounter.id = "%s_key" % encounter.id
+		encounter.name = "열쇠 수호자 · %s" % encounter.name
+		encounter.health = roundi(encounter.health * 1.15)
+	elif route_types.has("elite"):
+		encounter = stage_content.elites[(run.seed + run.step) % stage_content.elites.size()]
+	else:
+		encounter = stage_content.normal_formations[(run.seed + run.step) % stage_content.normal_formations.size()]
+	var enemy := EnemyState.new(StringName(encounter.id), String(encounter.name), int(encounter.health))
+	enemy.intent_damage = int(encounter.intent_damage)
+	state.enemies.append(enemy)
+	begin_turn(state)
+	return state
+
 func begin_turn(state: CombatState) -> void:
 	if state.phase == CombatState.Phase.WON or state.phase == CombatState.Phase.LOST:
 		return

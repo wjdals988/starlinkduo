@@ -16,8 +16,8 @@ func _init(card_catalog: Dictionary, store: RunSaveStore = null) -> void:
 func start_new(seed: int) -> RunState:
 	run = RunState.new(seed)
 	run.map = MapGenerator.new().generate_run(seed)
-	run.decks[0] = ["guardian_strike", "guardian_guard", "guardian_cover", "neutral_pulse"]
-	run.decks[1] = ["engineer_bolt", "engineer_charge", "engineer_patch", "neutral_barrier"]
+	run.decks[0] = ["guardian_strike", "guardian_guard", "guardian_cover", "neutral_pulse", "guardian_strike", "guardian_guard", "neutral_barrier", "neutral_pulse"]
+	run.decks[1] = ["engineer_bolt", "engineer_charge", "engineer_patch", "neutral_barrier", "engineer_bolt", "engineer_charge", "neutral_link", "neutral_pulse"]
 	checkpoint("new_run")
 	return run
 
@@ -109,6 +109,37 @@ func complete_routes(completed_types: Array[String]) -> Dictionary:
 	advance_step()
 	return {"ok": true}
 
+func complete_combat(combat: CombatState, completed_types: Array[String]) -> Dictionary:
+	if combat.phase != CombatState.Phase.WON:
+		return {"ok": false, "error": "combat_not_won"}
+	run.team_health = combat.team_health
+	var gold_reward := 45 if completed_types.has("elite") or completed_types.has("key_challenge") else 25
+	for slot in 2:
+		run.gold[slot] += gold_reward
+	var result := complete_routes(completed_types)
+	if result.ok:
+		checkpoint("combat_reward")
+	return {"ok": result.ok, "gold": gold_reward}
+
+func resolve_noncombat(completed_types: Array[String]) -> Dictionary:
+	if run.pending_routes.size() != 2:
+		return {"ok": false, "error": "routes_not_ready"}
+	var summary: Array[String] = []
+	for node_type in completed_types:
+		match node_type:
+			"rest":
+				var before := run.team_health
+				run.team_health = mini(run.team_max_health, run.team_health + 12)
+				summary.append("팀 내구도 +%d" % (run.team_health - before))
+			"event":
+				for slot in 2:
+					run.gold[slot] += 12
+				summary.append("각 플레이어 +12 C")
+			"shop": summary.append("상점 방문 가능")
+			_: summary.append(_node_summary(node_type))
+	var result := complete_routes(completed_types)
+	return {"ok": result.ok, "summary": summary}
+
 func selected_route_types() -> Array[String]:
 	var result: Array[String] = []
 	if run.pending_routes.size() != 2:
@@ -147,3 +178,6 @@ func _valid_slot(player_slot: int) -> bool:
 
 func _valid_shop_entry(player_slot: int, entry: Dictionary) -> bool:
 	return _valid_slot(player_slot) and entry.has("id") and entry.has("price") and int(entry.price) >= 0 and run.gold[player_slot] >= int(entry.price)
+
+func _node_summary(node_type: String) -> String:
+	return {"combat": "전투", "elite": "엘리트", "key_challenge": "열쇠 도전"}.get(node_type, node_type)

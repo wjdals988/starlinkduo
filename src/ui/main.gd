@@ -22,6 +22,8 @@ var local_slot := 0
 var selected_plays: Array[Dictionary] = []
 var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
+var active_route_types: Array[String] = []
+var active_route_combat := false
 
 var team_health_label: Label
 var team_health_bar: ProgressBar
@@ -38,6 +40,9 @@ var overlay_title: Label
 var overlay_subtitle: Label
 var overlay_content: VBoxContainer
 var connection_label: Label
+var encounter_label: Label
+var enemy_name_label: Label
+var intent_label: Label
 
 func _ready() -> void:
 	catalog = FullCardCatalog.build()
@@ -68,6 +73,9 @@ func _process(_delta: float) -> void:
 		cooperative_session.poll()
 	else:
 		bluetooth_transport.poll()
+	if active_route_combat and state.phase == CombatState.Phase.WON:
+		if cooperative_session == null or cooperative_session.role == CooperativeSession.Role.HOST:
+			_finish_route_combat()
 	if connection_label != null:
 		var next_text := _connection_status_text()
 		if connection_label.text != next_text:
@@ -183,19 +191,19 @@ func _build_enemy_panel() -> Control:
 	column.add_theme_constant_override("separation", 12)
 	panel.add_child(column)
 
-	var encounter := Label.new()
-	encounter.text = "일반 전투  ·  훈련 구역 01"
-	encounter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	encounter.add_theme_font_size_override("font_size", 16)
-	encounter.add_theme_color_override("font_color", COLOR_MUTED)
-	column.add_child(encounter)
+	encounter_label = Label.new()
+	encounter_label.text = "일반 전투  ·  훈련 구역 01"
+	encounter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	encounter_label.add_theme_font_size_override("font_size", 16)
+	encounter_label.add_theme_color_override("font_color", COLOR_MUTED)
+	column.add_child(encounter_label)
 
-	var enemy_name := Label.new()
-	enemy_name.text = "훈련 드론"
-	enemy_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	enemy_name.add_theme_font_size_override("font_size", 29)
-	enemy_name.add_theme_color_override("font_color", COLOR_TEXT)
-	column.add_child(enemy_name)
+	enemy_name_label = Label.new()
+	enemy_name_label.text = "훈련 드론"
+	enemy_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	enemy_name_label.add_theme_font_size_override("font_size", 29)
+	enemy_name_label.add_theme_color_override("font_color", COLOR_TEXT)
+	column.add_child(enemy_name_label)
 
 	enemy_health_label = Label.new()
 	enemy_health_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -208,12 +216,12 @@ func _build_enemy_panel() -> Control:
 	enemy_health_bar.add_theme_stylebox_override("fill", _panel_style(COLOR_RED, 9))
 	column.add_child(enemy_health_bar)
 
-	var intent := Label.new()
-	intent.text = "다음 행동\n⚠  팀에 9 피해"
-	intent.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	intent.add_theme_font_size_override("font_size", 21)
-	intent.add_theme_color_override("font_color", COLOR_YELLOW)
-	column.add_child(intent)
+	intent_label = Label.new()
+	intent_label.text = "다음 행동\n⚠  팀에 9 피해"
+	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intent_label.add_theme_font_size_override("font_size", 21)
+	intent_label.add_theme_color_override("font_color", COLOR_YELLOW)
+	column.add_child(intent_label)
 	return panel
 
 func _build_hand_section() -> Control:
@@ -454,10 +462,39 @@ func _choose_route(slot: int, node_id: String) -> void:
 
 func _enter_selected_routes() -> void:
 	var types := run_coordinator.selected_route_types()
-	var result := run_coordinator.complete_routes(types)
+	var combat_types := ["combat", "elite", "key_challenge", "boss"]
+	if types.any(func(type: String) -> bool: return combat_types.has(type)):
+		active_route_types = types
+		active_route_combat = true
+		state = engine.create_run_combat(run_coordinator.run, types, RunContentCatalog.build())
+		if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST:
+			cooperative_session.combat_state = state
+		selected_hand_indices.clear()
+		selected_plays.clear()
+		selected_energy = 0
+		overlay.hide()
+		log_label.text = "%s 조우 시작 · 승리해야 항로가 진행됩니다." % " + ".join(types.map(func(type: String) -> String: return _node_label(type)))
+		_refresh()
+		return
+	var result := run_coordinator.resolve_noncombat(types)
 	if result.ok:
-		overlay_subtitle.text = "%s 진입 완료 · 진행 상황을 저장했습니다." % " + ".join(types.map(func(type: String) -> String: return _node_label(type)))
-		_show_map()
+		state.team_health = run_coordinator.run.team_health
+		_show_route_result("노드 해결 완료", " · ".join(result.summary))
+
+func _finish_route_combat() -> void:
+	active_route_combat = false
+	var result := run_coordinator.complete_combat(state, active_route_types)
+	if not result.ok:
+		log_label.text = "전투 보상을 저장하지 못했습니다: %s" % result.get("error", "unknown")
+		return
+	_show_route_result("항로 전투 승리", "각 플레이어 +%d C · 진행 상황 자동 저장" % result.gold)
+	active_route_types.clear()
+
+func _show_route_result(title: String, summary: String) -> void:
+	_clear_overlay()
+	overlay_title.text = title
+	overlay_subtitle.text = summary
+	_add_connection_action("다음 항로 선택", _show_map, COLOR_CYAN)
 
 func _show_reward() -> void:
 	_clear_overlay()
@@ -569,6 +606,9 @@ func _refresh() -> void:
 	team_health_bar.max_value = state.team_max_health
 	team_health_bar.value = state.team_health
 	var enemy: EnemyState = state.enemies[0]
+	enemy_name_label.text = enemy.display_name
+	encounter_label.text = "%s  ·  STAGE %d-%02d" % [_encounter_kind(), run_coordinator.run.stage, run_coordinator.run.step + 1]
+	intent_label.text = "다음 행동\n⚠  팀에 %d 피해" % enemy.intent_damage
 	enemy_health_label.text = "%d / %d" % [enemy.health, enemy.max_health]
 	enemy_health_bar.max_value = enemy.max_health
 	enemy_health_bar.value = enemy.health
@@ -582,6 +622,12 @@ func _refresh() -> void:
 	ready_button.disabled = selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING
 	_rebuild_hand()
 	queue_redraw()
+
+func _encounter_kind() -> String:
+	if active_route_types.has("key_challenge"): return "열쇠 도전"
+	if active_route_types.has("boss"): return "보스 전투"
+	if active_route_types.has("elite"): return "엘리트 전투"
+	return "일반 전투" if active_route_combat else "훈련 전투"
 
 func _rebuild_hand() -> void:
 	for child in hand_container.get_children():
