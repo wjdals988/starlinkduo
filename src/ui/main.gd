@@ -14,6 +14,7 @@ const COLOR_YELLOW := Color("#ffd45f")
 var engine: CombatEngine
 var state: CombatState
 var catalog: Dictionary
+var run_coordinator: RunCoordinator
 var selected_plays: Array[Dictionary] = []
 var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
@@ -28,9 +29,15 @@ var status_label: Label
 var ready_button: Button
 var turn_label: Label
 var log_label: Label
+var overlay: PanelContainer
+var overlay_title: Label
+var overlay_subtitle: Label
+var overlay_content: VBoxContainer
 
 func _ready() -> void:
 	catalog = DemoCardCatalog.build()
+	run_coordinator = RunCoordinator.new(catalog)
+	run_coordinator.resume_or_start(20260902)
 	engine = CombatEngine.new(catalog)
 	state = engine.create_demo_combat()
 	_build_interface()
@@ -58,6 +65,7 @@ func _build_interface() -> void:
 	root.add_child(_build_top_bar())
 	root.add_child(_build_battlefield())
 	root.add_child(_build_hand_section())
+	_build_overlay()
 
 func _build_top_bar() -> Control:
 	var panel := PanelContainer.new()
@@ -78,6 +86,15 @@ func _build_top_bar() -> Control:
 	turn_label.add_theme_font_size_override("font_size", 18)
 	turn_label.add_theme_color_override("font_color", COLOR_MUTED)
 	row.add_child(turn_label)
+
+	for item in [["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop]]:
+		var navigation := Button.new()
+		navigation.text = item[0]
+		navigation.custom_minimum_size = Vector2(88, 42)
+		navigation.add_theme_font_size_override("font_size", 16)
+		navigation.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL_SOFT, 12))
+		navigation.pressed.connect(item[1])
+		row.add_child(navigation)
 
 	var connection := Label.new()
 	connection.text = "●  LOCAL DEMO"
@@ -230,6 +247,137 @@ func _build_hand_section() -> Control:
 	log_label.add_theme_color_override("font_color", COLOR_MUTED)
 	section.add_child(log_label)
 	return section
+
+func _build_overlay() -> void:
+	overlay = PanelContainer.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.offset_left = 90
+	overlay.offset_top = 54
+	overlay.offset_right = -90
+	overlay.offset_bottom = -54
+	overlay.add_theme_stylebox_override("panel", _panel_style(Color("#18213eeF"), 24, COLOR_CYAN, 2))
+	overlay.visible = false
+	add_child(overlay)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 16)
+	overlay.add_child(column)
+	var header := HBoxContainer.new()
+	column.add_child(header)
+	var titles := VBoxContainer.new()
+	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(titles)
+	overlay_title = Label.new()
+	overlay_title.add_theme_font_size_override("font_size", 30)
+	overlay_title.add_theme_color_override("font_color", COLOR_TEXT)
+	titles.add_child(overlay_title)
+	overlay_subtitle = Label.new()
+	overlay_subtitle.add_theme_font_size_override("font_size", 16)
+	overlay_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
+	titles.add_child(overlay_subtitle)
+	var close := Button.new()
+	close.text = "전투로 돌아가기  ×"
+	close.custom_minimum_size = Vector2(190, 48)
+	close.pressed.connect(func() -> void: overlay.hide())
+	header.add_child(close)
+	overlay_content = VBoxContainer.new()
+	overlay_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	overlay_content.add_theme_constant_override("separation", 12)
+	column.add_child(overlay_content)
+
+func _clear_overlay() -> void:
+	for child in overlay_content.get_children():
+		child.queue_free()
+	overlay.show()
+
+func _show_map() -> void:
+	_clear_overlay()
+	var run := run_coordinator.run
+	overlay_title.text = "항로 선택 · STAGE %d" % run.stage
+	overlay_subtitle.text = "진행 %d / 8   ·   열쇠 %d / 3   ·   런 %s" % [run.step, run.keys.count(true), run.run_id]
+	var stage: Dictionary = run.map.stages[run.stage - 1]
+	for step_data in stage.steps:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var marker := Label.new()
+		marker.custom_minimum_size.x = 95
+		marker.text = "%s %02d" % ["현재" if int(step_data.index) == run.step else "구간", int(step_data.index) + 1]
+		marker.add_theme_color_override("font_color", COLOR_CYAN if int(step_data.index) == run.step else COLOR_MUTED)
+		row.add_child(marker)
+		if step_data.kind == "common":
+			row.add_child(_route_chip("공동 · %s" % _node_label(step_data.options[0].type), COLOR_CYAN))
+		else:
+			for slot in 2:
+				var option_texts: Array[String] = []
+				for option in step_data.lanes[slot].options:
+					option_texts.append(_node_label(option.type))
+				row.add_child(_route_chip("P%d  %s" % [slot + 1, " / ".join(option_texts)], COLOR_BLUE if slot == 0 else COLOR_ORANGE))
+		overlay_content.add_child(row)
+
+func _show_reward() -> void:
+	_clear_overlay()
+	overlay_title.text = "전투 보상"
+	overlay_subtitle.text = "전용 카드 2장 + 공용 카드 1장 · 선택 즉시 덱과 체크포인트에 반영"
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 18)
+	overlay_content.add_child(row)
+	for card_id in run_coordinator.current_card_reward(0):
+		var card: CardData = catalog[card_id]
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(260, 220)
+		button.text = "%s\n\n%d 에너지\n%s\n\n%s" % [_rarity_label(card.rarity), card.energy_cost, card.display_name, _effect_summary(card)]
+		button.add_theme_font_size_override("font_size", 19)
+		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 18, _scope_color(card.owner_scope), 3))
+		button.pressed.connect(_claim_reward.bind(card_id))
+		row.add_child(button)
+
+func _claim_reward(card_id: StringName) -> void:
+	if run_coordinator.claim_card(0, card_id):
+		overlay_subtitle.text = "%s 획득 완료 · 현재 덱 %d장 · 자동 저장됨" % [catalog[card_id].display_name, run_coordinator.run.decks[0].size()]
+
+func _show_shop() -> void:
+	_clear_overlay()
+	var inventory := run_coordinator.current_shop(0)
+	overlay_title.text = "궤도 정거장 상점"
+	overlay_subtitle.text = "보유 크레딧 %d · 공용 카드는 희소성 때문에 10%% 할증" % run_coordinator.run.gold[0]
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	overlay_content.add_child(row)
+	for entry in inventory.cards:
+		var card: CardData = catalog[StringName(entry.card_id)]
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(190, 190)
+		button.text = "%s\n%s\n%s\n\n%d C" % [_rarity_label(card.rarity), card.display_name, _effect_summary(card), entry.price]
+		button.disabled = run_coordinator.run.gold[0] < int(entry.price)
+		button.add_theme_font_size_override("font_size", 16)
+		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, _scope_color(card.owner_scope), 2))
+		button.pressed.connect(_buy_shop_card.bind(entry))
+		row.add_child(button)
+	var services := Label.new()
+	services.text = "유물 2종 · 소비 아이템 2종 · 카드 제거 %d C" % inventory.remove_card_cost
+	services.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	services.add_theme_font_size_override("font_size", 18)
+	services.add_theme_color_override("font_color", COLOR_MUTED)
+	overlay_content.add_child(services)
+
+func _buy_shop_card(entry: Dictionary) -> void:
+	if run_coordinator.buy_card(0, entry):
+		_show_shop()
+
+func _route_chip(text: String, accent: Color) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chip.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL, 12, accent, 1))
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 16)
+	chip.add_child(label)
+	return chip
+
+func _node_label(type: String) -> String:
+	return {"combat": "전투", "event": "이벤트", "shop": "상점", "rest": "휴식", "elite": "엘리트", "key_challenge": "열쇠 도전"}.get(type, type)
 
 func _refresh() -> void:
 	turn_label.text = "TURN %02d" % state.turn
