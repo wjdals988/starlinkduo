@@ -134,9 +134,20 @@ func _test_reward_and_shop_generation() -> void:
 	var generator := RewardGenerator.new(catalog)
 	var reward := generator.card_reward(90210, CardData.Scope.GUARDIAN, "combat")
 	_expect(reward.size() == 3, "card reward contains three choices")
+	var reward_unique := {}
+	for card_id in reward:
+		reward_unique[card_id] = true
+	_expect(reward_unique.size() == 3, "card reward choices are unique")
 	_expect(catalog[reward[0]].owner_scope == CardData.Scope.GUARDIAN, "first reward matches character scope")
 	_expect(catalog[reward[1]].owner_scope == CardData.Scope.GUARDIAN, "second reward matches character scope")
 	_expect(catalog[reward[2]].owner_scope == CardData.Scope.NEUTRAL, "third reward is a neutral card")
+	var unique_shop := generator.shop_inventory(90210, CardData.Scope.GUARDIAN)
+	var shop_ids: Array[String] = []
+	var shop_unique := {}
+	for entry in unique_shop.cards:
+		shop_ids.append(String(entry.card_id))
+		shop_unique[String(entry.card_id)] = true
+	_expect(shop_unique.size() == shop_ids.size(), "shop card offers are unique")
 	var shop := generator.shop_inventory(777, CardData.Scope.GUARDIAN)
 	_expect(shop.cards.size() == 5, "shop contains five cards")
 	_expect(shop.relics.size() == 2 and shop.consumables.size() == 2, "shop contains relics and consumables")

@@ -926,17 +926,43 @@ func _show_event() -> void:
 	overlay_title.text = String(event.name)
 	overlay_subtitle.text = String(event.body)
 	var votes: Dictionary = run_coordinator.run.pending_event.votes
+	var event_header := HBoxContainer.new()
+	event_header.add_theme_constant_override("separation", 14)
+	var emblem := PanelContainer.new()
+	emblem.custom_minimum_size = Vector2(120, 100)
+	emblem.add_theme_stylebox_override("panel", _panel_style(Color("#8e66ff22"), 22, Color("#bc8cff"), 2, 10, 8))
+	var emblem_label := Label.new()
+	emblem_label.text = "?"
+	emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emblem_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	emblem_label.add_theme_font_size_override("font_size", 54)
+	emblem_label.add_theme_color_override("font_color", Color("#bc8cff"))
+	emblem.add_child(emblem_label)
+	event_header.add_child(emblem)
+	var status_column := VBoxContainer.new()
+	status_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_column.add_theme_constant_override("separation", 8)
+	event_header.add_child(status_column)
 	for slot in 2:
 		var voted := votes.has(slot) or votes.has(str(slot))
-		_add_connection_notice("P%d  %s" % [slot + 1, "선택 완료" if voted else "선택 중"], COLOR_BLUE if slot == 0 else COLOR_ORANGE)
+		status_column.add_child(_status_chip("P%d  ·  %s" % [slot + 1, "선택 완료" if voted else "선택 중"], COLOR_BLUE if slot == 0 else COLOR_ORANGE))
+	overlay_content.add_child(event_header)
 	var local_voted := votes.has(local_slot) or votes.has(str(local_slot))
 	if local_voted:
-		_add_connection_notice("동료의 결정을 기다리고 있습니다.", COLOR_MUTED)
+		_info_panel("내 선택 확정", "동료의 결정을 기다리고 있습니다. 두 선택이 다르면 이벤트 규칙에 따라 절충 결과가 적용됩니다.", COLOR_CYAN)
 		return
+	var choices := HBoxContainer.new()
+	choices.add_theme_constant_override("separation", 14)
+	overlay_content.add_child(choices)
 	for choice_index in event.choices.size():
 		var choice: Dictionary = event.choices[choice_index]
-		var risk_text := "안전" if int(choice.risk) == 0 else "위험도 %d" % int(choice.risk)
-		_add_connection_action("%s  ·  %s" % [choice.label, risk_text], _choose_event.bind(choice_index), COLOR_CYAN if choice_index == 0 else COLOR_BLUE)
+		var risk := int(choice.risk)
+		var risk_text := "안전 선택\n결과 변동이 적습니다" if risk == 0 else "위험도 %d\n성공 시 더 큰 보상" % risk
+		var accent := COLOR_BLUE if risk == 0 else COLOR_YELLOW
+		var choice_button := _action_button("%s\n\n%s" % [choice.label, risk_text], _choose_event.bind(choice_index), accent, 132)
+		choice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		choices.add_child(choice_button)
+	_info_panel("협동 판정", "두 플레이어가 각각 선택합니다. 같은 선택은 그대로 실행되고, 선택이 다르면 안전과 보상 사이의 절충 결과를 적용합니다.", Color("#bc8cff"))
 
 func _choose_event(choice_index: int) -> void:
 	var result := cooperative_session.submit_event_choice(local_slot, choice_index) if cooperative_session != null else run_coordinator.submit_event_choice(local_slot, choice_index)
@@ -957,13 +983,63 @@ func _show_route_result(title: String, summary: String) -> void:
 	_clear_overlay()
 	overlay_title.text = title
 	overlay_subtitle.text = summary
-	_add_connection_action("다음 항로 선택", _show_map, COLOR_CYAN)
+	var victory := Label.new()
+	victory.text = "✦"
+	victory.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	victory.add_theme_font_size_override("font_size", 72)
+	victory.add_theme_color_override("font_color", COLOR_YELLOW)
+	overlay_content.add_child(victory)
+	var metrics := HBoxContainer.new()
+	metrics.add_theme_constant_override("separation", 12)
+	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], COLOR_CYAN))
+	metrics.add_child(_metric_card("항로 진행", "%d / 8" % run_coordinator.run.step, COLOR_BLUE))
+	metrics.add_child(_metric_card("P1 크레딧", "%d C" % run_coordinator.run.gold[0], COLOR_BLUE))
+	metrics.add_child(_metric_card("P2 크레딧", "%d C" % run_coordinator.run.gold[1], COLOR_ORANGE))
+	overlay_content.add_child(metrics)
+	_info_panel("체크포인트 저장 완료", "승리 결과와 두 플레이어의 진행 상황을 이 기기에 저장했습니다.", COLOR_CYAN)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	if run_coordinator.run.pending_card_rewards[local_slot]:
+		var reward_button := _action_button("✦  카드 보상 확인", _show_reward, COLOR_YELLOW, 64)
+		reward_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(reward_button)
+	var route_button := _action_button("⌁  다음 항로 선택", _show_map, COLOR_CYAN, 64)
+	route_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(route_button)
+	overlay_content.add_child(actions)
 
 func _show_run_outcome(victory: bool) -> void:
 	_clear_overlay()
 	overlay_title.text = "런 완주 · 두 별의 승리" if victory else "런 종료 · 열쇠 부족"
 	overlay_subtitle.text = "별을 삼키는 자를 격파했습니다. 최종 기록이 저장되었습니다." if victory else "3개 열쇠를 모두 확보하지 못해 진 최종 보스에 진입할 수 없습니다."
-	_add_connection_notice("최종 팀 내구도 %d / %d   ·   보유 열쇠 %d / 3" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health, run_coordinator.run.keys.count(true)], COLOR_CYAN if victory else COLOR_RED)
+	var outcome_color := COLOR_CYAN if victory else COLOR_RED
+	var emblem := Label.new()
+	emblem.text = "✦" if victory else "◇"
+	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emblem.add_theme_font_size_override("font_size", 84)
+	emblem.add_theme_color_override("font_color", outcome_color)
+	overlay_content.add_child(emblem)
+	var metrics := HBoxContainer.new()
+	metrics.add_theme_constant_override("separation", 12)
+	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], outcome_color))
+	metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run_coordinator.run.keys.count(true), COLOR_YELLOW))
+	metrics.add_child(_metric_card("도달 스테이지", "%d / 3" % run_coordinator.run.stage, COLOR_BLUE))
+	overlay_content.add_child(metrics)
+	_info_panel("원정 기록 저장됨", "완료된 런의 편성·덱·항로 결과를 로컬 체크포인트에 반영했습니다.", outcome_color)
+
+func _metric_card(title: String, value: String, accent: Color) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.custom_minimum_size.y = 82
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.09), 16, Color(accent, 0.60), 1, 12, 10))
+	var label := Label.new()
+	label.text = "%s\n%s" % [title, value]
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", COLOR_TEXT)
+	panel.add_child(label)
+	return panel
 
 func _show_reward() -> void:
 	if game_mode == "duel":
@@ -986,15 +1062,31 @@ func _show_reward() -> void:
 		var button := preload("res://src/ui/card_button.gd").new()
 		button.custom_minimum_size = Vector2(260, 220)
 		var accent := _scope_color(card.owner_scope)
-		button.configure(card, _rarity_label(card.rarity), _effect_summary(card), accent, false, "＋ 이 카드 획득")
+		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "＋ 이 카드 획득")
 		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 18, accent, 3, 14, 10))
 		button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 18, accent, 4, 14, 10))
 		button.pressed.connect(_claim_reward.bind(card_id))
 		row.add_child(button)
+	_info_panel("선택 가이드", "전용 카드는 현재 직업의 조합을 강화하고, 공용 카드는 두 직업의 약점을 보완합니다. 한 장을 선택하면 나머지 카드는 사라집니다.", COLOR_MUTED)
 
 func _claim_reward(card_id: StringName) -> void:
 	if run_coordinator.claim_card(local_slot, card_id):
-		overlay_subtitle.text = "%s 획득 완료 · 현재 덱 %d장 · 자동 저장됨" % [catalog[card_id].display_name, run_coordinator.run.decks[local_slot].size()]
+		var card: CardData = catalog[card_id]
+		_clear_overlay()
+		overlay_title.text = "카드 획득 완료"
+		overlay_subtitle.text = "%s이(가) P%d 덱과 체크포인트에 반영됐습니다." % [card.display_name, local_slot + 1]
+		var row := HBoxContainer.new()
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		overlay_content.add_child(row)
+		var acquired := preload("res://src/ui/card_button.gd").new()
+		acquired.custom_minimum_size = Vector2(280, 230)
+		var accent := _scope_color(card.owner_scope)
+		acquired.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, true, "✓ 덱에 추가됨")
+		acquired.disabled = true
+		acquired.add_theme_stylebox_override("disabled", _panel_style(Color(accent, 0.12), 18, accent, 3, 14, 10))
+		row.add_child(acquired)
+		_info_panel("현재 덱 · %d장" % run_coordinator.run.decks[local_slot].size(), "보상 선택은 자동 저장됐으며 다음 전투부터 드로우될 수 있습니다.", COLOR_CYAN)
+		_add_connection_action("⌁  다음 항로 선택", _show_map, COLOR_CYAN)
 
 func _show_shop() -> void:
 	if game_mode == "duel":
@@ -1017,7 +1109,7 @@ func _show_shop() -> void:
 		var button := preload("res://src/ui/card_button.gd").new()
 		button.custom_minimum_size = Vector2(200, 190)
 		var accent := _scope_color(card.owner_scope)
-		button.configure(card, _rarity_label(card.rarity), _effect_summary(card), accent, false, "%d C  ·  구매" % entry.price)
+		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "%d C  ·  구매" % entry.price)
 		button.disabled = run_coordinator.run.gold[local_slot] < int(entry.price)
 		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, accent, 2, 12, 8))
 		button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 16, accent, 3, 12, 8))
@@ -1218,11 +1310,31 @@ func _show_duel_outcome() -> void:
 	_clear_overlay()
 	overlay_title.text = "결투 종료 · 무승부" if duel_state.winner == -1 else "결투 종료 · P%d 승리" % (duel_state.winner + 1)
 	overlay_subtitle.text = "최종 내구도 P1 %d / %d · P2 %d / %d · %d턴" % [duel_state.health[0], duel_state.max_health[0], duel_state.health[1], duel_state.max_health[1], duel_state.turn]
+	var emblem := Label.new()
+	emblem.text = "DRAW" if duel_state.winner == -1 else "P%d  VICTORY" % (duel_state.winner + 1)
+	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emblem.add_theme_font_size_override("font_size", 52)
+	emblem.add_theme_color_override("font_color", COLOR_MUTED if duel_state.winner == -1 else (COLOR_BLUE if duel_state.winner == 0 else COLOR_ORANGE))
+	overlay_content.add_child(emblem)
+	var metrics := HBoxContainer.new()
+	metrics.add_theme_constant_override("separation", 12)
+	metrics.add_child(_metric_card("P1 최종 내구도", "%d / %d" % [duel_state.health[0], duel_state.max_health[0]], COLOR_BLUE))
+	metrics.add_child(_metric_card("해결 턴", "%02d" % duel_state.turn, COLOR_CYAN))
+	metrics.add_child(_metric_card("P2 최종 내구도", "%d / %d" % [duel_state.health[1], duel_state.max_health[1]], COLOR_ORANGE))
+	overlay_content.add_child(metrics)
+	_info_panel("공정한 결투 기록", "원정 성장과 소비 아이템을 제외한 표준 덱 결과입니다. 재대결하면 같은 편성과 초기 조건으로 다시 시작합니다.", COLOR_CYAN)
 	if cooperative_session == null or cooperative_session.role == CooperativeSession.Role.HOST:
-		_add_connection_action("같은 편성으로 재대결", _activate_mode.bind("duel"), COLOR_RED)
-		_add_connection_action("협동 원정으로 전환", _activate_mode.bind("cooperative"), COLOR_CYAN)
+		var actions := HBoxContainer.new()
+		actions.add_theme_constant_override("separation", 12)
+		var rematch := _action_button("↻  같은 편성으로 재대결", _activate_mode.bind("duel"), COLOR_RED, 64)
+		rematch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(rematch)
+		var expedition := _action_button("✦  협동 원정으로 전환", _activate_mode.bind("cooperative"), COLOR_CYAN, 64)
+		expedition.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(expedition)
+		overlay_content.add_child(actions)
 	else:
-		_add_connection_notice("호스트가 재대결 또는 모드 전환을 선택합니다.", COLOR_MUTED)
+		_info_panel("호스트 선택 대기", "호스트가 재대결 또는 협동 원정 전환을 선택하면 자동으로 동기화됩니다.", COLOR_MUTED)
 
 func _encounter_kind() -> String:
 	if active_route_types.has("true_boss"): return "진 최종 보스"
@@ -1242,7 +1354,7 @@ func _rebuild_hand() -> void:
 		var selected := selected_hand_indices.has(hand_index)
 		card_button.custom_minimum_size = Vector2(178 if selected else 166, 148 if selected else 132)
 		var accent := _scope_color(card.owner_scope)
-		card_button.configure(card, _rarity_label(card.rarity), _effect_summary(card), accent, selected)
+		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected)
 		var base_color := COLOR_PANEL_SOFT if selected else COLOR_PANEL
 		var border_width := (4 if glow_enabled else 3) if selected else 2
 		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 16, accent, border_width, 12, 8))
@@ -1341,6 +1453,9 @@ func _effect_summary(card: CardData) -> String:
 
 func _rarity_label(rarity: CardData.Rarity) -> String:
 	return ["● 일반", "◆ 매직", "⬢ 레어", "★ 전설"][rarity]
+
+func _scope_label(scope: CardData.Scope) -> String:
+	return ["수호자", "기술자", "해커", "강습병", "공용"][scope]
 
 func _scope_color(scope: CardData.Scope) -> Color:
 	match scope:

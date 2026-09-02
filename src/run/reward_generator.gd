@@ -20,11 +20,11 @@ func card_reward(seed: int, character_scope: CardData.Scope, encounter_type: Str
 	var desired_scopes := [character_scope, character_scope, CardData.Scope.NEUTRAL]
 	for scope in desired_scopes:
 		var rarity := _roll_rarity(rng, encounter_type)
-		var candidates := _cards_for(scope, rarity)
+		var candidates := _without(_cards_for(scope, rarity), reward)
 		if candidates.is_empty():
-			candidates = _cards_for(scope, -1)
+			candidates = _without(_cards_for(scope, -1), reward)
 		if candidates.is_empty():
-			candidates = catalog.keys()
+			candidates = _without(_all_card_ids(), reward)
 		var choice: StringName = rng.pick(candidates)
 		reward.append(choice)
 	return reward
@@ -32,11 +32,14 @@ func card_reward(seed: int, character_scope: CardData.Scope, encounter_type: Str
 func shop_inventory(seed: int, character_scope: CardData.Scope) -> Dictionary:
 	var rng := SeededRng.new(seed)
 	var cards: Array[Dictionary] = []
+	var picked: Array[StringName] = []
 	for index in 3:
-		var card_id := _pick_any(rng, character_scope)
+		var card_id := _pick_any(rng, character_scope, picked)
+		picked.append(card_id)
 		cards.append(_shop_entry(card_id))
 	for index in 2:
-		var card_id := _pick_any(rng, CardData.Scope.NEUTRAL)
+		var card_id := _pick_any(rng, CardData.Scope.NEUTRAL, picked)
+		picked.append(card_id)
 		cards.append(_shop_entry(card_id, 1.1))
 	var relics: Array[Dictionary] = []
 	var relic_indices := rng.shuffled(range(run_content.relics.size()))
@@ -55,11 +58,23 @@ func shop_inventory(seed: int, character_scope: CardData.Scope) -> Dictionary:
 		"remove_card_cost": 75,
 	}
 
-func _pick_any(rng: SeededRng, scope: CardData.Scope) -> StringName:
-	var candidates := _cards_for(scope, -1)
+func _pick_any(rng: SeededRng, scope: CardData.Scope, excluded: Array[StringName] = []) -> StringName:
+	var candidates := _without(_cards_for(scope, -1), excluded)
 	if candidates.is_empty():
-		candidates = catalog.keys()
+		candidates = _without(_all_card_ids(), excluded)
 	return rng.pick(candidates)
+
+func _all_card_ids() -> Array[StringName]:
+	var result: Array[StringName] = []
+	result.assign(catalog.keys())
+	return result
+
+func _without(candidates: Array[StringName], excluded: Array[StringName]) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for card_id in candidates:
+		if not excluded.has(card_id):
+			result.append(card_id)
+	return result
 
 func _shop_entry(card_id: StringName, multiplier: float = 1.0) -> Dictionary:
 	var card: CardData = catalog[card_id]
