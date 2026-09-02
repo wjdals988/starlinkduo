@@ -56,6 +56,25 @@ func buy_card(player_slot: int, entry: Dictionary) -> bool:
 	checkpoint("shop_purchase")
 	return true
 
+func buy_relic(player_slot: int, entry: Dictionary) -> bool:
+	if not _valid_shop_entry(player_slot, entry):
+		return false
+	var relic_id := String(entry.id)
+	if run.relics[player_slot].has(relic_id):
+		return false
+	run.gold[player_slot] -= int(entry.price)
+	run.relics[player_slot].append(relic_id)
+	checkpoint("relic_purchase")
+	return true
+
+func buy_consumable(player_slot: int, entry: Dictionary) -> bool:
+	if not _valid_shop_entry(player_slot, entry) or run.consumables[player_slot].size() >= 3:
+		return false
+	run.gold[player_slot] -= int(entry.price)
+	run.consumables[player_slot].append(String(entry.id))
+	checkpoint("consumable_purchase")
+	return true
+
 func choose_route(player_slot: int, node_id: String) -> Dictionary:
 	if not _valid_slot(player_slot):
 		return {"ok": false, "error": "invalid_slot"}
@@ -125,3 +144,6 @@ func _scope_for_slot(player_slot: int) -> CardData.Scope:
 
 func _valid_slot(player_slot: int) -> bool:
 	return run != null and player_slot >= 0 and player_slot < 2
+
+func _valid_shop_entry(player_slot: int, entry: Dictionary) -> bool:
+	return _valid_slot(player_slot) and entry.has("id") and entry.has("price") and int(entry.price) >= 0 and run.gold[player_slot] >= int(entry.price)

@@ -463,7 +463,7 @@ func _show_reward() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 18)
 	overlay_content.add_child(row)
-	for card_id in run_coordinator.current_card_reward(0):
+	for card_id in run_coordinator.current_card_reward(local_slot):
 		var card: CardData = catalog[card_id]
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(260, 220)
@@ -474,14 +474,14 @@ func _show_reward() -> void:
 		row.add_child(button)
 
 func _claim_reward(card_id: StringName) -> void:
-	if run_coordinator.claim_card(0, card_id):
-		overlay_subtitle.text = "%s 획득 완료 · 현재 덱 %d장 · 자동 저장됨" % [catalog[card_id].display_name, run_coordinator.run.decks[0].size()]
+	if run_coordinator.claim_card(local_slot, card_id):
+		overlay_subtitle.text = "%s 획득 완료 · 현재 덱 %d장 · 자동 저장됨" % [catalog[card_id].display_name, run_coordinator.run.decks[local_slot].size()]
 
 func _show_shop() -> void:
 	_clear_overlay()
-	var inventory := run_coordinator.current_shop(0)
+	var inventory := run_coordinator.current_shop(local_slot)
 	overlay_title.text = "궤도 정거장 상점"
-	overlay_subtitle.text = "보유 크레딧 %d · 공용 카드는 희소성 때문에 10%% 할증" % run_coordinator.run.gold[0]
+	overlay_subtitle.text = "P%d 보유 크레딧 %d · 공용 카드는 희소성 때문에 10%% 할증" % [local_slot + 1, run_coordinator.run.gold[local_slot]]
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
@@ -491,21 +491,49 @@ func _show_shop() -> void:
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(190, 190)
 		button.text = "%s\n%s\n%s\n\n%d C" % [_rarity_label(card.rarity), card.display_name, _effect_summary(card), entry.price]
-		button.disabled = run_coordinator.run.gold[0] < int(entry.price)
+		button.disabled = run_coordinator.run.gold[local_slot] < int(entry.price)
 		button.add_theme_font_size_override("font_size", 16)
 		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, _scope_color(card.owner_scope), 2))
 		button.pressed.connect(_buy_shop_card.bind(entry))
 		row.add_child(button)
+	var item_row := HBoxContainer.new()
+	item_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	item_row.add_theme_constant_override("separation", 10)
+	for relic in inventory.relics:
+		var relic_button := _shop_item_button("유물 · %s\n%d C" % [relic.name, relic.price], COLOR_BLUE, run_coordinator.run.gold[local_slot] < int(relic.price))
+		relic_button.pressed.connect(_buy_shop_relic.bind(relic))
+		item_row.add_child(relic_button)
+	for consumable in inventory.consumables:
+		var consumable_button := _shop_item_button("소비품 · %s\n%d C" % [consumable.name, consumable.price], COLOR_ORANGE, run_coordinator.run.gold[local_slot] < int(consumable.price))
+		consumable_button.pressed.connect(_buy_shop_consumable.bind(consumable))
+		item_row.add_child(consumable_button)
+	overlay_content.add_child(item_row)
 	var services := Label.new()
-	services.text = "유물 2종 · 소비 아이템 2종 · 카드 제거 %d C" % inventory.remove_card_cost
+	services.text = "카드 제거 %d C · 소비 아이템 최대 3개" % inventory.remove_card_cost
 	services.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	services.add_theme_font_size_override("font_size", 18)
 	services.add_theme_color_override("font_color", COLOR_MUTED)
 	overlay_content.add_child(services)
 
 func _buy_shop_card(entry: Dictionary) -> void:
-	if run_coordinator.buy_card(0, entry):
+	if run_coordinator.buy_card(local_slot, entry):
 		_show_shop()
+
+func _buy_shop_relic(entry: Dictionary) -> void:
+	if run_coordinator.buy_relic(local_slot, entry):
+		_show_shop()
+
+func _buy_shop_consumable(entry: Dictionary) -> void:
+	if run_coordinator.buy_consumable(local_slot, entry):
+		_show_shop()
+
+func _shop_item_button(text: String, accent: Color, disabled: bool) -> Button:
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(210, 62)
+	button.text = text
+	button.disabled = disabled
+	button.add_theme_font_size_override("font_size", 14)
+	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, accent, 2))
+	return button
 
 func _route_chip(text: String, accent: Color) -> PanelContainer:
 	var chip := PanelContainer.new()

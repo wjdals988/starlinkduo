@@ -126,6 +126,8 @@ func _test_reward_and_shop_generation() -> void:
 	var shop := generator.shop_inventory(777, CardData.Scope.GUARDIAN)
 	_expect(shop.cards.size() == 5, "shop contains five cards")
 	_expect(shop.relics.size() == 2 and shop.consumables.size() == 2, "shop contains relics and consumables")
+	_expect(shop.relics[0].has("id") and shop.relics[0].has("price"), "shop relics are purchasable entries")
+	_expect(shop.consumables[0].has("id") and shop.consumables[0].has("price"), "shop consumables are purchasable entries")
 
 func _test_run_save_round_trip() -> void:
 	var store := RunSaveStore.new()
@@ -157,6 +159,14 @@ func _test_run_coordinator_economy() -> void:
 	_expect(coordinator.buy_card(0, affordable), "affordable shop card can be purchased")
 	_expect(run.gold[0] == 0, "shop purchase deducts exact gold")
 	_expect(not coordinator.buy_card(0, affordable), "shop rejects purchase without enough gold")
+	var stocked := coordinator.current_shop(0)
+	var relic: Dictionary = stocked.relics[0]
+	run.gold[0] = int(relic.price)
+	_expect(coordinator.buy_relic(0, relic), "relic purchase deducts gold and adds inventory")
+	_expect(not coordinator.buy_relic(0, relic), "duplicate relic purchase is rejected")
+	var consumable: Dictionary = stocked.consumables[0]
+	run.gold[0] = int(consumable.price)
+	_expect(coordinator.buy_consumable(0, consumable), "consumable purchase adds carried item")
 	var restored := store.load_active()
 	_expect(restored != null and restored.decks[0] == run.decks[0], "economy mutations persist at checkpoints")
 	store.clear()

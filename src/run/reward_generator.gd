@@ -8,9 +8,11 @@ const RARITY_WEIGHTS := {
 }
 
 var catalog: Dictionary
+var run_content: Dictionary
 
-func _init(card_catalog: Dictionary) -> void:
+func _init(card_catalog: Dictionary, content_catalog: Dictionary = {}) -> void:
 	catalog = card_catalog
+	run_content = content_catalog if not content_catalog.is_empty() else RunContentCatalog.build()
 
 func card_reward(seed: int, character_scope: CardData.Scope, encounter_type: String) -> Array[StringName]:
 	var rng := SeededRng.new(seed)
@@ -36,10 +38,20 @@ func shop_inventory(seed: int, character_scope: CardData.Scope) -> Dictionary:
 	for index in 2:
 		var card_id := _pick_any(rng, CardData.Scope.NEUTRAL)
 		cards.append(_shop_entry(card_id, 1.1))
+	var relics: Array[Dictionary] = []
+	var relic_indices := rng.shuffled(range(run_content.relics.size()))
+	for index in 2:
+		var relic: Dictionary = run_content.relics[relic_indices[index]]
+		relics.append({"id": relic.id, "name": relic.name, "price": 125 + index * 20})
+	var consumables: Array[Dictionary] = []
+	var consumable_indices := rng.shuffled(range(run_content.consumables.size()))
+	for index in 2:
+		var consumable: Dictionary = run_content.consumables[consumable_indices[index]]
+		consumables.append({"id": consumable.id, "name": consumable.name, "price": 45 + index * 10})
 	return {
 		"cards": cards,
-		"relics": ["relay_core", "repair_nanites"],
-		"consumables": ["shield_cell", "energy_gel"],
+		"relics": relics,
+		"consumables": consumables,
 		"remove_card_cost": 75,
 	}
 
@@ -72,4 +84,3 @@ func _roll_rarity(rng: SeededRng, encounter_type: String) -> int:
 		if roll < cumulative:
 			return rarity
 	return CardData.Rarity.COMMON
-
