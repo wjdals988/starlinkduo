@@ -40,7 +40,7 @@ var overlay_content: VBoxContainer
 var connection_label: Label
 
 func _ready() -> void:
-	catalog = DemoCardCatalog.build()
+	catalog = FullCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
 	run_coordinator.resume_or_start(20260902)
 	bluetooth_transport = AndroidBluetoothTransport.new()

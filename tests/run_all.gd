@@ -15,8 +15,9 @@ func _init() -> void:
 	_test_host_authoritative_session()
 	_test_session_rejects_stale_sequence()
 	_test_combat_snapshot_round_trip()
+	_test_full_card_catalog()
 	if failures.is_empty():
-		print("PASS: 12 core, run, save, economy, protocol, and transport tests")
+		print("PASS: 13 core, content, run, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -198,6 +199,18 @@ func _test_combat_snapshot_round_trip() -> void:
 	var restored := CombatState.from_snapshot(JSON.parse_string(JSON.stringify(original.to_snapshot())))
 	_expect(restored.to_snapshot() == original.to_snapshot(), "combat snapshot survives JSON reconstruction")
 	_expect(StateHasher.hash_snapshot(restored.to_snapshot()) == StateHasher.hash_snapshot(original.to_snapshot()), "reconstructed combat preserves state hash")
+
+func _test_full_card_catalog() -> void:
+	var catalog := FullCardCatalog.build()
+	_expect(catalog.size() == 144, "full catalog contains exactly 144 cards")
+	for scope in CardData.Scope.values():
+		var count := 0
+		for card in catalog.values():
+			if card.owner_scope == scope:
+				count += 1
+			_expect(not card.display_name.is_empty() and not card.effects.is_empty(), "every card has visible content and effects")
+		var expected := 48 if scope == CardData.Scope.NEUTRAL else 24
+		_expect(count == expected, "scope %d has its exact card target" % scope)
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:
