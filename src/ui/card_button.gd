@@ -7,12 +7,7 @@ var effect_kind := "utility"
 var effect_accent := Color("#8fa0bc")
 var primary_tag := "전술"
 
-const EFFECT_ART := {
-	"damage": preload("res://assets/art/card-effect-damage-v1.png"),
-	"block": preload("res://assets/art/card-effect-block-v1.png"),
-	"heal": preload("res://assets/art/card-effect-heal-v1.png"),
-	"energy": preload("res://assets/art/card-effect-energy-v1.png"),
-}
+const CardArt := preload("res://src/ui/card_art_catalog.gd")
 
 func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "") -> void:
 	accent = accent_color
@@ -63,7 +58,7 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	var art := TextureRect.new()
 	art.custom_minimum_size.y = 34 if is_selected else 26
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	art.texture = EFFECT_ART.get(effect_kind, EFFECT_ART["energy"])
+	art.texture = CardArt.texture_for(card.owner_scope, effect_kind)
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS

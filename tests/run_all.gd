@@ -2,6 +2,7 @@ extends SceneTree
 
 const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
 const CardFrames := preload("res://src/ui/card_frame_visual.gd")
+const CardArt := preload("res://src/ui/card_art_catalog.gd")
 
 var failures: Array[String] = []
 
@@ -36,8 +37,9 @@ func _init() -> void:
 	_test_duel_commitment_process_restart_recovery()
 	_test_reduced_motion_effect_cues()
 	_test_card_scope_frames()
+	_test_character_card_art_profiles()
 	if failures.is_empty():
-		print("PASS: 30 core, content, run, character, duel, relic, item, event, boss, encounter, route, accessibility, save, economy, protocol, and transport tests")
+		print("PASS: 31 core, content, run, character, duel, relic, item, event, boss, encounter, route, accessibility, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -57,6 +59,20 @@ func _test_card_scope_frames() -> void:
 	for scope in CardData.Scope.values():
 		signatures[CardFrames.frame_signature(scope)] = true
 	_expect(signatures.size() == 5, "five card ownership scopes use five distinct geometric frame signatures")
+
+func _test_character_card_art_profiles() -> void:
+	var profile_keys := {}
+	var texture_paths := {}
+	for scope in CardData.Scope.values():
+		for effect_kind in CardArt.EFFECT_KINDS:
+			profile_keys[CardArt.profile_key(scope, effect_kind)] = true
+			var texture := CardArt.texture_for(scope, effect_kind)
+			_expect(texture != null, "card art exists for scope %d and effect %s" % [scope, effect_kind])
+			if texture != null:
+				texture_paths[texture.resource_path] = true
+	_expect(CardArt.profile_count() == 20, "five scopes and four effects provide twenty card art profiles")
+	_expect(profile_keys.size() == 20, "all twenty card art profile keys are distinct")
+	_expect(texture_paths.size() == 20, "all twenty card art profiles use distinct texture resources")
 
 func _test_initial_state() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())
