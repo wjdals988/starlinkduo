@@ -26,20 +26,23 @@ var guest_duel_commit_turn := -1
 var host_guest_duel_commitment: Dictionary = {}
 var outgoing_sequence := 0
 var incoming_sequence := 0
+var compatibility_fingerprint: String
+var handshake_complete := false
+var handshake_failed := false
 
-func _init(session_role: Role, session_transport: SessionTransport, combat_engine: CombatEngine = null, initial_state: CombatState = null, coordinator: RunCoordinator = null, session_duel_store: DuelSaveStore = null) -> void:
+func _init(session_role: Role, session_transport: SessionTransport, combat_engine: CombatEngine = null, initial_state: CombatState = null, coordinator: RunCoordinator = null, session_duel_store: DuelSaveStore = null, session_fingerprint: String = "") -> void:
 	role = session_role
 	transport = session_transport
 	engine = combat_engine
 	combat_state = initial_state
 	run_coordinator = coordinator
 	duel_save_store = session_duel_store if session_duel_store != null else DuelSaveStore.new()
+	compatibility_fingerprint = session_fingerprint if not session_fingerprint.is_empty() else GameCompatibility.fingerprint()
 	transport.message_received.connect(_on_message)
 	transport.transport_error.connect(_on_transport_error)
 	transport.state_changed.connect(_on_transport_state_changed)
-	if role == Role.HOST and transport.get_state() == "connected":
-		_publish_snapshot("session_started")
-		_publish_run_snapshot("session_started")
+	if transport.get_state() == "connected":
+		_begin_handshake()
 
 func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 	if game_mode != "cooperative":
@@ -54,12 +57,16 @@ func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 		_publish_snapshot("plan_accepted")
 		_resolve_if_ready()
 		return result
+	if not handshake_complete:
+		return _error("handshake_required")
 	if slot != 1:
 		return _error("guest_slot_forbidden")
 	var sent := _send("plan", {"slot": slot, "turn": _known_turn(), "plays": plays})
 	return {"ok": sent} if sent else _error("send_failed")
 
 func request_resync() -> bool:
+	if not handshake_complete:
+		return false
 	return _send("resync_request", {"last_seq": incoming_sequence})
 
 func set_game_mode(mode: String) -> Dictionary:
@@ -87,11 +94,12 @@ func set_game_mode(mode: String) -> Dictionary:
 		duel_engine = null
 		duel_save_store.clear()
 	game_mode_changed.emit(game_mode)
-	_send("game_mode", {"mode": game_mode})
-	if mode == "duel":
-		_publish_duel_snapshot("duel_started")
-	else:
-		_publish_snapshot("cooperative_resumed")
+	if handshake_complete:
+		_send("game_mode", {"mode": game_mode})
+		if mode == "duel":
+			_publish_duel_snapshot("duel_started")
+		else:
+			_publish_snapshot("cooperative_resumed")
 	return {"ok": true, "mode": game_mode}
 
 func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
@@ -107,6 +115,8 @@ func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 		_publish_duel_snapshot("duel_plan_accepted")
 		_request_duel_reveal_if_ready()
 		return result
+	if not handshake_complete:
+		return _error("handshake_required")
 	if slot != 1:
 		return _error("guest_slot_forbidden")
 	if not guest_pending_duel_plays.is_empty():
@@ -142,6 +152,8 @@ func select_route(slot: int, node_id: String) -> Dictionary:
 		if result.ok:
 			_publish_run_snapshot("route_selected")
 		return result
+	if not handshake_complete:
+		return _error("handshake_required")
 	if slot != 1:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("route_select", {"slot": slot, "node_id": node_id})}
@@ -156,6 +168,8 @@ func select_character(slot: int, character_id: StringName) -> Dictionary:
 		if result.ok:
 			_publish_run_snapshot("character_selected")
 		return result
+	if not handshake_complete:
+		return _error("handshake_required")
 	if slot != 1:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("character_select", {"slot": slot, "character_id": String(character_id)})}
@@ -170,6 +184,8 @@ func submit_event_choice(slot: int, choice_index: int) -> Dictionary:
 		if result.ok:
 			_publish_run_snapshot("event_choice")
 		return result
+	if not handshake_complete:
+		return _error("handshake_required")
 	if slot != 1:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("event_choice", {"slot": slot, "choice": choice_index})}
@@ -185,6 +201,8 @@ func use_consumable(slot: int, item_index: int) -> Dictionary:
 			_publish_snapshot("consumable_used")
 			_publish_run_snapshot("consumable_used")
 		return result
+	if not handshake_complete:
+		return _error("handshake_required")
 	if slot != 1:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("use_consumable", {"slot": slot, "index": item_index})}
@@ -224,6 +242,12 @@ func _on_message(raw: String) -> void:
 		session_error.emit("stale_sequence", str(message.seq))
 		return
 	incoming_sequence = int(message.seq)
+	if message.type == "hello":
+		_handle_hello(message.payload)
+		return
+	if not handshake_complete:
+		session_error.emit("handshake_required", message.type)
+		return
 	if role == Role.HOST:
 		_handle_host_message(message.type, message.payload)
 	else:
@@ -231,17 +255,42 @@ func _on_message(raw: String) -> void:
 
 func _on_transport_state_changed(next_state: String) -> void:
 	if next_state in ["disconnected", "closed", "error"]:
+		handshake_complete = false
 		session_error.emit("peer_disconnected", next_state)
 		return
-	if next_state == "connected" and role == Role.HOST:
-		_restore_duel_commitment_if_matching()
-		_send("game_mode", {"mode": game_mode})
-		if game_mode == "duel" and duel_state != null:
-			_publish_duel_snapshot("session_started")
-			_request_duel_reveal_if_ready()
-		else:
-			_publish_snapshot("session_started")
-			_publish_run_snapshot("session_started")
+	if next_state == "connected":
+		_begin_handshake()
+
+func _begin_handshake() -> void:
+	handshake_complete = false
+	handshake_failed = false
+	_send("hello", {
+		"role": "host" if role == Role.HOST else "guest",
+		"fingerprint": compatibility_fingerprint,
+		"ruleset": GameCompatibility.RULESET_VERSION,
+	})
+
+func _handle_hello(payload: Dictionary) -> void:
+	var expected_role := "guest" if role == Role.HOST else "host"
+	if String(payload.get("role", "")) != expected_role:
+		handshake_failed = true
+		session_error.emit("role_mismatch", "expected_%s" % expected_role)
+		return
+	if String(payload.get("fingerprint", "")) != compatibility_fingerprint:
+		handshake_failed = true
+		session_error.emit("incompatible_content", String(payload.get("fingerprint", "")))
+		return
+	handshake_complete = true
+	if role != Role.HOST:
+		return
+	_restore_duel_commitment_if_matching()
+	_send("game_mode", {"mode": game_mode})
+	if game_mode == "duel" and duel_state != null:
+		_publish_duel_snapshot("session_started")
+		_request_duel_reveal_if_ready()
+	else:
+		_publish_snapshot("session_started")
+		_publish_run_snapshot("session_started")
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 	if game_mode == "duel" and message_type not in ["duel_commit", "duel_reveal", "resync_request"]:

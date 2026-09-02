@@ -15,6 +15,7 @@ func _init() -> void:
 	_test_host_authoritative_session()
 	_test_host_authoritative_route_session()
 	_test_session_rejects_stale_sequence()
+	_test_session_rejects_incompatible_content()
 	_test_combat_snapshot_round_trip()
 	_test_full_card_catalog()
 	_test_full_run_content_catalog()
@@ -31,7 +32,7 @@ func _init() -> void:
 	_test_duel_commitment_tamper_rejected()
 	_test_duel_commitment_process_restart_recovery()
 	if failures.is_empty():
-		print("PASS: 27 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 28 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -224,6 +225,8 @@ func _test_host_authoritative_session() -> void:
 	var state := engine.create_demo_combat()
 	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, state)
 	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
+	host.poll()
+	guest.poll()
 	var hashes: Array[String] = []
 	guest.snapshot_received.connect(func(_snapshot: Dictionary, state_hash: String) -> void: hashes.append(state_hash))
 	_expect(guest.submit_plan(1, [{"card_id": "engineer_bolt", "target": 0}]).ok, "guest sends intent without mutating host directly")
@@ -248,6 +251,8 @@ func _test_host_authoritative_route_session() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())
 	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, engine.create_demo_combat(), coordinator)
 	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
+	host.poll()
+	guest.poll()
 	var received_runs: Array[Dictionary] = []
 	guest.run_snapshot_received.connect(func(snapshot: Dictionary) -> void: received_runs.append(snapshot))
 	_expect(guest.select_character(1, &"hacker").ok, "guest sends character selection intent")
@@ -287,12 +292,33 @@ func _test_session_rejects_stale_sequence() -> void:
 	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, engine.create_demo_combat())
 	var errors: Array[String] = []
 	host.session_error.connect(func(code: String, _detail: String) -> void: errors.append(code))
-	var repeated := SessionProtocol.encode("resync_request", 1, {})
+	transports[1].send_message(SessionProtocol.encode("hello", 1, {"role": "guest", "fingerprint": GameCompatibility.fingerprint(), "ruleset": GameCompatibility.RULESET_VERSION}))
+	var repeated := SessionProtocol.encode("resync_request", 2, {})
 	transports[1].send_message(repeated)
 	transports[1].send_message(repeated)
 	host.poll()
 	_expect(errors == ["stale_sequence"], "duplicate sequence is rejected exactly once")
 	host.close()
+	transports[0].dispose()
+
+func _test_session_rejects_incompatible_content() -> void:
+	var transports := LoopbackTransport.pair()
+	transports[0].start_host("incompatible")
+	transports[1].connect_to("loopback", "incompatible")
+	var engine := CombatEngine.new(DemoCardCatalog.build())
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, engine.create_demo_combat(), null, null, "host-content")
+	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1], null, null, null, null, "guest-content")
+	var host_errors: Array[String] = []
+	var guest_errors: Array[String] = []
+	host.session_error.connect(func(code: String, _detail: String) -> void: host_errors.append(code))
+	guest.session_error.connect(func(code: String, _detail: String) -> void: guest_errors.append(code))
+	host.poll()
+	guest.poll()
+	_expect(not host.handshake_complete and not guest.handshake_complete and host_errors.has("incompatible_content") and guest_errors.has("incompatible_content"), "different content fingerprints fail the multiplayer handshake on both devices")
+	var blocked := guest.submit_plan(1, [{"card_id": "engineer_bolt"}])
+	_expect(not blocked.ok and blocked.error == "handshake_required", "guest game commands remain blocked after an incompatible handshake")
+	host.close()
+	guest.close()
 	transports[0].dispose()
 
 func _test_combat_snapshot_round_trip() -> void:
@@ -306,6 +332,8 @@ func _test_combat_snapshot_round_trip() -> void:
 func _test_full_card_catalog() -> void:
 	var catalog := FullCardCatalog.build()
 	_expect(catalog.size() == 144, "full catalog contains exactly 144 cards")
+	var fingerprint := GameCompatibility.fingerprint()
+	_expect(fingerprint.length() == 64 and fingerprint == GameCompatibility.fingerprint(), "complete game content produces one stable SHA-256 compatibility fingerprint")
 	for scope in CardData.Scope.values():
 		var count := 0
 		for card in catalog.values():
@@ -514,6 +542,8 @@ func _test_host_authoritative_duel_session() -> void:
 	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
 	var received_duels: Array[Dictionary] = []
 	guest.duel_snapshot_received.connect(func(snapshot: Dictionary, _hash: String) -> void: received_duels.append(snapshot))
+	host.poll()
+	guest.poll()
 	_expect(host.set_game_mode("duel").ok, "host starts duel mode on the shared session")
 	_expect(not host.select_route(0, "forbidden").ok and not host.submit_plan(0, []).ok, "duel mode rejects cooperative route and combat commands")
 	guest.poll()
@@ -590,6 +620,8 @@ func _test_duel_commitment_tamper_rejected() -> void:
 	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
 	var errors: Array[String] = []
 	guest.session_error.connect(func(code: String, _detail: String) -> void: errors.append(code))
+	host.poll()
+	guest.poll()
 	host.set_game_mode("duel")
 	guest.poll()
 	var committed_card: StringName = guest.duel_state.players[1].hand[0]
@@ -628,6 +660,8 @@ func _test_duel_commitment_process_restart_recovery() -> void:
 	var combat_engine := CombatEngine.new(catalog)
 	var host := CooperativeSession.new(CooperativeSession.Role.HOST, first_transports[0], combat_engine, combat_engine.create_demo_combat(), coordinator, host_store)
 	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, first_transports[1], null, null, null, guest_store)
+	host.poll()
+	guest.poll()
 	host.set_game_mode("duel")
 	guest.poll()
 	var guest_card: StringName = guest.duel_state.players[1].hand[0]
@@ -645,6 +679,7 @@ func _test_duel_commitment_process_restart_recovery() -> void:
 	restarted_host.duel_state = host_store.load_active()
 	var restarted_guest := CooperativeSession.new(CooperativeSession.Role.GUEST, restarted_transports[1], null, null, null, guest_store)
 	restarted_transports[1].connect_to("loopback", "duel-restart")
+	restarted_host.poll()
 	restarted_guest.poll()
 	restarted_host.poll()
 	restarted_guest.poll()

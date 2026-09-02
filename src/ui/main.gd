@@ -465,6 +465,10 @@ func _add_connection_notice(text: String, accent: Color) -> void:
 func _connection_status_text() -> String:
 	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
 		return "●  LOCAL DEMO"
+	if cooperative_session != null and cooperative_session.handshake_failed:
+		return "●  VERSION MISMATCH"
+	if bluetooth_transport.get_state() == "connected" and cooperative_session != null and not cooperative_session.handshake_complete:
+		return "●  VERIFYING"
 	match bluetooth_transport.get_state():
 		"listening": return "●  WAITING"
 		"connecting": return "●  CONNECTING"
@@ -515,6 +519,12 @@ func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
 		_show_map()
 
 func _on_session_error(code: String, detail: String) -> void:
+	if code == "incompatible_content":
+		log_label.text = "연결 차단 · 두 기기의 앱 또는 카드 콘텐츠가 다릅니다. 같은 APK를 설치해 주세요."
+		return
+	if code == "role_mismatch":
+		log_label.text = "연결 차단 · 두 기기 모두 같은 역할을 선택했습니다. 한 명은 방 만들기, 다른 한 명은 참가를 선택하세요."
+		return
 	log_label.text = "연결 오류 · %s (%s)" % [code, detail]
 
 func _show_roster() -> void:
