@@ -29,3 +29,9 @@
 - Godot Android Plugin v2 기반 Kotlin 플러그인 골격을 추가했다.
 - Android 12 이상의 Nearby Devices 권한, RFCOMM 호스트·참가자 연결과 길이 프레임 메시지 입출력을 구현했다.
 - 최대 메시지 크기, 연결 상태, 오류 큐 및 소켓 종료 처리를 추가했다.
+
+### Android 실행
+
+- Android 12 이상, arm64 및 x86_64 대상의 개발용 APK 내보내기 프리셋을 추가했다.
+- 에뮬레이터 UI 검증과 실제 갤럭시 Bluetooth 검증을 별도 단계로 분리했다.
+- emulator-5556 실기기 캡처에서 발견된 세로 레터박스 문제를 수정하고 가로 방향을 명시했다.
