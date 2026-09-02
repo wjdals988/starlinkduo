@@ -16,8 +16,9 @@ func _init() -> void:
 	_test_session_rejects_stale_sequence()
 	_test_combat_snapshot_round_trip()
 	_test_full_card_catalog()
+	_test_full_run_content_catalog()
 	if failures.is_empty():
-		print("PASS: 13 core, content, run, save, economy, protocol, and transport tests")
+		print("PASS: 14 core, content, run, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -211,6 +212,18 @@ func _test_full_card_catalog() -> void:
 			_expect(not card.display_name.is_empty() and not card.effects.is_empty(), "every card has visible content and effects")
 		var expected := 48 if scope == CardData.Scope.NEUTRAL else 24
 		_expect(count == expected, "scope %d has its exact card target" % scope)
+
+func _test_full_run_content_catalog() -> void:
+	var content := RunContentCatalog.build()
+	_expect(content.relics.size() == 24, "run content contains 24 relics")
+	_expect(content.consumables.size() == 8, "run content contains 8 consumables")
+	_expect(content.events.size() == 18, "run content contains 18 events")
+	_expect(content.stages.size() == 3, "enemy content covers three stages")
+	for stage in content.stages:
+		_expect(stage.normal_formations.size() == 4, "each stage has four normal formations")
+		_expect(stage.elites.size() == 2, "each stage has two elites")
+		_expect(not stage.boss.id.is_empty(), "each stage has one boss")
+	_expect(content.true_boss.health > content.stages[-1].boss.health, "true boss exceeds final stage boss health")
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:
