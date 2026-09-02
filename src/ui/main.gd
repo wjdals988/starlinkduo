@@ -403,23 +403,25 @@ func _request_bluetooth_permissions() -> void:
 func _start_bluetooth_host() -> void:
 	if bluetooth_transport.start_host(SERVICE_UUID):
 		local_slot = 0
-		cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state, run_coordinator)
-		cooperative_session.session_error.connect(_on_session_error)
-		cooperative_session.set_game_mode(game_mode)
-		overlay_subtitle.text = "참가자를 기다리는 중… 상대 기기에서 이 기기를 선택하세요."
+		if cooperative_session == null or cooperative_session.role != CooperativeSession.Role.HOST:
+			cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state, run_coordinator)
+			cooperative_session.session_error.connect(_on_session_error)
+			cooperative_session.set_game_mode(game_mode)
+		overlay_subtitle.text = "참가자를 기다리는 중… 기존 세션이 있으면 현재 턴에서 복구합니다."
 	else:
 		overlay_subtitle.text = "방을 만들지 못했습니다. 권한과 Bluetooth 상태를 확인하세요."
 
 func _join_bluetooth_host(address: String) -> void:
 	if bluetooth_transport.connect_to(address, SERVICE_UUID):
 		local_slot = 1
-		cooperative_session = CooperativeSession.new(CooperativeSession.Role.GUEST, bluetooth_transport)
-		cooperative_session.snapshot_received.connect(_on_remote_snapshot)
-		cooperative_session.run_snapshot_received.connect(_on_remote_run_snapshot)
-		cooperative_session.duel_snapshot_received.connect(_on_remote_duel_snapshot)
-		cooperative_session.game_mode_changed.connect(_on_remote_game_mode)
-		cooperative_session.session_error.connect(_on_session_error)
-		overlay_subtitle.text = "호스트에 연결하는 중…"
+		if cooperative_session == null or cooperative_session.role != CooperativeSession.Role.GUEST:
+			cooperative_session = CooperativeSession.new(CooperativeSession.Role.GUEST, bluetooth_transport)
+			cooperative_session.snapshot_received.connect(_on_remote_snapshot)
+			cooperative_session.run_snapshot_received.connect(_on_remote_run_snapshot)
+			cooperative_session.duel_snapshot_received.connect(_on_remote_duel_snapshot)
+			cooperative_session.game_mode_changed.connect(_on_remote_game_mode)
+			cooperative_session.session_error.connect(_on_session_error)
+		overlay_subtitle.text = "호스트에 연결하는 중… 기존 세션이면 현재 턴을 다시 받습니다."
 	else:
 		overlay_subtitle.text = "연결을 시작하지 못했습니다. 페어링 상태를 확인하세요."
 
@@ -983,8 +985,22 @@ func _refresh_duel() -> void:
 	if duel_state.phase == DuelState.Phase.FINISHED:
 		ready_button.disabled = true
 		status_label.text = "무승부" if duel_state.winner == -1 else "P%d 결투 승리" % (duel_state.winner + 1)
+		if not overlay.visible:
+			_show_duel_outcome.call_deferred()
 	_rebuild_hand()
 	queue_redraw()
+
+func _show_duel_outcome() -> void:
+	if game_mode != "duel" or duel_state == null or duel_state.phase != DuelState.Phase.FINISHED:
+		return
+	_clear_overlay()
+	overlay_title.text = "결투 종료 · 무승부" if duel_state.winner == -1 else "결투 종료 · P%d 승리" % (duel_state.winner + 1)
+	overlay_subtitle.text = "최종 내구도 P1 %d / %d · P2 %d / %d · %d턴" % [duel_state.health[0], duel_state.max_health[0], duel_state.health[1], duel_state.max_health[1], duel_state.turn]
+	if cooperative_session == null or cooperative_session.role == CooperativeSession.Role.HOST:
+		_add_connection_action("같은 편성으로 재대결", _activate_mode.bind("duel"), COLOR_RED)
+		_add_connection_action("협동 원정으로 전환", _activate_mode.bind("cooperative"), COLOR_CYAN)
+	else:
+		_add_connection_notice("호스트가 재대결 또는 모드 전환을 선택합니다.", COLOR_MUTED)
 
 func _encounter_kind() -> String:
 	if active_route_types.has("true_boss"): return "진 최종 보스"

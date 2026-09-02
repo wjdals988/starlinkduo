@@ -183,6 +183,9 @@ func _on_message(raw: String) -> void:
 		_handle_guest_message(message.type, message.payload)
 
 func _on_transport_state_changed(next_state: String) -> void:
+	if next_state in ["disconnected", "closed", "error"]:
+		session_error.emit("peer_disconnected", next_state)
+		return
 	if next_state == "connected" and role == Role.HOST:
 		_send("game_mode", {"mode": game_mode})
 		if game_mode == "duel" and duel_state != null:

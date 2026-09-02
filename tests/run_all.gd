@@ -492,6 +492,12 @@ func _test_host_authoritative_duel_session() -> void:
 	_expect(host.submit_duel_plan(0, [{"card_id": host_card}]).ok, "host accepts its duel plan and resolves when both are ready")
 	guest.poll()
 	_expect(host.duel_state.turn == 2 and not received_duels.is_empty() and int(received_duels[-1].turn) == 2, "guest receives resolved authoritative duel turn")
+	var preserved_duel_id := host.duel_state.duel_id
+	transports[1].close()
+	transports[0].start_host("duel")
+	transports[1].connect_to("loopback", "duel")
+	guest.poll()
+	_expect(guest.duel_state != null and guest.duel_state.duel_id == preserved_duel_id and guest.duel_state.turn == 2, "reconnecting transport restores the existing authoritative duel")
 	store.clear()
 
 func _expect(condition: bool, label: String) -> void:
