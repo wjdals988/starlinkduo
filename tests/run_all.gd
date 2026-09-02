@@ -48,10 +48,14 @@ func _init() -> void:
 
 func _test_reduced_motion_effect_cues() -> void:
 	var visual := CombatEffectVisual.new()
-	for effect_type in ["damage", "block", "heal", "energy"]:
-		visual.configure(effect_type, 0, true)
-		_expect(visual.static_mode and is_equal_approx(visual.progress, 0.82), "reduced motion keeps a stable spatial cue for %s" % effect_type)
-		_expect(not visual.effect_description().is_empty(), "effect %s has a non-color accessibility description" % effect_type)
+	var signatures := {}
+	for character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
+		for effect_type in ["damage", "block", "heal", "energy"]:
+			visual.configure(effect_type, 0, true, character_id)
+			_expect(visual.static_mode and is_equal_approx(visual.progress, 0.82), "reduced motion keeps a stable spatial cue for %s %s" % [character_id, effect_type])
+			_expect(visual.effect_description().contains(CombatEffectVisual.CHARACTER_PROFILES[character_id].name), "effect description names its source character")
+			signatures[CombatEffectVisual.profile_signature(character_id, effect_type)] = true
+	_expect(signatures.size() == 16, "four characters and four effects use sixteen distinct combat effect profiles")
 	visual.free()
 
 func _test_card_scope_frames() -> void:

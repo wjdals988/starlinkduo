@@ -1853,7 +1853,8 @@ func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_d
 	battle_fx_layer.visible = true
 	var spatial_effect: CombatEffectVisual = preload("res://src/ui/combat_effect_visual.gd").new()
 	spatial_effect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	spatial_effect.configure(_primary_effect_type(cards), source_slot, reduce_motion)
+	var source_character: StringName = duel_state.players[source_slot].character_id if game_mode == "duel" and duel_state != null else run_coordinator.run.characters[source_slot]
+	spatial_effect.configure(_primary_effect_type(cards), source_slot, reduce_motion, source_character)
 	battle_fx_layer.add_child(spatial_effect)
 	var stack := VBoxContainer.new()
 	stack.set_anchors_preset(Control.PRESET_CENTER)
