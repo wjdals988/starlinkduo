@@ -28,8 +28,9 @@ func _init() -> void:
 	_test_duel_resolution_and_snapshot()
 	_test_host_authoritative_duel_session()
 	_test_duel_save_round_trip()
+	_test_duel_commitment_tamper_rejected()
 	if failures.is_empty():
-		print("PASS: 25 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 26 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -493,6 +494,8 @@ func _test_host_authoritative_duel_session() -> void:
 	var host_card: StringName = host.duel_state.players[0].hand[0]
 	_expect(host.submit_duel_plan(0, [{"card_id": host_card}]).ok, "host accepts its duel plan and resolves when both are ready")
 	guest.poll()
+	host.poll()
+	guest.poll()
 	_expect(host.duel_state.turn == 2 and not received_duels.is_empty() and int(received_duels[-1].turn) == 2, "guest receives resolved authoritative duel turn")
 	var preserved_duel_id := host.duel_state.duel_id
 	transports[1].close()
@@ -516,6 +519,39 @@ func _test_duel_save_round_trip() -> void:
 	var restored := store.load_active()
 	_expect(restored != null and restored.duel_id == duel.duel_id and restored.plans.has(0) and restored.players[0].ready, "duel checkpoint restores id, plan, and readiness")
 	store.clear()
+
+func _test_duel_commitment_tamper_rejected() -> void:
+	var transports := LoopbackTransport.pair()
+	transports[0].start_host("duel-tamper")
+	transports[1].connect_to("loopback", "duel-tamper")
+	var catalog := FullCardCatalog.build()
+	var run_store := RunSaveStore.new("user://duel_tamper_run.json")
+	run_store.clear()
+	var coordinator := RunCoordinator.new(catalog, run_store)
+	coordinator.start_new(9191)
+	var combat_engine := CombatEngine.new(catalog)
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], combat_engine, combat_engine.create_demo_combat(), coordinator)
+	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
+	var errors: Array[String] = []
+	guest.session_error.connect(func(code: String, _detail: String) -> void: errors.append(code))
+	host.set_game_mode("duel")
+	guest.poll()
+	var committed_card: StringName = guest.duel_state.players[1].hand[0]
+	var commit_result := guest.submit_duel_plan(1, [{"card_id": committed_card}])
+	_expect(commit_result.ok, "guest duel plan creates a commitment")
+	var duplicate_result := guest.submit_duel_plan(1, [{"card_id": committed_card}])
+	_expect(not duplicate_result.ok and duplicate_result.error == "duel_plan_already_committed", "guest cannot replace a pending committed plan")
+	guest.guest_pending_duel_plays = [{"card_id": &"tampered_card"}]
+	host.poll()
+	host.submit_duel_plan(0, [{"card_id": host.duel_state.players[0].hand[0]}])
+	guest.poll()
+	host.poll()
+	guest.poll()
+	_expect(host.duel_state.turn == 1 and host.duel_state.plans.size() == 1 and errors.has("duel_commitment_mismatch"), "tampered duel reveal is rejected before guest plan validation")
+	_expect(guest.guest_pending_duel_plays.is_empty(), "guest clears rejected commitment and can choose again")
+	_expect(guest.submit_duel_plan(1, [{"card_id": committed_card}]).ok, "guest can recommit after a rejected reveal")
+	run_store.clear()
+	DuelSaveStore.new().clear()
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:
