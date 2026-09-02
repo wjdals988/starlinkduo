@@ -15,6 +15,7 @@ var engine: CombatEngine
 var state: CombatState
 var catalog: Dictionary
 var run_coordinator: RunCoordinator
+var bluetooth_transport: AndroidBluetoothTransport
 var selected_plays: Array[Dictionary] = []
 var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
@@ -33,11 +34,18 @@ var overlay: PanelContainer
 var overlay_title: Label
 var overlay_subtitle: Label
 var overlay_content: VBoxContainer
+var connection_label: Label
 
 func _ready() -> void:
 	catalog = DemoCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
 	run_coordinator.resume_or_start(20260902)
+	bluetooth_transport = AndroidBluetoothTransport.new()
+	print("STARLINK_BT singleton=%s available=%s state=%s" % [
+		Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME),
+		bluetooth_transport.is_available(),
+		bluetooth_transport.get_state(),
+	])
 	engine = CombatEngine.new(catalog)
 	state = engine.create_demo_combat()
 	_build_interface()
@@ -96,11 +104,12 @@ func _build_top_bar() -> Control:
 		navigation.pressed.connect(item[1])
 		row.add_child(navigation)
 
-	var connection := Label.new()
-	connection.text = "●  LOCAL DEMO"
-	connection.add_theme_font_size_override("font_size", 17)
-	connection.add_theme_color_override("font_color", COLOR_CYAN)
-	row.add_child(connection)
+	connection_label = Label.new()
+	connection_label.text = "●  BLUETOOTH READY" if bluetooth_transport.is_available() else "●  LOCAL DEMO"
+	connection_label.tooltip_text = "Android Bluetooth 플러그인 감지됨" if Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME) else "에디터/에뮬레이터 로컬 모드"
+	connection_label.add_theme_font_size_override("font_size", 17)
+	connection_label.add_theme_color_override("font_color", COLOR_CYAN)
+	row.add_child(connection_label)
 	return panel
 
 func _build_battlefield() -> Control:

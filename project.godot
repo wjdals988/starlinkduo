@@ -9,6 +9,10 @@ config/name="Starlink Duo"
 run/main_scene="res://src/ui/main.tscn"
 config/features=PackedStringArray("4.3")
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/starlink_bluetooth/plugin.cfg")
+
 [display]
 
 window/size/viewport_width=1280

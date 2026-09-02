@@ -29,6 +29,8 @@
 - Godot Android Plugin v2 기반 Kotlin 플러그인 골격을 추가했다.
 - Android 12 이상의 Nearby Devices 권한, RFCOMM 호스트·참가자 연결과 길이 프레임 메시지 입출력을 구현했다.
 - 최대 메시지 크기, 연결 상태, 오류 큐 및 소켓 종료 처리를 추가했다.
+- Android 플러그인 v2 표준인 EditorExportPlugin 패키징과 Gradle APK 포함 구성을 추가했다.
+- 실행 시 Bluetooth 싱글턴 감지·어댑터 가용성·초기 상태를 로그와 상단 상태에 노출했다.
 
 ### Android 실행
 
