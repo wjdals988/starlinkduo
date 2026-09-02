@@ -16,6 +16,7 @@ var engine: CombatEngine
 var state: CombatState
 var duel_engine: DuelEngine
 var duel_state: DuelState
+var duel_save_store: DuelSaveStore
 var game_mode := "cooperative"
 var catalog: Dictionary
 var run_coordinator: RunCoordinator
@@ -62,6 +63,11 @@ func _ready() -> void:
 	])
 	engine = CombatEngine.new(catalog)
 	state = engine.create_demo_combat()
+	duel_save_store = DuelSaveStore.new()
+	duel_state = duel_save_store.load_active()
+	if duel_state != null:
+		duel_engine = DuelEngine.new(catalog)
+		game_mode = "duel"
 	_build_interface()
 	_refresh()
 	if not run_coordinator.run.pending_event.is_empty():
@@ -352,8 +358,10 @@ func _activate_mode(mode: String) -> void:
 			run_coordinator.starter_deck_for(run_coordinator.run.characters[1]),
 		])
 		local_slot = 0 if cooperative_session == null else local_slot
+		duel_save_store.save(duel_state)
 		log_label.text = "2인 결투 시작 · 두 플레이어가 행동을 확정하면 동시에 해결됩니다."
 	else:
+		duel_save_store.clear()
 		state = engine.create_demo_combat() if not active_route_combat else state
 		log_label.text = "협동 원정 모드 · 공동 체력과 항로 진행을 공유합니다."
 	selected_hand_indices.clear()
@@ -406,7 +414,12 @@ func _start_bluetooth_host() -> void:
 		if cooperative_session == null or cooperative_session.role != CooperativeSession.Role.HOST:
 			cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state, run_coordinator)
 			cooperative_session.session_error.connect(_on_session_error)
-			cooperative_session.set_game_mode(game_mode)
+			if game_mode == "duel" and duel_state != null:
+				cooperative_session.game_mode = "duel"
+				cooperative_session.duel_engine = DuelEngine.new(catalog)
+				cooperative_session.duel_state = duel_state
+			else:
+				cooperative_session.set_game_mode(game_mode)
 		overlay_subtitle.text = "참가자를 기다리는 중… 기존 세션이 있으면 현재 턴에서 복구합니다."
 	else:
 		overlay_subtitle.text = "방을 만들지 못했습니다. 권한과 Bluetooth 상태를 확인하세요."
@@ -465,6 +478,7 @@ func _on_remote_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
 func _on_remote_duel_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
 	game_mode = "duel"
 	duel_state = DuelState.from_snapshot(snapshot)
+	duel_save_store.save(duel_state)
 	selected_hand_indices.clear()
 	selected_plays.clear()
 	selected_energy = 0
@@ -542,7 +556,7 @@ func _refresh_character_identity() -> void:
 	if player_title_labels.size() < 2:
 		return
 	for slot in 2:
-		var character_id: StringName = run_coordinator.run.characters[slot]
+		var character_id: StringName = duel_state.players[slot].character_id if game_mode == "duel" and duel_state != null else run_coordinator.run.characters[slot]
 		player_title_labels[slot].text = "P%d  %s" % [slot + 1, _character_name(character_id)]
 		player_title_labels[slot].add_theme_color_override("font_color", _character_color(character_id))
 		player_role_labels[slot].text = _character_role(character_id)
@@ -1090,6 +1104,8 @@ func _on_duel_ready_pressed() -> void:
 	if not result.ok:
 		log_label.text = "결투 행동을 확정할 수 없습니다: %s" % result.get("error", "unknown")
 		return
+	if cooperative_session == null:
+		duel_save_store.save(duel_state)
 	selected_hand_indices.clear()
 	selected_plays.clear()
 	selected_energy = 0
@@ -1099,6 +1115,7 @@ func _on_duel_ready_pressed() -> void:
 			log_label.text = "기기를 상대에게 건네주세요 · P%d 행동 선택" % (local_slot + 1)
 		else:
 			duel_engine.resolve_if_ready(duel_state)
+			duel_save_store.save(duel_state)
 			local_slot = 0
 			log_label.text = "동시 행동 해결 완료 · 상태 해시 %s…" % StateHasher.hash_snapshot(duel_state.to_snapshot()).left(8)
 	else:

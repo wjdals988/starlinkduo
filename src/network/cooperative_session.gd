@@ -17,6 +17,7 @@ var combat_state: CombatState
 var run_coordinator: RunCoordinator
 var duel_engine: DuelEngine
 var duel_state: DuelState
+var duel_save_store := DuelSaveStore.new()
 var game_mode := "cooperative"
 var remote_snapshot: Dictionary = {}
 var outgoing_sequence := 0
@@ -70,9 +71,11 @@ func set_game_mode(mode: String) -> Dictionary:
 			run_coordinator.starter_deck_for(run_coordinator.run.characters[0]),
 			run_coordinator.starter_deck_for(run_coordinator.run.characters[1]),
 		])
+		duel_save_store.save(duel_state)
 	else:
 		duel_state = null
 		duel_engine = null
+		duel_save_store.clear()
 	game_mode_changed.emit(game_mode)
 	_send("game_mode", {"mode": game_mode})
 	if mode == "duel":
@@ -90,6 +93,7 @@ func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 		var result := duel_engine.submit_plan(duel_state, slot, plays)
 		if not result.ok:
 			return result
+		duel_save_store.save(duel_state)
 		_publish_duel_snapshot("duel_plan_accepted")
 		_resolve_duel_if_ready()
 		return result
@@ -215,6 +219,7 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 			if not duel_result.ok:
 				_send_rejection(duel_result.error)
 				return
+			duel_save_store.save(duel_state)
 			_publish_duel_snapshot("duel_plan_accepted")
 			_resolve_duel_if_ready()
 		"character_select":
@@ -338,6 +343,7 @@ func _resolve_duel_if_ready() -> void:
 		return
 	var result := duel_engine.resolve_if_ready(duel_state)
 	if result.ok:
+		duel_save_store.save(duel_state)
 		_publish_duel_snapshot("duel_turn_resolved")
 
 func _publish_duel_snapshot(reason: String) -> bool:

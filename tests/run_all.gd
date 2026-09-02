@@ -27,8 +27,9 @@ func _init() -> void:
 	_test_character_selection_and_scope()
 	_test_duel_resolution_and_snapshot()
 	_test_host_authoritative_duel_session()
+	_test_duel_save_round_trip()
 	if failures.is_empty():
-		print("PASS: 24 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 25 core, content, run, character, duel, relic, item, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -474,6 +475,7 @@ func _test_host_authoritative_duel_session() -> void:
 	var catalog := FullCardCatalog.build()
 	var store := RunSaveStore.new("user://duel_session_test.json")
 	store.clear()
+	DuelSaveStore.new().clear()
 	var coordinator := RunCoordinator.new(catalog, store)
 	coordinator.start_new(9090)
 	var combat_engine := CombatEngine.new(catalog)
@@ -498,6 +500,21 @@ func _test_host_authoritative_duel_session() -> void:
 	transports[1].connect_to("loopback", "duel")
 	guest.poll()
 	_expect(guest.duel_state != null and guest.duel_state.duel_id == preserved_duel_id and guest.duel_state.turn == 2, "reconnecting transport restores the existing authoritative duel")
+	store.clear()
+	DuelSaveStore.new().clear()
+
+func _test_duel_save_round_trip() -> void:
+	var store := DuelSaveStore.new("user://duel_round_trip_test.json")
+	store.clear()
+	var engine := DuelEngine.new(FullCardCatalog.build())
+	var duel := engine.create_duel(["guardian", "engineer"], [
+		["guardian_strike", "guardian_guard", "neutral_pulse"],
+		["engineer_bolt", "engineer_charge", "neutral_barrier"],
+	])
+	engine.submit_plan(duel, 0, [{"card_id": duel.players[0].hand[0]}])
+	_expect(store.save(duel) == OK, "duel checkpoint saves after one hidden plan")
+	var restored := store.load_active()
+	_expect(restored != null and restored.duel_id == duel.duel_id and restored.plans.has(0) and restored.players[0].ready, "duel checkpoint restores id, plan, and readiness")
 	store.clear()
 
 func _expect(condition: bool, label: String) -> void:
