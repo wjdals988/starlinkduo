@@ -1,6 +1,7 @@
 extends SceneTree
 
 const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
+const EnemyAura := preload("res://src/ui/enemy_visual.gd")
 const CardFrames := preload("res://src/ui/card_frame_visual.gd")
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
 
@@ -431,6 +432,29 @@ func _test_full_run_content_catalog() -> void:
 	for profile in [EnemyVisuals.TRAINING, EnemyVisuals.STANDARD, EnemyVisuals.ELITE, EnemyVisuals.BOSS, EnemyVisuals.TRUE_BOSS]:
 		visual_textures[profile.texture] = true
 	_expect(visual_textures.size() == 5, "each encounter tier uses a distinct enemy texture")
+	var identity_signatures := {}
+	var encounter_count := 0
+	for stage in content.stages:
+		for enemy in stage.normal_formations:
+			var identity := EnemyVisuals.identity_profile(StringName(enemy.id), ["combat"])
+			identity_signatures[EnemyAura.geometry_signature(identity)] = true
+			_expect(String(identity.description).contains(String(identity.identity_name)), "enemy description includes its non-color identity marker")
+			encounter_count += 1
+		for enemy in stage.elites:
+			var identity := EnemyVisuals.identity_profile(StringName(enemy.id), ["elite"])
+			identity_signatures[EnemyAura.geometry_signature(identity)] = true
+			encounter_count += 1
+		var boss_identity := EnemyVisuals.identity_profile(StringName(stage.boss.id), ["boss"])
+		identity_signatures[EnemyAura.geometry_signature(boss_identity)] = true
+		encounter_count += 1
+	for special in [[&"training_drone", []], [&"true_boss_star_eater", ["true_boss"]]]:
+		var special_routes: Array[String] = []
+		special_routes.assign(special[1])
+		var identity := EnemyVisuals.identity_profile(special[0], special_routes)
+		identity_signatures[EnemyAura.geometry_signature(identity)] = true
+		encounter_count += 1
+	_expect(encounter_count == 23, "run content exposes twenty-three enemy identities")
+	_expect(identity_signatures.size() == 23, "all twenty-three enemies use distinct stage, tier, and formation identity signatures")
 
 func _test_route_selection_and_key_gate() -> void:
 	var store := RunSaveStore.new("user://route_test.json")

@@ -68,6 +68,7 @@ var accessibility_sync_pending := false
 var interaction_locked := false
 var battle_fx_layer: Control
 var enemy_art: Control
+var enemy_aura: Control
 
 func _ready() -> void:
 	get_tree().set_auto_accept_quit(false)
@@ -427,7 +428,7 @@ func _build_enemy_panel() -> Control:
 	enemy_stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	enemy_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(enemy_stage)
-	var enemy_aura := preload("res://src/ui/enemy_visual.gd").new()
+	enemy_aura = preload("res://src/ui/enemy_visual.gd").new()
 	enemy_aura.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	enemy_stage.add_child(enemy_aura)
 	enemy_art = TextureRect.new()
@@ -444,6 +445,9 @@ func _build_enemy_panel() -> Control:
 	enemy_art.accessibility_name = "적 캐릭터"
 	enemy_art.accessibility_description = "자홍색 코어와 네 개의 칼날을 지닌 부유 전투체"
 	enemy_stage.add_child(enemy_art)
+	# Identity arcs stay above the transparent enemy art so stage and formation
+	# markers remain visible without replacing the tier silhouette.
+	enemy_stage.move_child(enemy_aura, enemy_stage.get_child_count() - 1)
 
 	intent_panel = PanelContainer.new()
 	intent_panel.add_theme_stylebox_override("panel", _panel_style(Color("#241221df"), 18, Color("#ff667d88"), 2, 14, 7))
@@ -1606,7 +1610,7 @@ func _refresh() -> void:
 	queue_redraw()
 
 func _apply_enemy_visual(enemy: EnemyState) -> void:
-	var profile: Dictionary = EnemyVisuals.profile(enemy.id, active_route_types)
+	var profile: Dictionary = EnemyVisuals.identity_profile(enemy.id, active_route_types)
 	var padding: Vector2 = profile["padding"]
 	enemy_art.texture = load(String(profile["texture"]))
 	enemy_art.offset_left = -padding.x
@@ -1615,6 +1619,9 @@ func _apply_enemy_visual(enemy: EnemyState) -> void:
 	enemy_art.offset_bottom = padding.y
 	enemy_art.accessibility_name = "%s · %s" % [enemy.display_name, _encounter_kind()]
 	enemy_art.accessibility_description = String(profile["description"])
+	enemy_name_label.accessibility_name = "전투 상대 · %s" % String(profile["identity_name"])
+	if enemy_aura != null:
+		enemy_aura.configure(profile)
 
 func _refresh_duel() -> void:
 	turn_label.text = "DUEL %02d" % duel_state.turn
