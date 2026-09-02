@@ -8,8 +8,12 @@ func _init() -> void:
 	_test_support_limit()
 	_test_deterministic_hash()
 	_test_loopback_transport()
+	_test_run_map_generation()
+	_test_reward_and_shop_generation()
+	_test_run_save_round_trip()
+	_test_run_coordinator_economy()
 	if failures.is_empty():
-		print("PASS: 5 core and transport tests")
+		print("PASS: 9 core, run, save, economy, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -65,6 +69,91 @@ func _test_loopback_transport() -> void:
 	_expect(host.send_message("{\"type\":\"ready\"}"), "connected loopback sends a message")
 	guest.poll()
 	_expect(received == ["{\"type\":\"ready\"}"], "loopback delivers the exact payload")
+
+func _test_run_map_generation() -> void:
+	var generator := MapGenerator.new()
+	var first := generator.generate_run(20260902)
+	var second := generator.generate_run(20260902)
+	_expect(first == second, "run map generation is deterministic")
+	_expect(first.stages.size() == 3, "run contains three stages")
+	for stage in first.stages:
+		_expect(stage.steps.size() == MapGenerator.TRAVERSAL_STEPS, "stage contains eight traversal steps")
+		_expect(stage.boss.type == "boss", "stage ends with a boss")
+		for slot in 2:
+			var found: Dictionary = {"shop": false, "rest": false, "elite": false, "key_challenge": false}
+			for step in stage.steps:
+				if step.kind != "parallel":
+					continue
+				for option in step.lanes[slot].options:
+					if found.has(option.type):
+						found[option.type] = true
+			_expect(found.values().all(func(value: bool) -> bool: return value), "each lane guarantees shop, rest, elite, and key")
+	var run := RunState.new(20260902)
+	run.unlock_key(1)
+	run.unlock_key(2)
+	_expect(not run.can_enter_true_boss(), "two keys do not unlock the true boss")
+	run.unlock_key(3)
+	_expect(run.can_enter_true_boss(), "three stage keys unlock the true boss")
+	var invalid_seed_count := 0
+	for seed in 10_000:
+		var generated := generator.generate_run(seed + 1)
+		for stage in generated.stages:
+			for slot in 2:
+				var required := {"shop": false, "rest": false, "elite": false, "key_challenge": false}
+				for step in stage.steps:
+					if step.kind == "parallel":
+						for option in step.lanes[slot].options:
+							if required.has(option.type):
+								required[option.type] = true
+				if not required.values().all(func(value: bool) -> bool: return value):
+					invalid_seed_count += 1
+	_expect(invalid_seed_count == 0, "10,000 map seeds preserve every lane guarantee")
+
+func _test_reward_and_shop_generation() -> void:
+	var catalog := DemoCardCatalog.build()
+	var generator := RewardGenerator.new(catalog)
+	var reward := generator.card_reward(90210, CardData.Scope.GUARDIAN, "combat")
+	_expect(reward.size() == 3, "card reward contains three choices")
+	_expect(catalog[reward[0]].owner_scope == CardData.Scope.GUARDIAN, "first reward matches character scope")
+	_expect(catalog[reward[1]].owner_scope == CardData.Scope.GUARDIAN, "second reward matches character scope")
+	_expect(catalog[reward[2]].owner_scope == CardData.Scope.NEUTRAL, "third reward is a neutral card")
+	var shop := generator.shop_inventory(777, CardData.Scope.GUARDIAN)
+	_expect(shop.cards.size() == 5, "shop contains five cards")
+	_expect(shop.relics.size() == 2 and shop.consumables.size() == 2, "shop contains relics and consumables")
+
+func _test_run_save_round_trip() -> void:
+	var store := RunSaveStore.new()
+	store.clear()
+	var original := RunState.new(314159)
+	original.map = MapGenerator.new().generate_run(original.seed)
+	original.stage = 2
+	original.step = 4
+	original.gold[0] = 143
+	_expect(store.save(original, "test_checkpoint") == OK, "run checkpoint saves")
+	var restored := store.load_active()
+	_expect(restored != null, "saved run loads")
+	if restored != null:
+		_expect(restored.to_snapshot() == original.to_snapshot(), "run save round trip preserves state")
+	store.clear()
+
+func _test_run_coordinator_economy() -> void:
+	var store := RunSaveStore.new("user://coordinator_test.json")
+	store.clear()
+	var coordinator := RunCoordinator.new(DemoCardCatalog.build(), store)
+	var run := coordinator.start_new(4242)
+	var reward := coordinator.current_card_reward(0)
+	var previous_deck_size: int = run.decks[0].size()
+	_expect(coordinator.claim_card(0, reward[2]), "neutral reward can be claimed")
+	_expect(run.decks[0].size() == previous_deck_size + 1, "claimed reward joins the player deck")
+	var shop := coordinator.current_shop(0)
+	var affordable: Dictionary = shop.cards[0]
+	run.gold[0] = int(affordable.price)
+	_expect(coordinator.buy_card(0, affordable), "affordable shop card can be purchased")
+	_expect(run.gold[0] == 0, "shop purchase deducts exact gold")
+	_expect(not coordinator.buy_card(0, affordable), "shop rejects purchase without enough gold")
+	var restored := store.load_active()
+	_expect(restored != null and restored.decks[0] == run.decks[0], "economy mutations persist at checkpoints")
+	store.clear()
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:

@@ -7,3 +7,4 @@ builds/
 *.apk
 *.aab
 local.properties
+artifacts/*.import

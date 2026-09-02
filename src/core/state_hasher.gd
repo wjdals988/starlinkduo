@@ -19,4 +19,6 @@ static func _canonicalize(value: Variant) -> Variant:
 		for item in value:
 			result.append(_canonicalize(item))
 		return result
+	if value is float and is_equal_approx(value, roundf(value)):
+		return int(value)
 	return value
