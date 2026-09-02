@@ -1,0 +1,187 @@
+class_name CombatEngine
+extends RefCounted
+
+const HAND_SIZE := 5
+
+var cards: Dictionary
+
+func _init(card_catalog: Dictionary) -> void:
+	cards = card_catalog
+
+func create_demo_combat() -> CombatState:
+	var state := CombatState.new()
+	var guardian := CombatantState.new(0, &"guardian")
+	guardian.draw_pile.assign([
+		&"guardian_strike", &"guardian_guard", &"guardian_cover",
+		&"neutral_pulse", &"neutral_barrier", &"guardian_strike",
+	])
+	var engineer := CombatantState.new(1, &"engineer")
+	engineer.draw_pile.assign([
+		&"engineer_bolt", &"engineer_charge", &"engineer_patch",
+		&"neutral_link", &"neutral_pulse", &"engineer_bolt",
+	])
+	state.players.assign([guardian, engineer])
+	var drone := EnemyState.new(&"training_drone", "훈련 드론", 44)
+	drone.intent_damage = 9
+	state.enemies.append(drone)
+	begin_turn(state)
+	return state
+
+func begin_turn(state: CombatState) -> void:
+	if state.phase == CombatState.Phase.WON or state.phase == CombatState.Phase.LOST:
+		return
+	state.phase = CombatState.Phase.PLANNING
+	state.plans.clear()
+	for player in state.players:
+		player.energy = player.max_energy
+		player.block = 0
+		player.ready = false
+		_draw_to_hand(player, HAND_SIZE)
+	state.event_log.append({"type": "turn_started", "turn": state.turn})
+
+func submit_plan(state: CombatState, slot: int, plays: Array[Dictionary]) -> Dictionary:
+	if state.phase != CombatState.Phase.PLANNING:
+		return _error("not_planning")
+	if slot < 0 or slot >= state.players.size():
+		return _error("invalid_slot")
+	var validation := _validate_plays(state, slot, plays)
+	if not validation.ok:
+		return validation
+	state.plans[slot] = plays.duplicate(true)
+	state.players[slot].ready = true
+	return {"ok": true, "state_hash": StateHasher.hash_snapshot(state.to_snapshot())}
+
+func resolve_if_ready(state: CombatState) -> Dictionary:
+	if state.plans.size() != state.players.size():
+		return _error("players_not_ready")
+	state.phase = CombatState.Phase.RESOLVING
+	var ordered_plays: Array[Dictionary] = []
+	for slot in state.plans.keys():
+		var selection_order := 0
+		for play in state.plans[slot]:
+			var card: CardData = cards[play.card_id]
+			ordered_plays.append({
+				"slot": int(slot),
+				"selection_order": selection_order,
+				"speed": card.speed,
+				"play": play,
+			})
+			selection_order += 1
+	ordered_plays.sort_custom(_sort_plays)
+	for ordered in ordered_plays:
+		_resolve_play(state, ordered.slot, ordered.play)
+		if state.phase == CombatState.Phase.WON:
+			break
+	if state.phase != CombatState.Phase.WON:
+		_resolve_enemy_turn(state)
+	_finish_turn(state)
+	return {"ok": true, "state_hash": StateHasher.hash_snapshot(state.to_snapshot())}
+
+func _validate_plays(state: CombatState, slot: int, plays: Array[Dictionary]) -> Dictionary:
+	var player: CombatantState = state.players[slot]
+	var remaining_energy := player.energy
+	var available := player.hand.duplicate()
+	var support_count := 0
+	for play in plays:
+		if not play.has("card_id") or not cards.has(play.card_id):
+			return _error("unknown_card")
+		var card_id: StringName = play.card_id
+		if not available.has(card_id):
+			return _error("card_not_in_hand")
+		var card: CardData = cards[card_id]
+		remaining_energy -= card.energy_cost
+		if remaining_energy < 0:
+			return _error("insufficient_energy")
+		if card.is_support():
+			support_count += 1
+			if support_count > 1:
+				return _error("support_limit")
+		if card.target == CardData.Target.ENEMY:
+			var target_index: int = play.get("target", -1)
+			if target_index < 0 or target_index >= state.enemies.size():
+				return _error("invalid_target")
+		available.erase(card_id)
+	return {"ok": true}
+
+func _resolve_play(state: CombatState, slot: int, play: Dictionary) -> void:
+	var source: CombatantState = state.players[slot]
+	var card: CardData = cards[play.card_id]
+	source.energy -= card.energy_cost
+	source.hand.erase(card.id)
+	source.discard_pile.append(card.id)
+	for effect in card.effects:
+		_resolve_effect(state, source, card, play, effect)
+	state.event_log.append({"type": "card_played", "slot": slot, "card_id": String(card.id)})
+	if _living_enemies(state).is_empty():
+		state.phase = CombatState.Phase.WON
+		state.event_log.append({"type": "combat_won", "turn": state.turn})
+
+func _resolve_effect(state: CombatState, source: CombatantState, card: CardData, play: Dictionary, effect: Dictionary) -> void:
+	var amount: int = effect.get("amount", 0)
+	match effect.get("type", ""):
+		"damage":
+			var enemy: EnemyState = state.enemies[play.get("target", 0)]
+			var unblocked := maxi(0, amount - enemy.block)
+			enemy.block = maxi(0, enemy.block - amount)
+			enemy.health = maxi(0, enemy.health - unblocked)
+		"block":
+			var recipient := _recipient_for(state, source, card)
+			recipient.block += amount
+		"energy":
+			var recipient := _recipient_for(state, source, card)
+			recipient.energy += amount
+		"heal":
+			state.team_health = mini(state.team_max_health, state.team_health + amount)
+
+func _recipient_for(state: CombatState, source: CombatantState, card: CardData) -> CombatantState:
+	if card.target == CardData.Target.ALLY:
+		return state.players[1 - source.slot]
+	return source
+
+func _resolve_enemy_turn(state: CombatState) -> void:
+	for enemy in _living_enemies(state):
+		var total_block := 0
+		for player in state.players:
+			total_block += player.block
+		var damage := maxi(0, enemy.intent_damage - total_block)
+		state.team_health = maxi(0, state.team_health - damage)
+		state.event_log.append({"type": "enemy_attack", "enemy_id": String(enemy.id), "damage": damage})
+	if state.team_health <= 0:
+		state.phase = CombatState.Phase.LOST
+		state.event_log.append({"type": "combat_lost", "turn": state.turn})
+
+func _finish_turn(state: CombatState) -> void:
+	if state.phase == CombatState.Phase.WON or state.phase == CombatState.Phase.LOST:
+		return
+	for player in state.players:
+		player.discard_pile.append_array(player.hand)
+		player.hand.clear()
+	state.turn += 1
+	begin_turn(state)
+
+func _draw_to_hand(player: CombatantState, target_size: int) -> void:
+	while player.hand.size() < target_size:
+		if player.draw_pile.is_empty():
+			if player.discard_pile.is_empty():
+				break
+			player.draw_pile.assign(player.discard_pile)
+			player.discard_pile.clear()
+		var card_id: StringName = player.draw_pile.pop_front()
+		player.hand.append(card_id)
+
+func _living_enemies(state: CombatState) -> Array[EnemyState]:
+	var result: Array[EnemyState] = []
+	for enemy in state.enemies:
+		if enemy.health > 0:
+			result.append(enemy)
+	return result
+
+static func _sort_plays(a: Dictionary, b: Dictionary) -> bool:
+	if a.speed != b.speed:
+		return a.speed < b.speed
+	if a.slot != b.slot:
+		return a.slot < b.slot
+	return a.selection_order < b.selection_order
+
+static func _error(code: String) -> Dictionary:
+	return {"ok": false, "error": code}
