@@ -157,9 +157,13 @@ func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	role.add_theme_color_override("font_color", COLOR_MUTED)
 	column.add_child(role)
 
-	var portrait := ColorRect.new()
-	portrait.custom_minimum_size.y = 112
-	portrait.color = Color(accent, 0.18)
+	var portrait := TextureRect.new()
+	portrait.custom_minimum_size.y = 170
+	portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	portrait.texture = load("res://assets/art/guardian-portrait.png" if slot == 0 else "res://assets/art/engineer-portrait.png")
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	column.add_child(portrait)
 
 	var detail := Label.new()
