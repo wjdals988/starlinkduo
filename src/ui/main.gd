@@ -42,7 +42,7 @@ var status_label: Label
 var ready_button: Button
 var turn_label: Label
 var log_label: Label
-var overlay: PanelContainer
+var overlay: Control
 var overlay_title: Label
 var overlay_subtitle: Label
 var overlay_content: VBoxContainer
@@ -302,18 +302,28 @@ func _build_hand_section() -> Control:
 	return section
 
 func _build_overlay() -> void:
-	overlay = PanelContainer.new()
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.offset_left = 90
-	overlay.offset_top = 54
-	overlay.offset_right = -90
-	overlay.offset_bottom = -54
-	overlay.add_theme_stylebox_override("panel", _panel_style(Color("#18213eeF"), 24, COLOR_CYAN, 2))
+	overlay = Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.visible = false
 	add_child(overlay)
+	var scrim := ColorRect.new()
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scrim.color = Color("#080d1ca8")
+	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(scrim)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.offset_left = 90
+	panel.offset_top = 54
+	panel.offset_right = -90
+	panel.offset_bottom = -54
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.add_theme_stylebox_override("panel", _panel_style(Color("#18213eef"), 24, COLOR_CYAN, 2))
+	overlay.add_child(panel)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 16)
-	overlay.add_child(column)
+	panel.add_child(column)
 	var header := HBoxContainer.new()
 	column.add_child(header)
 	var titles := VBoxContainer.new()
@@ -384,6 +394,7 @@ func _clear_overlay() -> void:
 func _show_connection() -> void:
 	_clear_overlay()
 	overlay_title.text = "근거리 2인 연결"
+	_add_connection_notice("호환 코드 · %s" % GameCompatibility.code(), COLOR_MUTED)
 	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
 		overlay_subtitle.text = "현재 환경에는 Android Bluetooth 플러그인이 없어 로컬 데모로 실행 중입니다."
 		_add_connection_notice("APK를 Android 12 이상 갤럭시에서 실행하세요.", COLOR_YELLOW)

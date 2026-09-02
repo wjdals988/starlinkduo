@@ -281,6 +281,7 @@ func _handle_hello(payload: Dictionary) -> void:
 		session_error.emit("incompatible_content", String(payload.get("fingerprint", "")))
 		return
 	handshake_complete = true
+	print("SESSION_HANDSHAKE role=%s compatibility=%s" % ["host" if role == Role.HOST else "guest", GameCompatibility.code()])
 	if role != Role.HOST:
 		return
 	_restore_duel_commitment_if_matching()

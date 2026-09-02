@@ -32,6 +32,8 @@ godot --headless --path . --install-android-build-template --export-debug "Andro
 
 플러그인은 Android에서만 로드되며 데스크톱 개발 중에는 `LoopbackTransport`로 동일한 메시지 흐름을 검증합니다. 앱과 플러그인의 최소 지원 버전은 모두 Android 12(API 31)입니다.
 
+실제 갤럭시 2대의 기내모드 검증 범위와 증적 양식은 [실기기 E2E 절차](docs/DEVICE_E2E_TEST.md)를 따릅니다.
+
 ## 설계 원칙
 
 - 호스트 권한 기반 결정론적 상태 동기화

@@ -20,3 +20,6 @@ static func fingerprint() -> String:
 		"run_content": RunContentCatalog.build(),
 	})
 	return _cached_fingerprint
+
+static func code() -> String:
+	return fingerprint().left(12).to_upper()

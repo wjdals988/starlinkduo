@@ -334,6 +334,7 @@ func _test_full_card_catalog() -> void:
 	_expect(catalog.size() == 144, "full catalog contains exactly 144 cards")
 	var fingerprint := GameCompatibility.fingerprint()
 	_expect(fingerprint.length() == 64 and fingerprint == GameCompatibility.fingerprint(), "complete game content produces one stable SHA-256 compatibility fingerprint")
+	_expect(GameCompatibility.code().length() == 12 and fingerprint.begins_with(GameCompatibility.code().to_lower()), "connection screen exposes a stable 12-character compatibility code")
 	for scope in CardData.Scope.values():
 		var count := 0
 		for card in catalog.values():
