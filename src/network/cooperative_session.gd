@@ -22,6 +22,9 @@ func _init(session_role: Role, session_transport: SessionTransport, combat_engin
 	combat_state = initial_state
 	transport.message_received.connect(_on_message)
 	transport.transport_error.connect(func(code: String, detail: String) -> void: session_error.emit(code, detail))
+	transport.state_changed.connect(_on_transport_state_changed)
+	if role == Role.HOST and transport.get_state() == "connected":
+		_publish_snapshot("session_started")
 
 func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 	if role == Role.HOST:
@@ -36,7 +39,8 @@ func submit_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 		return result
 	if slot != 1:
 		return _error("guest_slot_forbidden")
-	return {"ok": _send("plan", {"slot": slot, "turn": _known_turn(), "plays": plays})}
+	var sent := _send("plan", {"slot": slot, "turn": _known_turn(), "plays": plays})
+	return {"ok": sent} if sent else _error("send_failed")
 
 func request_resync() -> bool:
 	return _send("resync_request", {"last_seq": incoming_sequence})
@@ -60,6 +64,10 @@ func _on_message(raw: String) -> void:
 		_handle_host_message(message.type, message.payload)
 	else:
 		_handle_guest_message(message.type, message.payload)
+
+func _on_transport_state_changed(next_state: String) -> void:
+	if next_state == "connected" and role == Role.HOST:
+		_publish_snapshot("session_started")
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:

@@ -30,9 +30,26 @@ func to_snapshot() -> Dictionary:
 		"ready": ready,
 	}
 
+static func from_snapshot(snapshot: Dictionary) -> CombatantState:
+	var result := CombatantState.new(int(snapshot.slot), StringName(snapshot.character_id))
+	result.energy = int(snapshot.energy)
+	result.max_energy = int(snapshot.max_energy)
+	result.block = int(snapshot.block)
+	result.draw_pile.assign(_to_string_names(snapshot.draw_pile))
+	result.hand.assign(_to_string_names(snapshot.hand))
+	result.discard_pile.assign(_to_string_names(snapshot.discard_pile))
+	result.statuses = snapshot.statuses.duplicate(true)
+	result.ready = bool(snapshot.ready)
+	return result
+
 static func _string_names(values: Array[StringName]) -> Array[String]:
 	var result: Array[String] = []
 	for value in values:
 		result.append(String(value))
 	return result
 
+static func _to_string_names(values: Array) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for value in values:
+		result.append(StringName(value))
+	return result

@@ -26,3 +26,10 @@ func to_snapshot() -> Dictionary:
 		"statuses": statuses.duplicate(true),
 	}
 
+static func from_snapshot(snapshot: Dictionary) -> EnemyState:
+	var result := EnemyState.new(StringName(snapshot.id), String(snapshot.name), int(snapshot.max_health))
+	result.health = int(snapshot.health)
+	result.block = int(snapshot.block)
+	result.intent_damage = int(snapshot.intent_damage)
+	result.statuses = snapshot.statuses.duplicate(true)
+	return result

@@ -32,3 +32,25 @@ func to_snapshot() -> Dictionary:
 		"event_log": event_log.duplicate(true),
 	}
 
+static func from_snapshot(snapshot: Dictionary) -> CombatState:
+	snapshot = RunState._normalize_json_numbers(snapshot)
+	var result := CombatState.new()
+	result.combat_id = StringName(snapshot.combat_id)
+	result.turn = int(snapshot.turn)
+	result.phase = int(snapshot.phase) as Phase
+	result.team_health = int(snapshot.team_health)
+	result.team_max_health = int(snapshot.team_max_health)
+	for player_snapshot in snapshot.players:
+		result.players.append(CombatantState.from_snapshot(player_snapshot))
+	for enemy_snapshot in snapshot.enemies:
+		result.enemies.append(EnemyState.from_snapshot(enemy_snapshot))
+	for key in snapshot.plans:
+		var restored_plays: Array[Dictionary] = []
+		for play in snapshot.plans[key]:
+			var restored_play: Dictionary = play.duplicate(true)
+			if restored_play.has("card_id"):
+				restored_play.card_id = StringName(restored_play.card_id)
+			restored_plays.append(restored_play)
+		result.plans[int(key)] = restored_plays
+	result.event_log.assign(snapshot.event_log)
+	return result

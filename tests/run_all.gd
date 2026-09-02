@@ -14,8 +14,9 @@ func _init() -> void:
 	_test_run_coordinator_economy()
 	_test_host_authoritative_session()
 	_test_session_rejects_stale_sequence()
+	_test_combat_snapshot_round_trip()
 	if failures.is_empty():
-		print("PASS: 11 core, run, save, economy, protocol, and transport tests")
+		print("PASS: 12 core, run, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -189,6 +190,14 @@ func _test_session_rejects_stale_sequence() -> void:
 	transports[1].send_message(repeated)
 	host.poll()
 	_expect(errors == ["stale_sequence"], "duplicate sequence is rejected exactly once")
+
+func _test_combat_snapshot_round_trip() -> void:
+	var engine := CombatEngine.new(DemoCardCatalog.build())
+	var original := engine.create_demo_combat()
+	engine.submit_plan(original, 0, [{"card_id": &"guardian_strike", "target": 0}])
+	var restored := CombatState.from_snapshot(JSON.parse_string(JSON.stringify(original.to_snapshot())))
+	_expect(restored.to_snapshot() == original.to_snapshot(), "combat snapshot survives JSON reconstruction")
+	_expect(StateHasher.hash_snapshot(restored.to_snapshot()) == StateHasher.hash_snapshot(original.to_snapshot()), "reconstructed combat preserves state hash")
 
 func _expect(condition: bool, label: String) -> void:
 	if not condition:

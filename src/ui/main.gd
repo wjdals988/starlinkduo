@@ -17,6 +17,8 @@ var state: CombatState
 var catalog: Dictionary
 var run_coordinator: RunCoordinator
 var bluetooth_transport: AndroidBluetoothTransport
+var cooperative_session: CooperativeSession
+var local_slot := 0
 var selected_plays: Array[Dictionary] = []
 var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
@@ -25,7 +27,7 @@ var team_health_label: Label
 var team_health_bar: ProgressBar
 var enemy_health_label: Label
 var enemy_health_bar: ProgressBar
-var energy_label: Label
+var player_detail_labels: Array[Label] = []
 var hand_container: HBoxContainer
 var status_label: Label
 var ready_button: Button
@@ -62,7 +64,10 @@ func _draw() -> void:
 func _process(_delta: float) -> void:
 	if bluetooth_transport == null:
 		return
-	bluetooth_transport.poll()
+	if cooperative_session != null:
+		cooperative_session.poll()
+	else:
+		bluetooth_transport.poll()
 	if connection_label != null:
 		var next_text := _connection_status_text()
 		if connection_label.text != next_text:
@@ -126,12 +131,12 @@ func _build_battlefield() -> Control:
 	var row := HBoxContainer.new()
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", 14)
-	row.add_child(_build_player_panel("P1  수호자", COLOR_BLUE, true))
+	row.add_child(_build_player_panel("P1  수호자", COLOR_BLUE, 0))
 	row.add_child(_build_enemy_panel())
-	row.add_child(_build_player_panel("P2  기술자", COLOR_ORANGE, false))
+	row.add_child(_build_player_panel("P2  기술자", COLOR_ORANGE, 1))
 	return row
 
-func _build_player_panel(title: String, accent: Color, local_player: bool) -> Control:
+func _build_player_panel(title: String, accent: Color, slot: int) -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(250, 280)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -147,7 +152,7 @@ func _build_player_panel(title: String, accent: Color, local_player: bool) -> Co
 	column.add_child(title_label)
 
 	var role := Label.new()
-	role.text = "전방 방어 · 아군 엄호" if local_player else "에너지 지원 · 장치 제어"
+	role.text = "전방 방어 · 아군 엄호" if slot == 0 else "에너지 지원 · 장치 제어"
 	role.add_theme_font_size_override("font_size", 15)
 	role.add_theme_color_override("font_color", COLOR_MUTED)
 	column.add_child(role)
@@ -157,17 +162,11 @@ func _build_player_panel(title: String, accent: Color, local_player: bool) -> Co
 	portrait.color = Color(accent, 0.18)
 	column.add_child(portrait)
 
-	if local_player:
-		energy_label = Label.new()
-		energy_label.add_theme_font_size_override("font_size", 18)
-		energy_label.add_theme_color_override("font_color", COLOR_YELLOW)
-		column.add_child(energy_label)
-	else:
-		var teammate := Label.new()
-		teammate.text = "에너지  3 / 3\n상태  카드 선택 중"
-		teammate.add_theme_font_size_override("font_size", 18)
-		teammate.add_theme_color_override("font_color", COLOR_TEXT)
-		column.add_child(teammate)
+	var detail := Label.new()
+	detail.add_theme_font_size_override("font_size", 18)
+	detail.add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
+	column.add_child(detail)
+	player_detail_labels.append(detail)
 	return panel
 
 func _build_enemy_panel() -> Control:
@@ -343,12 +342,19 @@ func _request_bluetooth_permissions() -> void:
 
 func _start_bluetooth_host() -> void:
 	if bluetooth_transport.start_host(SERVICE_UUID):
+		local_slot = 0
+		cooperative_session = CooperativeSession.new(CooperativeSession.Role.HOST, bluetooth_transport, engine, state)
+		cooperative_session.session_error.connect(_on_session_error)
 		overlay_subtitle.text = "참가자를 기다리는 중… 상대 기기에서 이 기기를 선택하세요."
 	else:
 		overlay_subtitle.text = "방을 만들지 못했습니다. 권한과 Bluetooth 상태를 확인하세요."
 
 func _join_bluetooth_host(address: String) -> void:
 	if bluetooth_transport.connect_to(address, SERVICE_UUID):
+		local_slot = 1
+		cooperative_session = CooperativeSession.new(CooperativeSession.Role.GUEST, bluetooth_transport)
+		cooperative_session.snapshot_received.connect(_on_remote_snapshot)
+		cooperative_session.session_error.connect(_on_session_error)
 		overlay_subtitle.text = "호스트에 연결하는 중…"
 	else:
 		overlay_subtitle.text = "연결을 시작하지 못했습니다. 페어링 상태를 확인하세요."
@@ -380,6 +386,17 @@ func _connection_status_text() -> String:
 		"connected": return "●  CONNECTED"
 		"error": return "●  CONNECTION ERROR"
 		_: return "●  BLUETOOTH READY" if bluetooth_transport.is_available() else "●  BLUETOOTH OFF"
+
+func _on_remote_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
+	state = CombatState.from_snapshot(snapshot)
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	log_label.text = "호스트 상태 동기화 완료 · TURN %d" % state.turn
+	_refresh()
+
+func _on_session_error(code: String, detail: String) -> void:
+	log_label.text = "연결 오류 · %s (%s)" % [code, detail]
 
 func _show_map() -> void:
 	_clear_overlay()
@@ -480,11 +497,12 @@ func _refresh() -> void:
 	enemy_health_label.text = "%d / %d" % [enemy.health, enemy.max_health]
 	enemy_health_bar.max_value = enemy.max_health
 	enemy_health_bar.value = enemy.health
-	energy_label.text = "에너지  %d / %d   ·   방어 %d" % [
-		state.players[0].energy - selected_energy,
-		state.players[0].max_energy,
-		state.players[0].block,
-	]
+	for slot in state.players.size():
+		var player: CombatantState = state.players[slot]
+		var remaining := player.energy - selected_energy if slot == local_slot else player.energy
+		var readiness := "준비 완료" if player.ready else ("내 캐릭터" if slot == local_slot else "선택 중")
+		player_detail_labels[slot].text = "에너지  %d / %d   ·   방어 %d\n상태  %s" % [remaining, player.max_energy, player.block, readiness]
+		player_detail_labels[slot].add_theme_color_override("font_color", COLOR_YELLOW if slot == local_slot else COLOR_TEXT)
 	status_label.text = "선택 카드 %d장  ·  예상 비용 %d  ·  지원 카드 최대 1장" % [selected_plays.size(), selected_energy]
 	ready_button.disabled = selected_plays.is_empty() or state.phase != CombatState.Phase.PLANNING
 	_rebuild_hand()
@@ -493,8 +511,8 @@ func _refresh() -> void:
 func _rebuild_hand() -> void:
 	for child in hand_container.get_children():
 		child.queue_free()
-	for hand_index in state.players[0].hand.size():
-		var card_id: StringName = state.players[0].hand[hand_index]
+	for hand_index in state.players[local_slot].hand.size():
+		var card_id: StringName = state.players[local_slot].hand[hand_index]
 		var card: CardData = catalog[card_id]
 		var card_button := Button.new()
 		card_button.custom_minimum_size = Vector2(186, 126)
@@ -525,7 +543,7 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 		log_label.text = "%s 선택 취소" % card.display_name
 		_refresh()
 		return
-	if selected_energy + card.energy_cost > state.players[0].energy:
+	if selected_energy + card.energy_cost > state.players[local_slot].energy:
 		log_label.text = "에너지가 부족합니다."
 		return
 	if card.is_support():
@@ -541,21 +559,24 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 	_refresh()
 
 func _on_ready_pressed() -> void:
-	var local_result := engine.submit_plan(state, 0, selected_plays)
+	var previous_turn := state.turn
+	var local_result := cooperative_session.submit_plan(local_slot, selected_plays) if cooperative_session != null else engine.submit_plan(state, local_slot, selected_plays)
 	if not local_result.ok:
-		log_label.text = "행동을 확정할 수 없습니다: %s" % local_result.error
+		log_label.text = "행동을 확정할 수 없습니다: %s" % local_result.get("error", "unknown")
 		return
-	var teammate_card: StringName = &"engineer_bolt" if state.players[1].hand.has(&"engineer_bolt") else state.players[1].hand[0]
-	var teammate_play: Dictionary = {"card_id": teammate_card, "target": 0}
-	var teammate_result := engine.submit_plan(state, 1, [teammate_play])
-	if not teammate_result.ok:
-		log_label.text = "동료 행동 오류: %s" % teammate_result.error
-		return
-	engine.resolve_if_ready(state)
+	if cooperative_session == null:
+		var teammate_slot := 1 - local_slot
+		var teammate_card: StringName = &"engineer_bolt" if state.players[teammate_slot].hand.has(&"engineer_bolt") else state.players[teammate_slot].hand[0]
+		var teammate_result := engine.submit_plan(state, teammate_slot, [{"card_id": teammate_card, "target": 0}])
+		if not teammate_result.ok:
+			log_label.text = "동료 행동 오류: %s" % teammate_result.error
+			return
+		engine.resolve_if_ready(state)
 	selected_hand_indices.clear()
 	selected_plays.clear()
 	selected_energy = 0
-	log_label.text = "턴 해결 완료 · 상태 해시 %s…" % StateHasher.hash_snapshot(state.to_snapshot()).left(8)
+	var result_label := "상대 준비 대기 중" if cooperative_session != null and state.turn == previous_turn else "턴 해결 완료"
+	log_label.text = "%s · 상태 해시 %s…" % [result_label, StateHasher.hash_snapshot(state.to_snapshot()).left(8)]
 	_refresh()
 
 func _effect_summary(card: CardData) -> String:
