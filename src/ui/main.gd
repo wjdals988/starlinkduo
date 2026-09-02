@@ -129,7 +129,7 @@ func _build_top_bar() -> Control:
 	for item in [["플레이", _show_mode], ["편성", _show_roster], ["항로", _show_map], ["보상", _show_reward], ["상점", _show_shop], ["아이템", _show_consumables]]:
 		var navigation := Button.new()
 		navigation.text = item[0]
-		navigation.custom_minimum_size = Vector2(88, 42)
+		navigation.custom_minimum_size = Vector2(88, 48)
 		navigation.add_theme_font_size_override("font_size", 16)
 		navigation.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL_SOFT, 12))
 		navigation.pressed.connect(item[1])
