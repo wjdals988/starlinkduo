@@ -61,6 +61,18 @@ func select_route(slot: int, node_id: String) -> Dictionary:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("route_select", {"slot": slot, "node_id": node_id})}
 
+func submit_event_choice(slot: int, choice_index: int) -> Dictionary:
+	if role == Role.HOST:
+		if run_coordinator == null:
+			return _error("host_run_missing")
+		var result := run_coordinator.submit_event_choice(slot, choice_index)
+		if result.ok:
+			_publish_run_snapshot("event_choice")
+		return result
+	if slot != 1:
+		return _error("guest_slot_forbidden")
+	return {"ok": _send("event_choice", {"slot": slot, "choice": choice_index})}
+
 func replace_combat_state(next_state: CombatState) -> void:
 	combat_state = next_state
 	if role == Role.HOST:
@@ -96,6 +108,15 @@ func _on_transport_state_changed(next_state: String) -> void:
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"event_choice":
+			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
+				_send_rejection("guest_event_forbidden")
+				return
+			var event_result := run_coordinator.submit_event_choice(1, int(payload.get("choice", -1)))
+			if not event_result.ok:
+				_send_rejection(event_result.error)
+				return
+			_publish_run_snapshot("event_choice")
 		"route_select":
 			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
 				_send_rejection("guest_route_forbidden")

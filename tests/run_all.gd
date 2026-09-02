@@ -21,8 +21,9 @@ func _init() -> void:
 	_test_route_selection_and_key_gate()
 	_test_run_combat_completion_gate()
 	_test_boss_and_run_completion_flow()
+	_test_collaborative_event_resolution()
 	if failures.is_empty():
-		print("PASS: 18 core, content, run, boss, encounter, route, save, economy, protocol, and transport tests")
+		print("PASS: 19 core, content, run, event, boss, encounter, route, save, economy, protocol, and transport tests")
 		quit(0)
 	else:
 		for failure in failures:
@@ -217,6 +218,14 @@ func _test_host_authoritative_route_session() -> void:
 	guest.poll()
 	_expect(run.pending_routes.get(1, "") == guest_node, "host validates and records guest route")
 	_expect(not received_runs.is_empty() and received_runs[-1].pending_routes.get("1", "") == guest_node, "guest receives authoritative run snapshot")
+	run.pending_routes = {0: "event-a", 1: "rest-b"}
+	coordinator.begin_event(["event", "rest"])
+	_expect(guest.submit_event_choice(1, 1).ok, "guest sends event choice without resolving locally")
+	host.poll()
+	_expect(run.pending_event.votes.size() == 1, "host records guest event vote")
+	_expect(host.submit_event_choice(0, 0).ready, "host vote resolves two-player event")
+	guest.poll()
+	_expect(received_runs[-1].pending_event.is_empty() and received_runs[-1].last_event_result.outcome == "compromise", "guest receives resolved event result in run snapshot")
 	host_store.clear()
 
 func _test_session_rejects_stale_sequence() -> void:
@@ -337,6 +346,23 @@ func _test_boss_and_run_completion_flow() -> void:
 	true_boss.phase = CombatState.Phase.WON
 	var finish := coordinator.complete_boss_combat(true_boss, true)
 	_expect(finish.run_completed and run.phase == "completed" and run.checkpoint_reason == "run_completed", "true boss victory completes and saves the run")
+	store.clear()
+
+func _test_collaborative_event_resolution() -> void:
+	var store := RunSaveStore.new("user://event_flow_test.json")
+	store.clear()
+	var coordinator := RunCoordinator.new(FullCardCatalog.build(), store)
+	var run := coordinator.start_new(5150)
+	run.pending_routes = {0: "event-a", 1: "rest-b"}
+	run.team_health = 50
+	var started := coordinator.resolve_noncombat(["event", "rest"])
+	_expect(started.event_pending and run.step == 0 and run.team_health == 62, "event node waits after applying paired rest benefit")
+	var first := coordinator.submit_event_choice(0, 0)
+	_expect(first.ok and not first.ready and run.step == 0, "first event vote waits for teammate")
+	_expect(not coordinator.submit_event_choice(0, 1).ok, "player cannot vote twice in one event")
+	var second := coordinator.submit_event_choice(1, 1)
+	_expect(second.ok and second.ready and second.outcome == "compromise", "different choices resolve to deterministic compromise")
+	_expect(run.step == 1 and run.gold == [108, 108] and run.pending_event.is_empty(), "resolved event rewards both players and advances once")
 	store.clear()
 
 func _expect(condition: bool, label: String) -> void:

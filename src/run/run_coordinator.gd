@@ -81,7 +81,7 @@ func buy_consumable(player_slot: int, entry: Dictionary) -> bool:
 func choose_route(player_slot: int, node_id: String) -> Dictionary:
 	if not _valid_slot(player_slot):
 		return {"ok": false, "error": "invalid_slot"}
-	if run.phase != "traversal" or run.step < 0 or run.step >= MapGenerator.TRAVERSAL_STEPS:
+	if run.phase != "traversal" or not run.pending_event.is_empty() or run.step < 0 or run.step >= MapGenerator.TRAVERSAL_STEPS:
 		return {"ok": false, "error": "route_unavailable"}
 	var step_data: Dictionary = run.map.stages[run.stage - 1].steps[run.step]
 	if step_data.kind == "common":
@@ -122,6 +122,9 @@ func complete_combat(combat: CombatState, completed_types: Array[String]) -> Dic
 		run.pending_card_rewards[slot] = true
 	_set_shop_access(completed_types)
 	var node_summary := _apply_noncombat_effects(completed_types)
+	if completed_types.has("event"):
+		var event_result := begin_event(completed_types)
+		return {"ok": event_result.ok, "gold": gold_reward, "summary": node_summary, "event_pending": event_result.ok}
 	var result := complete_routes(completed_types)
 	if result.ok:
 		checkpoint("combat_reward")
@@ -161,8 +164,61 @@ func resolve_noncombat(completed_types: Array[String]) -> Dictionary:
 		return {"ok": false, "error": "routes_not_ready"}
 	_set_shop_access(completed_types)
 	var summary := _apply_noncombat_effects(completed_types)
+	if completed_types.has("event"):
+		var event_result := begin_event(completed_types)
+		return {"ok": event_result.ok, "summary": summary, "event_pending": event_result.ok}
 	var result := complete_routes(completed_types)
 	return {"ok": result.ok, "summary": summary}
+
+func begin_event(route_types: Array[String]) -> Dictionary:
+	if run.pending_routes.size() != 2 or not route_types.has("event") or not run.pending_event.is_empty():
+		return {"ok": false, "error": "event_unavailable"}
+	var events: Array = RunContentCatalog.build().events
+	var event: Dictionary = events[absi(_content_seed(0, 73)) % events.size()]
+	run.pending_event = {
+		"id": String(event.id),
+		"route_types": route_types.duplicate(),
+		"votes": {},
+	}
+	run.last_event_result.clear()
+	checkpoint("event_started")
+	return {"ok": true, "event": event}
+
+func current_event() -> Dictionary:
+	if run == null or run.pending_event.is_empty():
+		return {}
+	for event in RunContentCatalog.build().events:
+		if String(event.id) == String(run.pending_event.id):
+			return event
+	return {}
+
+func submit_event_choice(player_slot: int, choice_index: int) -> Dictionary:
+	if not _valid_slot(player_slot) or run.pending_event.is_empty():
+		return {"ok": false, "error": "event_unavailable"}
+	var event := current_event()
+	if event.is_empty() or choice_index < 0 or choice_index >= event.choices.size():
+		return {"ok": false, "error": "invalid_event_choice"}
+	var votes: Dictionary = run.pending_event.votes
+	if votes.has(player_slot) or votes.has(str(player_slot)):
+		return {"ok": false, "error": "choice_already_submitted"}
+	votes[player_slot] = choice_index
+	run.pending_event.votes = votes
+	if votes.size() < 2:
+		checkpoint("event_vote")
+		return {"ok": true, "ready": false}
+	var first := int(votes.get(0, votes.get("0", -1)))
+	var second := int(votes.get(1, votes.get("1", -1)))
+	var result := _resolve_event(event, first, second)
+	var route_types: Array[String] = []
+	for node_type in run.pending_event.route_types:
+		route_types.append(String(node_type))
+	run.last_event_result = result.duplicate(true)
+	run.pending_event.clear()
+	var completion := complete_routes(route_types)
+	checkpoint("event_resolved")
+	result["ok"] = completion.ok
+	result["ready"] = true
+	return result
 
 func selected_route_types() -> Array[String]:
 	var result: Array[String] = []
@@ -214,13 +270,33 @@ func _apply_noncombat_effects(completed_types: Array[String]) -> Array[String]:
 				var before := run.team_health
 				run.team_health = mini(run.team_max_health, run.team_health + 12)
 				summary.append("팀 내구도 +%d" % (run.team_health - before))
-			"event":
-				for slot in 2:
-					run.gold[slot] += 12
-				summary.append("각 플레이어 +12 C")
+			"event": pass
 			"shop": summary.append("상점 방문 가능")
 	return summary
 
 func _set_shop_access(completed_types: Array[String]) -> void:
 	for slot in 2:
 		run.shop_open[slot] = slot < completed_types.size() and completed_types[slot] == "shop"
+
+func _resolve_event(event: Dictionary, first: int, second: int) -> Dictionary:
+	if first != second:
+		for slot in 2:
+			run.gold[slot] += 8
+		return {"outcome": "compromise", "summary": "의견이 달라 안전한 절충안을 택했습니다 · 각 +8 C"}
+	if first == 1:
+		var before := run.team_health
+		run.team_health = mini(run.team_max_health, run.team_health + 4)
+		return {"outcome": "safe", "summary": "안전을 우선했습니다 · 팀 내구도 +%d" % (run.team_health - before)}
+	var risk := int(event.choices[0].risk)
+	var roll := absi(_content_seed(0, 211)) % 100
+	var success_threshold := 65 - risk * 10
+	if roll < success_threshold:
+		var reward := 24 + risk * 8
+		for slot in 2:
+			run.gold[slot] += reward
+		return {"outcome": "success", "summary": "위험한 조사 성공 · 각 +%d C" % reward, "roll": roll}
+	var damage := risk * 6
+	run.team_health = maxi(1, run.team_health - damage)
+	for slot in 2:
+		run.gold[slot] += 10
+	return {"outcome": "setback", "summary": "조사 중 사고 발생 · 팀 내구도 -%d · 각 +10 C" % damage, "roll": roll}

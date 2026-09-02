@@ -17,6 +17,8 @@ var map: Dictionary = {}
 var pending_routes: Dictionary = {}
 var pending_card_rewards: Array[bool] = [false, false]
 var shop_open: Array[bool] = [false, false]
+var pending_event: Dictionary = {}
+var last_event_result: Dictionary = {}
 var checkpoint_reason := "new_run"
 var phase := "traversal"
 
@@ -49,6 +51,8 @@ func to_snapshot() -> Dictionary:
 		"pending_routes": pending_routes.duplicate(true),
 		"pending_card_rewards": pending_card_rewards.duplicate(),
 		"shop_open": shop_open.duplicate(),
+		"pending_event": pending_event.duplicate(true),
+		"last_event_result": last_event_result.duplicate(true),
 		"checkpoint_reason": checkpoint_reason,
 		"phase": phase,
 	}
@@ -70,6 +74,8 @@ static func from_snapshot(snapshot: Dictionary) -> RunState:
 	result.pending_routes = _normalize_json_numbers(snapshot.get("pending_routes", {}))
 	result.pending_card_rewards.assign(snapshot.get("pending_card_rewards", [false, false]))
 	result.shop_open.assign(snapshot.get("shop_open", [false, false]))
+	result.pending_event = _normalize_json_numbers(snapshot.get("pending_event", {}))
+	result.last_event_result = _normalize_json_numbers(snapshot.get("last_event_result", {}))
 	result.checkpoint_reason = snapshot.checkpoint_reason
 	result.phase = String(snapshot.get("phase", "traversal"))
 	return result

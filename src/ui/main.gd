@@ -58,6 +58,8 @@ func _ready() -> void:
 	state = engine.create_demo_combat()
 	_build_interface()
 	_refresh()
+	if not run_coordinator.run.pending_event.is_empty():
+		_show_event.call_deferred()
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), COLOR_VOID)
@@ -409,7 +411,14 @@ func _on_remote_snapshot(snapshot: Dictionary, _state_hash: String) -> void:
 	_refresh()
 
 func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
+	var was_event_pending := not run_coordinator.run.pending_event.is_empty()
 	run_coordinator.run = RunState.from_snapshot(snapshot)
+	if not run_coordinator.run.pending_event.is_empty():
+		_show_event()
+		return
+	if was_event_pending and not run_coordinator.run.last_event_result.is_empty():
+		_show_route_result("이벤트 해결", String(run_coordinator.run.last_event_result.summary))
+		return
 	if overlay.visible and overlay_title.text.begins_with("항로 선택"):
 		_show_map()
 
@@ -503,7 +512,10 @@ func _enter_selected_routes() -> void:
 		if cooperative_session != null:
 			cooperative_session.publish_run_state("node_resolved")
 		state.team_health = run_coordinator.run.team_health
-		_show_route_result("노드 해결 완료", " · ".join(result.summary))
+		if result.get("event_pending", false):
+			_show_event()
+		else:
+			_show_route_result("노드 해결 완료", " · ".join(result.summary))
 
 func _start_boss_encounter(true_boss: bool) -> void:
 	if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST:
@@ -532,7 +544,9 @@ func _finish_route_combat() -> void:
 		return
 	if cooperative_session != null:
 		cooperative_session.publish_run_state("combat_reward")
-	if result.get("run_completed", false):
+	if result.get("event_pending", false):
+		_show_event()
+	elif result.get("run_completed", false):
 		_show_run_outcome(true)
 	elif result.get("run_failed", false):
 		_show_run_outcome(false)
@@ -543,6 +557,43 @@ func _finish_route_combat() -> void:
 	else:
 		_show_route_result("항로 전투 승리", "각 플레이어 +%d C · 진행 상황 자동 저장" % result.gold)
 	active_route_types.clear()
+
+func _show_event() -> void:
+	_clear_overlay()
+	var event := run_coordinator.current_event()
+	if event.is_empty():
+		overlay_title.text = "이벤트 오류"
+		overlay_subtitle.text = "이벤트 데이터를 불러오지 못했습니다."
+		return
+	overlay_title.text = String(event.name)
+	overlay_subtitle.text = String(event.body)
+	var votes: Dictionary = run_coordinator.run.pending_event.votes
+	for slot in 2:
+		var voted := votes.has(slot) or votes.has(str(slot))
+		_add_connection_notice("P%d  %s" % [slot + 1, "선택 완료" if voted else "선택 중"], COLOR_BLUE if slot == 0 else COLOR_ORANGE)
+	var local_voted := votes.has(local_slot) or votes.has(str(local_slot))
+	if local_voted:
+		_add_connection_notice("동료의 결정을 기다리고 있습니다.", COLOR_MUTED)
+		return
+	for choice_index in event.choices.size():
+		var choice: Dictionary = event.choices[choice_index]
+		var risk_text := "안전" if int(choice.risk) == 0 else "위험도 %d" % int(choice.risk)
+		_add_connection_action("%s  ·  %s" % [choice.label, risk_text], _choose_event.bind(choice_index), COLOR_CYAN if choice_index == 0 else COLOR_BLUE)
+
+func _choose_event(choice_index: int) -> void:
+	var result := cooperative_session.submit_event_choice(local_slot, choice_index) if cooperative_session != null else run_coordinator.submit_event_choice(local_slot, choice_index)
+	if not result.ok:
+		overlay_subtitle.text = "선택을 확정하지 못했습니다: %s" % result.get("error", "unknown")
+		return
+	if cooperative_session == null and not result.get("ready", false):
+		result = run_coordinator.submit_event_choice(1 - local_slot, choice_index)
+	if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST:
+		cooperative_session.publish_run_state("event_choice")
+	state.team_health = run_coordinator.run.team_health
+	if result.get("ready", false):
+		_show_route_result("이벤트 해결", String(result.summary))
+	else:
+		_show_event()
 
 func _show_route_result(title: String, summary: String) -> void:
 	_clear_overlay()
