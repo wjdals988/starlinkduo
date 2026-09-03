@@ -570,17 +570,28 @@ func _show_settings() -> void:
 	_add_setting_toggle("모션 줄이기", "카드 선택 전환을 즉시 표시해 화면 움직임을 줄입니다.", reduce_motion, _set_reduce_motion)
 	_add_setting_toggle("진동 피드백", "카드를 선택하거나 취소할 때 짧은 햅틱 신호를 사용합니다.", haptics_enabled, _set_haptics)
 	_add_setting_toggle("선택 카드 발광", "선택 카드의 강조 테두리 강도를 높입니다.", glow_enabled, _set_glow)
-	_info_panel("글자 크기 연동", "Android 시스템 %d%% 감지 · 게임 HUD %d%% 적용" % [roundi(system_font_scale * 100.0), roundi(_effective_text_scale() * 100.0)], COLOR_CYAN)
-	_info_panel("접근성 기준", "주요 터치 영역 48dp 이상 · 상태를 색상과 문자로 함께 표시 · 모달 외부 전투 입력 차단", COLOR_CYAN)
+	_add_settings_note("글자 크기 연동", "Android 시스템 %d%% 감지 · 게임 HUD %d%% 적용" % [roundi(system_font_scale * 100.0), roundi(_effective_text_scale() * 100.0)], COLOR_CYAN)
+	_add_settings_note("접근성 기준", "주요 터치 영역 48dp 이상 · 상태를 색상과 문자로 함께 표시 · 모달 외부 전투 입력 차단", COLOR_BLUE)
 
 func _add_setting_toggle(title: String, description: String, value: bool, callback: Callable) -> void:
 	var row := PanelContainer.new()
 	row.custom_minimum_size.y = 78
-	row.add_theme_stylebox_override("panel", _panel_style(COLOR_PANEL, 16, Color("#8297bb55"), 1, 16, 10))
+	row.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 16, 10))
 	var content := HBoxContainer.new()
+	content.add_theme_constant_override("separation", 14)
 	row.add_child(content)
+	var marker := Label.new()
+	marker.text = "●"
+	marker.custom_minimum_size.x = 18
+	marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	marker.add_theme_font_size_override("font_size", 11)
+	marker.add_theme_color_override("font_color", COLOR_CYAN if value else COLOR_MUTED)
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(marker)
 	var copy := Label.new()
 	copy.text = "%s\n%s" % [title, description]
+	copy.accessibility_name = title
+	copy.accessibility_description = description
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy.add_theme_font_size_override("font_size", 15)
 	copy.add_theme_color_override("font_color", COLOR_TEXT)
@@ -596,6 +607,29 @@ func _add_setting_toggle(title: String, description: String, value: bool, callba
 		callback.call(enabled)
 	)
 	content.add_child(toggle)
+	overlay_content.add_child(row)
+
+func _add_settings_note(title: String, body: String, accent: Color) -> void:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = 58
+	row.add_theme_constant_override("separation", 14)
+	var marker := Label.new()
+	marker.text = "◆"
+	marker.custom_minimum_size.x = 18
+	marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	marker.add_theme_font_size_override("font_size", 11)
+	marker.add_theme_color_override("font_color", accent)
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(marker)
+	var copy := Label.new()
+	copy.text = "%s\n%s" % [title, body]
+	copy.accessibility_name = title
+	copy.accessibility_description = body
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	copy.add_theme_font_size_override("font_size", 14)
+	copy.add_theme_color_override("font_color", COLOR_TEXT)
+	row.add_child(copy)
 	overlay_content.add_child(row)
 
 func _set_reduce_motion(enabled: bool) -> void:
