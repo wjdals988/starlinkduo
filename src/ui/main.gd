@@ -1928,12 +1928,56 @@ func _show_route_result(title: String, summary: String) -> void:
 	_set_overlay_compact(true)
 	overlay_title.text = title
 	overlay_subtitle.text = summary
-	var victory := Label.new()
-	victory.text = "✦"
-	victory.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	victory.add_theme_font_size_override("font_size", 72)
-	victory.add_theme_color_override("font_color", COLOR_YELLOW)
-	overlay_content.add_child(victory)
+	var outcome_text := "CHECKPOINT · 진행 저장 완료"
+	var outcome_description := "항로 결과가 저장되었습니다."
+	var outcome_color := COLOR_CYAN
+	if title == "이벤트 해결":
+		match String(run_coordinator.run.last_event_result.get("outcome", "")):
+			"success":
+				outcome_text = "합의 성공 · 위험 조사 완료"
+				outcome_description = "두 플레이어의 합의 선택이 성공 판정되었습니다."
+				outcome_color = COLOR_YELLOW
+			"safe":
+				outcome_text = "안전 합의 · 내구도 회복"
+				outcome_description = "두 플레이어가 안전 선택에 합의했습니다."
+				outcome_color = COLOR_CYAN
+			"compromise":
+				outcome_text = "선택 불일치 · 절충안 적용"
+				outcome_description = "두 플레이어의 선택이 달라 절충 결과가 적용되었습니다."
+				outcome_color = Color("#bc8cff")
+			"setback":
+				outcome_text = "합의 실행 · 조사 중 사고"
+				outcome_description = "두 플레이어의 합의 선택이 실패 판정되었습니다."
+				outcome_color = COLOR_RED
+	var verdict := PanelContainer.new()
+	verdict.custom_minimum_size.y = 76
+	verdict.add_theme_stylebox_override("panel", _panel_style(Color(outcome_color, 0.13), 18, Color.TRANSPARENT, 0, 20, 10))
+	var verdict_row := HBoxContainer.new()
+	verdict_row.add_theme_constant_override("separation", 20)
+	var p1_status := Label.new()
+	p1_status.text = "P1  ✓ 판정 완료"
+	p1_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	p1_status.add_theme_font_size_override("font_size", 15)
+	p1_status.add_theme_color_override("font_color", COLOR_BLUE)
+	verdict_row.add_child(p1_status)
+	var outcome_label := Label.new()
+	outcome_label.text = outcome_text
+	outcome_label.accessibility_name = outcome_text
+	outcome_label.accessibility_description = outcome_description
+	outcome_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	outcome_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	outcome_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outcome_label.add_theme_font_size_override("font_size", 24)
+	outcome_label.add_theme_color_override("font_color", outcome_color)
+	verdict_row.add_child(outcome_label)
+	var p2_status := Label.new()
+	p2_status.text = "P2  ✓ 판정 완료"
+	p2_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	p2_status.add_theme_font_size_override("font_size", 15)
+	p2_status.add_theme_color_override("font_color", COLOR_ORANGE)
+	verdict_row.add_child(p2_status)
+	verdict.add_child(verdict_row)
+	overlay_content.add_child(verdict)
 	var metrics := HBoxContainer.new()
 	metrics.add_theme_constant_override("separation", 12)
 	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], COLOR_CYAN))
@@ -1941,7 +1985,7 @@ func _show_route_result(title: String, summary: String) -> void:
 	metrics.add_child(_metric_card("P1 크레딧", "%d C" % run_coordinator.run.gold[0], COLOR_BLUE))
 	metrics.add_child(_metric_card("P2 크레딧", "%d C" % run_coordinator.run.gold[1], COLOR_ORANGE))
 	overlay_content.add_child(metrics)
-	_info_panel("체크포인트 저장 완료", "승리 결과와 두 플레이어의 진행 상황을 이 기기에 저장했습니다.", COLOR_CYAN)
+	_info_panel("체크포인트 저장 완료", "결과와 두 플레이어의 진행 상황을 이 기기에 저장했습니다.", COLOR_CYAN)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
 	if run_coordinator.run.pending_card_rewards[local_slot]:
@@ -2064,6 +2108,7 @@ func _claim_reward(card_id: StringName) -> void:
 	if run_coordinator.claim_card(local_slot, card_id):
 		var card: CardData = catalog[card_id]
 		_clear_overlay()
+		_set_overlay_compact(true)
 		overlay_title.text = "카드 획득 완료"
 		overlay_subtitle.text = "%s이(가) P%d 덱과 체크포인트에 반영됐습니다." % [card.display_name, local_slot + 1]
 		var row := HBoxContainer.new()

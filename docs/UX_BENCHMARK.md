@@ -49,9 +49,9 @@
 | 항로 | Slay the Spire, Across the Obelisk | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
 | 전투 | Slay the Spire, Into the Breach | PASS | Galaxy 2대 동시 확정·말풍선 검증 |
 | 현재 덱 | Slay the Spire | PARTIAL | 카드 역할 분포와 드로우 상태 시각화 |
-| 이벤트 | Across the Obelisk | PARTIAL | 양쪽 선택과 합의 결과의 장면형 연출 |
-| 보상 | Slay the Spire, Balatro | PARTIAL | 획득 전후 비교와 희귀도 연출 강화 |
-| 상점·카드 제거 | Balatro | PARTIAL | 재화 변화와 품절 상태의 공간적 피드백 강화 |
+| 이벤트 | Across the Obelisk | PASS | Galaxy 2대 선택 불일치 결과 검증 |
+| 보상 | Slay the Spire, Balatro | PASS | Galaxy 실기기 큰 글씨 확인 |
+| 상점·카드 제거 | Balatro | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
 | 결과·보스 브리핑 | Hades | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 설정 | Android Accessibility | PASS | 실제 Galaxy TalkBack 순서 확인 |
 
@@ -83,6 +83,14 @@
 - 실제 `event_01` 규칙은 성공률 55%, 성공 시 각 +32 C, 실패 시 팀 내구도 -6, 안전 선택 시 팀 내구도 최대 +4다. 선택 버튼에도 같은 수치를 반복해 선택 지점에서 판단 근거가 사라지지 않게 했다.
 - emulator-5556에서 이벤트 화면의 제목·안내·닫기·선택 2개, 총 5개 접근성 항목과 2400×1080 무잘림 배치를 `artifacts/emulator-5556-benchmarked-event-v1.png` 및 동명 XML로 확인했다. 캡처용 체크포인트 적용 전 저장은 별도 백업 후 원상 복구했다.
 - 런 종료 화면에는 기존 기록 지표 아래 `최종 덱 확인`과 `메인 화면으로`를 추가했다. 새 런 시작은 기존 체크포인트를 교체하므로 결과 화면에서 즉시 실행하지 않고 메인 흐름에 남겨 둔다.
+
+### 2026-09-03 선택 이후 결과 피드백 검증
+
+- 이벤트 해결 화면의 72px 장식용 별을 제거하고 `P1 판정 완료–실제 결과–P2 판정 완료` 행으로 교체했다. 저장된 결과값에 따라 성공·안전·절충·사고를 서로 다른 문구와 색으로 표시하며, 안전 선택은 팀 내구도 `66/70 → 70/70`로 적용됐다.
+- emulator-5556에서 안전 선택을 실제 실행한 뒤 `안전 합의 · 내구도 회복`, 항로 `4/8`, 양쪽 `202 C`와 다음 항로 CTA가 한 화면에 유지되는지 `artifacts/emulator-5556-benchmarked-event-result-v1.png`와 동명 XML로 확인했다. 접근성 항목은 9개다.
+- 보상 카드 `성간 갑주`를 실제 선택해 덱이 `10장 → 11장`으로 증가하고 나머지 2개 선택지가 사라지는지 확인했다. 1차 완료 화면에서 발견한 하단 공백은 모달을 636px 규격에서 540px 고밀도 규격으로 줄였고, 최종 증적은 `artifacts/emulator-5556-benchmarked-reward-acquired-v2.png`와 동명 XML이다.
+- 상점에서 `위협 유도`를 `75 C`에 구매해 보유 크레딧이 `202 C → 127 C`로 감소하고 해당 카드만 `판매 완료`·비활성으로 전환되는지 `artifacts/emulator-5556-benchmarked-shop-purchased-v1.png`와 동명 XML로 확인했다. 다른 카드 4장과 정비 서비스의 구매 가능 상태는 유지됐다.
+- 세 검증은 기존 체크포인트의 별도 사본에서 수행했으며, 종료 후 원본 SHA-256 `928c0a239b98714bcc73ee55d0a92678ebff8405c10250534e24723be6eb34ee`로 복원했다.
 
 ### 2026-09-03 보스 브리핑·런 결과 장면 개편
 
