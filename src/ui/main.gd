@@ -1648,6 +1648,31 @@ func _show_map() -> void:
 	route_metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_BLUE))
 	route_metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
 	overlay_content.add_child(route_metrics)
+	var progress_rail := HBoxContainer.new()
+	progress_rail.alignment = BoxContainer.ALIGNMENT_CENTER
+	progress_rail.add_theme_constant_override("separation", 5)
+	for route_index in 8:
+		var node_state := "완료" if route_index < run.step else ("현재" if route_index == run.step else "예정")
+		var node_accent := COLOR_CYAN if route_index == run.step else (COLOR_BLUE if route_index < run.step else COLOR_MUTED)
+		var node := PanelContainer.new()
+		node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		node.custom_minimum_size.y = 42
+		node.add_theme_stylebox_override("panel", _panel_style(Color(node_accent, 0.18 if route_index == run.step else 0.07), 12, Color.TRANSPARENT, 0, 8, 4))
+		var node_label := Label.new()
+		node_label.text = "%s %02d" % ["▶" if route_index == run.step else ("✓" if route_index < run.step else "·"), route_index + 1]
+		node_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		node_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		node_label.add_theme_font_size_override("font_size", 14)
+		node_label.add_theme_color_override("font_color", node_accent)
+		node_label.accessibility_name = "항로 %d %s" % [route_index + 1, node_state]
+		node.add_child(node_label)
+		progress_rail.add_child(node)
+		if route_index < 7:
+			var connector := Label.new()
+			connector.text = "—"
+			connector.add_theme_color_override("font_color", COLOR_BLUE if route_index < run.step else Color("#4d5a71"))
+			progress_rail.add_child(connector)
+	overlay_content.add_child(progress_rail)
 	if run.pending_routes.size() == 2:
 		_add_connection_action("선택 완료 · 노드 진입", _enter_selected_routes, COLOR_CYAN)
 	var stage: Dictionary = run.map.stages[run.stage - 1]
@@ -1656,9 +1681,11 @@ func _show_map() -> void:
 		row.add_theme_constant_override("separation", 10)
 		var marker := Label.new()
 		marker.custom_minimum_size.x = 106
-		marker.text = "%s  %02d" % ["▶ 현재" if int(step_data.index) == run.step else "· 구간", int(step_data.index) + 1]
+		var step_index := int(step_data.index)
+		var marker_state := "✓ 완료" if step_index < run.step else ("▶ 현재" if step_index == run.step else "· 예정")
+		marker.text = "%s  %02d" % [marker_state, step_index + 1]
 		marker.add_theme_font_size_override("font_size", 15)
-		marker.add_theme_color_override("font_color", COLOR_CYAN if int(step_data.index) == run.step else COLOR_MUTED)
+		marker.add_theme_color_override("font_color", COLOR_CYAN if step_index == run.step else (COLOR_BLUE if step_index < run.step else COLOR_MUTED))
 		row.add_child(marker)
 		var is_current := int(step_data.index) == run.step
 		if step_data.kind == "common":

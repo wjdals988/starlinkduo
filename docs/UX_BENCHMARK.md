@@ -46,7 +46,7 @@
 | Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 2대의 역할·준비 상태 시각 검증 |
 | 함선 메뉴 | MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 편성 | Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
-| 항로 | Slay the Spire, Across the Obelisk | PARTIAL | 분기 위험·보상 미리보기의 지도형 공간화 |
+| 항로 | Slay the Spire, Across the Obelisk | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
 | 전투 | Slay the Spire, Into the Breach | PASS | Galaxy 2대 동시 확정·말풍선 검증 |
 | 현재 덱 | Slay the Spire | PARTIAL | 카드 역할 분포와 드로우 상태 시각화 |
 | 이벤트 | Across the Obelisk | PARTIAL | 양쪽 선택과 합의 결과의 장면형 연출 |
@@ -104,6 +104,13 @@
 - 모든 선택 카드의 상시 외곽선을 제거하고 현재 P1/P2 캐릭터만 직업색 내부 배경으로 표시한다. 왼쪽 현재 편성에는 초상·직업·실제 덱 장수를 함께 노출해 선택 후보와 결과를 같은 행에서 비교한다.
 - 첫 항로 검증 사본에서 4직업×2슬롯 선택지와 제목·안내·닫기, 총 11개 접근성 항목이 2400×1080 화면에 잘림 없이 유지되는지 `artifacts/emulator-5556-benchmarked-roster-v3.png`와 동명 XML로 확인했다.
 - P1을 수호자에서 해커로 실제 변경해 초상·보라색 선택면·시작 덱이 갱신되고, P1 해커와 P2 기술자가 각각 현재 선택으로 고정되는지 `artifacts/emulator-5556-benchmarked-roster-selected-v1.png`와 동명 XML로 검증했다. 이후 원래 체크포인트 체크섬으로 복원했다.
+
+### 2026-09-03 8구간 항로 진행축 개편
+
+- Slay the Spire와 Across the Obelisk의 전체 경로 위치 우선 원칙을 적용해 세로 목록 위에 8구간 연결 진행축을 추가했다. 완료는 파란색 `✓`, 현재는 청록색 `▶`, 예정은 저채도 `·`로 색상 외 기호와 문자 상태를 함께 사용한다.
+- 세부 항로 행도 `구간` 단일 표기에서 `완료/현재/예정`으로 통일해 진행축과 목록을 오갈 때 상태 해석이 바뀌지 않는다. 상시 외곽선은 추가하지 않고 현재 노드만 내부 청록 색면으로 강조한다.
+- 기존 체크포인트의 1~3구간 완료, 4구간 현재, 5~8구간 예정과 팀 내구도 66/70·열쇠 0/3을 `artifacts/emulator-5556-benchmarked-route-v2.png` 및 동명 XML에서 확인했다. 제목·안내·닫기·지표 3개·진행 노드 8개·진입 CTA를 포함한 접근성 항목은 총 15개다.
+- `선택 완료 · 노드 진입`을 실제 실행해 STAGE 1-04 드론 정예 2, 적 내구도 96/96, 예고 피해 15 전투로 전환되는 것을 다시 검증했다.
 
 ## 근거 링크
 
