@@ -75,6 +75,9 @@ var interaction_locked := false
 var battle_fx_layer: Control
 var enemy_art: Control
 var enemy_aura: Control
+var chat_bubbles: Array[PanelContainer] = []
+var chat_bubble_labels: Array[Label] = []
+var chat_bubble_tokens := [0, 0]
 
 func _ready() -> void:
 	get_tree().set_auto_accept_quit(false)
@@ -180,6 +183,7 @@ func _build_interface() -> void:
 	root.add_child(_build_battlefield())
 	root.add_child(_build_hand_section())
 	_build_battle_fx_layer()
+	_build_chat_bubbles()
 	_build_overlay()
 
 func _build_battle_fx_layer() -> void:
@@ -190,6 +194,30 @@ func _build_battle_fx_layer() -> void:
 	battle_fx_layer.accessibility_live = AccessibilityServer.LIVE_ASSERTIVE
 	battle_fx_layer.visible = false
 	add_child(battle_fx_layer)
+
+func _build_chat_bubbles() -> void:
+	for side in 2:
+		var bubble := PanelContainer.new()
+		bubble.set_anchor(SIDE_LEFT, 0.06 if side == 0 else 0.68)
+		bubble.set_anchor(SIDE_RIGHT, 0.32 if side == 0 else 0.94)
+		bubble.set_anchor(SIDE_TOP, 0.39)
+		bubble.set_anchor(SIDE_BOTTOM, 0.49)
+		bubble.add_theme_stylebox_override("panel", _panel_style(Color("#153a46f2") if side == 0 else Color("#432c20f2"), 22, Color.TRANSPARENT, 0, 18, 10))
+		bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bubble.z_index = 12
+		bubble.visible = false
+		var label := Label.new()
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.add_theme_font_size_override("font_size", 16)
+		label.add_theme_color_override("font_color", Color.WHITE)
+		label.accessibility_name = "내 메시지" if side == 0 else "상대 메시지"
+		label.accessibility_live = AccessibilityServer.LIVE_POLITE
+		bubble.add_child(label)
+		add_child(bubble)
+		chat_bubbles.append(bubble)
+		chat_bubble_labels.append(label)
 
 func _build_top_bar() -> Control:
 	var panel := PanelContainer.new()
@@ -233,15 +261,6 @@ func _build_top_bar() -> Control:
 	deck_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 12))
 	deck_button.pressed.connect(_show_current_deck)
 	row.add_child(deck_button)
-	var chat_button := Button.new()
-	chat_button.text = "◌  메시지"
-	_set_button_accessibility(chat_button, "빠른 메시지", "미리 정한 짧은 메시지를 동료에게 보냅니다")
-	chat_button.custom_minimum_size = Vector2(102, 48)
-	chat_button.add_theme_stylebox_override("normal", _panel_style(Color("#14213ddf"), 12, Color.TRANSPARENT, 0, 12, 8))
-	chat_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 12, Color.TRANSPARENT, 0, 12, 8))
-	chat_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 12))
-	chat_button.pressed.connect(_show_quick_chat)
-	row.add_child(chat_button)
 	var menu := Button.new()
 	menu.text = "☰  메뉴"
 	_set_button_accessibility(menu, "함선 메뉴", "원정 정보, 편성, 항로, 보상, 상점, 설정을 엽니다")
@@ -299,11 +318,11 @@ func _show_hub() -> void:
 	grid.add_theme_constant_override("v_separation", 12)
 	overlay_content.add_child(grid)
 	for item in [["◈  플레이 모드", _show_mode, COLOR_CYAN], ["◆  대원 편성", _show_roster, COLOR_BLUE], ["⌁  항로 지도", _show_map, COLOR_CYAN], ["✦  전투 보상", _show_reward, COLOR_YELLOW], ["▣  궤도 상점", _show_shop, COLOR_ORANGE], ["＋  유물 · 소비품", _show_consumables, Color("#bc8cff")]]:
-		var button := _action_button(item[0], item[1], item[2])
+		var button := _menu_link_button(item[0], item[1], item[2])
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
-	_add_connection_action("⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED)
-	_add_connection_action("←  메인 화면으로 돌아가기", _confirm_return_to_main, COLOR_RED)
+	overlay_content.add_child(_menu_link_button("⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED))
+	overlay_content.add_child(_menu_link_button("←  메인 화면으로 돌아가기", _confirm_return_to_main, COLOR_RED))
 
 func _confirm_return_to_main() -> void:
 	_clear_overlay()
@@ -383,13 +402,39 @@ func _send_quick_chat(macro_id: String) -> void:
 	var text := _macro_chat_text(macro_id)
 	if cooperative_session == null:
 		log_label.text = "빠른 메시지 · %s" % text
-		overlay_subtitle.text = "싱글플레이에서는 전송되지 않고 전투 알림으로만 표시됩니다."
+		_close_overlay()
+		_show_chat_bubble.call_deferred(text, true)
 		return
 	var result := cooperative_session.send_macro_chat(macro_id)
-	overlay_subtitle.text = "전송 완료 · %s" % text if result.ok else "전송 실패 · 연결 상태를 확인하세요."
+	if result.ok:
+		_close_overlay()
+	else:
+		overlay_subtitle.text = "전송 실패 · 연결 상태를 확인하세요."
 
 func _on_macro_chat_received(from_slot: int, macro_id: String) -> void:
-	log_label.text = "P%d 메시지 · %s" % [from_slot + 1, _macro_chat_text(macro_id)]
+	var text := _macro_chat_text(macro_id)
+	var is_local := from_slot == local_slot
+	log_label.text = "%s 메시지 · %s" % ["내" if is_local else "상대", text]
+	_show_chat_bubble(text, is_local)
+
+func _show_chat_bubble(text: String, is_local: bool) -> void:
+	var index := 0 if is_local else 1
+	if chat_bubbles.size() <= index:
+		return
+	chat_bubble_tokens[index] = int(chat_bubble_tokens[index]) + 1
+	var token := int(chat_bubble_tokens[index])
+	var bubble := chat_bubbles[index]
+	chat_bubble_labels[index].text = "%s  %s" % [text, "◢" if is_local else "◣"]
+	bubble.modulate = Color.WHITE
+	bubble.show()
+	await get_tree().create_timer(4.5).timeout
+	if token != int(chat_bubble_tokens[index]) or not is_instance_valid(bubble):
+		return
+	var tween := bubble.create_tween()
+	tween.tween_property(bubble, "modulate:a", 0.0, 0.25)
+	await tween.finished
+	if token == int(chat_bubble_tokens[index]):
+		bubble.hide()
 
 func _macro_chat_text(macro_id: String) -> String:
 	return {"ready": "준비됐어요", "wait": "잠시만요", "attack": "공격에 집중해요", "defend": "방어가 필요해요", "nice": "좋아요!", "sorry": "미안해요"}.get(macro_id, macro_id)
@@ -682,6 +727,17 @@ func _build_hand_section() -> Control:
 	status_row.add_child(status_label)
 
 	ready_button = Button.new()
+	var chat_button := Button.new()
+	chat_button.text = "◌"
+	chat_button.tooltip_text = "빠른 메시지"
+	_set_button_accessibility(chat_button, "빠른 메시지", "미리 정한 짧은 메시지를 동료에게 보냅니다")
+	chat_button.custom_minimum_size = Vector2(48, 48)
+	chat_button.add_theme_font_size_override("font_size", 24)
+	chat_button.add_theme_stylebox_override("normal", _panel_style(Color("#17233de8"), 24, Color.TRANSPARENT, 0, 8, 6))
+	chat_button.add_theme_stylebox_override("hover", _panel_style(Color(COLOR_CYAN, 0.22), 24, Color.TRANSPARENT, 0, 8, 6))
+	chat_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 24))
+	chat_button.pressed.connect(_show_quick_chat)
+	status_row.add_child(chat_button)
 	energy_label = Label.new()
 	energy_label.accessibility_name = "남은 에너지"
 	energy_label.custom_minimum_size = Vector2(82, 48)
@@ -1039,6 +1095,21 @@ func _enter_started_game(mode: String) -> void:
 func _add_connection_action(text: String, callback: Callable, accent: Color) -> Button:
 	var button := _action_button(text, callback, accent, 64)
 	overlay_content.add_child(button)
+	return button
+
+func _menu_link_button(text: String, callback: Callable, accent: Color) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size.y = 58
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", COLOR_TEXT)
+	button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 14, Color.TRANSPARENT, 0, 20, 8))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.16), 14, Color.TRANSPARENT, 0, 20, 8))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.24), 14, Color.TRANSPARENT, 0, 20, 8))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 14))
+	_set_button_accessibility(button, _first_text_line(text), _remaining_text_lines(text))
+	button.pressed.connect(callback)
 	return button
 
 func _action_button(text: String, callback: Callable, accent: Color, height: int = 64) -> Button:
@@ -2249,7 +2320,7 @@ func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPA
 	style.corner_radius_top_right = radius
 	style.corner_radius_bottom_left = radius
 	style.corner_radius_bottom_right = radius
-	var subtle_border := mini(border_width, 1)
+	var subtle_border := 0
 	style.border_width_left = subtle_border
 	style.border_width_top = subtle_border
 	style.border_width_right = subtle_border
