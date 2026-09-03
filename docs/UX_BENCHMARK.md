@@ -56,7 +56,7 @@
 | 소비 아이템·제한 안내 | Slay the Spire | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 빠른 메시지·메인 복귀 확인 | Android Accessibility | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 결과·보스 브리핑 | Hades | PASS | Galaxy 실기기 큰 글씨 확인 |
-| 결투 결과 | MARVEL SNAP | PARTIAL | 최신 결투 종료 체크포인트 실기 캡처 |
+| 결투 결과 | MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 설정 | Android Accessibility | PASS | 실제 Galaxy TalkBack 순서 확인 |
 
 ### 2026-09-03 대기실·편성·항로 1차 개편
@@ -129,7 +129,8 @@
 - 앱은 `active_duel.json`을 시작 시 복원했지만 메인에서 해당 상태로 진입할 경로가 없었다. 저장된 결투가 있을 때만 `결투 이어하기` 또는 `최근 결투 결과 보기`를 추가하고 턴·양쪽 내구도 또는 승자·종료 턴을 함께 표시한다.
 - 조건부 CTA가 생긴 메인은 540px에서 설정이 첫 화면 아래로 밀리는 문제를 실기 캡처에서 발견했다. 저장 결투가 있을 때만 636px로 확장해 최근 결과·싱글플레이·Bluetooth·설정 4개 행동을 모두 노출하며, 저장 결투가 없으면 기존 540px를 유지한다. 최종 2400×1080 배치는 `artifacts/emulator-5556-main-resume-duel-v2.png`와 동명 XML로 확인했다.
 - `tests/generate_duel_visual_fixture.gd`는 실제 `DuelEngine`과 `DuelSaveStore`를 거쳐 P2 승리·8턴 종료 상태를 생성한다. 이를 앱 저장소에 임시 적용해 메인 결과 CTA부터 결투 종료 화면까지 복원 경로를 검증하고, 종료 후 테스트 파일을 제거했다.
-- 결투 결과에는 빠져 있던 `P2 VICTORY` 접근성 표식을 추가하고 결과 지표 3개·재대결·협동 전환을 같은 화면에 배치했다. 480px 검증본 `artifacts/emulator-5556-duel-outcome-v4.png`에서는 접근성 항목 10개와 CTA 무잘림을 확인했지만 우측 스크롤바가 남아 최종 코드는 500px로 조정했다. 이후 emulator-5556 Surface 캡처가 검은 화면만 반환하고 emulator-5554는 다른 앱이 사용 중이어서 최종 500px 정적 증적은 확보하지 못했으므로 결투 결과 판정은 `PARTIAL`로 유지한다.
+- 결투 결과에는 빠져 있던 `P2 VICTORY` 접근성 표식을 추가하고 결과 지표 3개·재대결·협동 전환을 같은 화면에 배치했다. 480px 검증본에서 남은 우측 스크롤바를 제거하기 위해 최종 높이를 500px로 조정했고, `artifacts/emulator-5556-duel-outcome-v5.png`와 동명 XML에서 접근성 항목 10개와 전체 CTA 무잘림을 확인했다.
+- `협동 원정으로 전환`은 디스크 저장뿐 아니라 메모리의 결투 상태도 제거한다. 결과 화면에서 협동 전환 후 함선 메뉴를 거쳐 메인으로 복귀했을 때 조건부 결과 CTA가 사라지고 기본 접근성 항목 5개만 남는지 `artifacts/emulator-5556-main-after-duel-clear-v1.png`와 동명 XML로 검증했으며, 앱 저장소의 `active_duel` 파일 부재도 확인했다.
 
 ### 2026-09-03 보스 브리핑·런 결과 장면 개편
 

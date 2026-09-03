@@ -1061,6 +1061,8 @@ func _activate_mode(mode: String) -> void:
 		log_label.text = "2인 결투 시작 · 두 플레이어가 행동을 확정하면 동시에 해결됩니다."
 	else:
 		duel_save_store.clear()
+		duel_state = null
+		duel_engine = null
 		state = engine.create_demo_combat() if not active_route_combat else state
 		log_label.text = "협동 원정 모드 · 공동 체력과 항로 진행을 공유합니다."
 	selected_hand_indices.clear()
