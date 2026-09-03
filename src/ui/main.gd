@@ -1325,6 +1325,11 @@ func _show_multiplayer_lobby() -> void:
 	_info_panel("대기실 상태", "%s\n역할 · %s\n호환 코드 · %s" % [_connection_status_text(), "방장" if is_host else "참가자", GameCompatibility.code()], COLOR_CYAN if verified else COLOR_BLUE)
 	if cooperative_session != null and cooperative_session.handshake_failed:
 		_info_panel("입장 실패", "두 기기에 같은 버전의 APK를 설치한 뒤 다시 연결하세요.", COLOR_RED)
+		_add_connection_action("↻  연결 다시 설정", _reset_multiplayer_connection, COLOR_RED)
+		return
+	if transport_state == "error":
+		_info_panel("연결 오류", "Bluetooth 상태와 페어링을 확인한 뒤 방 만들기 또는 참가를 다시 선택하세요.", COLOR_RED)
+		_add_connection_action("↻  연결 다시 설정", _reset_multiplayer_connection, COLOR_RED)
 		return
 	if not verified:
 		_info_panel("대기 중", "방장은 이 화면에서 기다리고, 참가자는 방장의 기기를 선택해야 합니다. 연결 중에는 앱을 닫지 마세요.", COLOR_YELLOW)
@@ -1342,6 +1347,16 @@ func _show_multiplayer_lobby() -> void:
 		modes.add_child(duel)
 	else:
 		_info_panel("방장 선택 대기", "방장이 협동 원정 또는 2인 결투를 선택하면 두 기기가 함께 게임으로 이동합니다.", COLOR_ORANGE)
+
+func _reset_multiplayer_connection() -> void:
+	if cooperative_session != null:
+		cooperative_session.close()
+		cooperative_session = null
+	elif bluetooth_transport != null:
+		bluetooth_transport.close()
+	in_multiplayer_lobby = false
+	lobby_signature = ""
+	_show_connection()
 
 func _start_multiplayer_game(mode: String) -> void:
 	if cooperative_session == null:
