@@ -400,6 +400,21 @@ func _show_current_deck() -> void:
 	var counts := {}
 	for card_id in deck:
 		counts[StringName(card_id)] = int(counts.get(StringName(card_id), 0)) + 1
+	var total_cost := 0
+	var exclusive_count := 0
+	for card_id in deck:
+		if catalog.has(StringName(card_id)):
+			var deck_card: CardData = catalog[StringName(card_id)]
+			total_cost += deck_card.energy_cost
+			if deck_card.owner_scope != CardData.Scope.NEUTRAL:
+				exclusive_count += 1
+	var deck_metrics := HBoxContainer.new()
+	deck_metrics.add_theme_constant_override("separation", 12)
+	deck_metrics.add_child(_metric_card("총 카드", "%d장" % deck.size(), COLOR_CYAN))
+	deck_metrics.add_child(_metric_card("고유 카드", "%d종" % counts.size(), COLOR_BLUE))
+	deck_metrics.add_child(_metric_card("평균 비용", "%.1f" % (float(total_cost) / maxf(float(deck.size()), 1.0)), COLOR_YELLOW))
+	deck_metrics.add_child(_metric_card("전용 / 공용", "%d / %d" % [exclusive_count, deck.size() - exclusive_count], COLOR_ORANGE))
+	overlay_content.add_child(deck_metrics)
 	var ids := counts.keys()
 	ids.sort_custom(func(a: Variant, b: Variant) -> bool: return String(a) < String(b))
 	var grid := GridContainer.new()
@@ -1764,6 +1779,7 @@ func _choose_event(choice_index: int) -> void:
 
 func _show_route_result(title: String, summary: String) -> void:
 	_clear_overlay()
+	_set_overlay_compact(true)
 	overlay_title.text = title
 	overlay_subtitle.text = summary
 	var victory := Label.new()
@@ -1793,6 +1809,7 @@ func _show_route_result(title: String, summary: String) -> void:
 
 func _show_run_outcome(victory: bool) -> void:
 	_clear_overlay()
+	_set_overlay_compact(true)
 	overlay_title.text = "런 완주 · 두 별의 승리" if victory else "런 종료 · 열쇠 부족"
 	overlay_subtitle.text = "별을 삼키는 자를 격파했습니다. 최종 기록이 저장되었습니다." if victory else "3개 열쇠를 모두 확보하지 못해 진 최종 보스에 진입할 수 없습니다."
 	var outcome_color := COLOR_CYAN if victory else COLOR_RED
@@ -1833,8 +1850,15 @@ func _show_reward() -> void:
 	overlay_subtitle.text = "전용 카드 2장 + 공용 카드 1장 · 선택 즉시 덱과 체크포인트에 반영"
 	var rewards := run_coordinator.current_card_reward(local_slot)
 	if rewards.is_empty():
+		_set_overlay_compact(true, true)
 		overlay_subtitle.text = "받을 수 있는 카드 보상이 없습니다. 전투에서 승리하면 보상이 해금됩니다."
-		_info_panel("보상 대기 중", "전투 승리 후 전용 카드 2장과 공용 카드 1장 중 하나를 선택합니다. 보상은 플레이어별로 전투당 한 번만 획득할 수 있습니다.", COLOR_YELLOW)
+		var reward_metrics := HBoxContainer.new()
+		reward_metrics.add_theme_constant_override("separation", 12)
+		reward_metrics.add_child(_metric_card("현재 덱", "%d장" % run_coordinator.run.decks[local_slot].size(), COLOR_BLUE))
+		reward_metrics.add_child(_metric_card("다음 보상", "전용 2 + 공용 1", COLOR_YELLOW))
+		reward_metrics.add_child(_metric_card("해금 조건", "전투 승리", COLOR_CYAN))
+		overlay_content.add_child(reward_metrics)
+		_info_panel("다음 보상 흐름", "전투에서 승리한 뒤 3장 중 1장을 선택합니다. 선택 즉시 덱과 체크포인트에 반영되고 나머지 카드는 사라집니다.", COLOR_YELLOW)
 		return
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -1878,11 +1902,24 @@ func _show_shop() -> void:
 	_clear_overlay()
 	overlay_title.text = "궤도 정거장 상점"
 	if not run_coordinator.run.shop_open[local_slot]:
+		_set_overlay_compact(true, true)
 		overlay_subtitle.text = "현재 항로에서는 상점을 이용할 수 없습니다."
-		_info_panel("상점 접근 조건", "항로에서 상점 노드를 선택한 플레이어만 구매할 수 있습니다. 크레딧과 구매 결과는 플레이어별로 저장됩니다.", COLOR_ORANGE)
+		var shop_metrics := HBoxContainer.new()
+		shop_metrics.add_theme_constant_override("separation", 12)
+		shop_metrics.add_child(_metric_card("보유 크레딧", "%d C" % run_coordinator.run.gold[local_slot], COLOR_ORANGE))
+		shop_metrics.add_child(_metric_card("현재 덱", "%d장" % run_coordinator.run.decks[local_slot].size(), COLOR_BLUE))
+		shop_metrics.add_child(_metric_card("접근 조건", "상점 노드", COLOR_CYAN))
+		overlay_content.add_child(shop_metrics)
+		_info_panel("상점 접근 조건", "항로에서 상점 노드를 선택한 플레이어만 구매할 수 있습니다. 다음 항로에서 ▣ 상점 아이콘을 선택하세요.", COLOR_ORANGE)
 		return
 	var inventory := run_coordinator.current_shop(local_slot)
 	overlay_subtitle.text = "P%d 보유 크레딧 %d · 공용 카드는 희소성 때문에 10%% 할증" % [local_slot + 1, run_coordinator.run.gold[local_slot]]
+	var wallet := HBoxContainer.new()
+	wallet.add_theme_constant_override("separation", 12)
+	wallet.add_child(_metric_card("보유 크레딧", "%d C" % run_coordinator.run.gold[local_slot], COLOR_ORANGE))
+	wallet.add_child(_metric_card("카드 재고", "%d장" % inventory.cards.size(), COLOR_CYAN))
+	wallet.add_child(_metric_card("정비 비용", "%d C" % inventory.remove_card_cost, Color("#bc8cff")))
+	overlay_content.add_child(wallet)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)

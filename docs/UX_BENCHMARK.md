@@ -62,6 +62,13 @@
 - Slay the Spire와 Into the Breach의 사전 판단 원칙을 적용해 항로 진입 전에 현재 구간·팀 내구도·열쇠 지표와 `위험 보통/높음/매우 높음`, 예상 보상을 문자로 제공한다. 정적 증적은 `artifacts/emulator-5556-benchmarked-route-v1.png`와 동명 접근성 트리다.
 - Bluetooth 역할 선택과 실제 대기실 양쪽 상태는 에뮬레이터 한 대만으로 완료 판정하지 않으며 Galaxy 2대 검증 전까지 `PARTIAL`을 유지한다.
 
+### 2026-09-03 덱·보상·상점·결과 1차 개편
+
+- Slay the Spire의 덱 판단 구조를 적용해 카드 목록 위에 총 카드·고유 카드·평균 에너지 비용·전용/공용 장수를 고정했다. P1 기본 덱은 10장·7종·평균 1.1·전용/공용 5/5로 `artifacts/emulator-5556-benchmarked-deck-v1.png`와 동명 접근성 트리에서 확인했다.
+- 보상 대기 화면은 빈 설명문 대신 현재 덱 10장, 다음 제안 전용 2+공용 1, 해금 조건 전투 승리를 3개 지표로 표시한다. 증적은 `artifacts/emulator-5556-benchmarked-reward-empty-v1.png`다.
+- 상점 잠금 화면은 보유 크레딧·현재 덱·접근 조건을 먼저 표시하고 다음 항로의 상점 아이콘을 안내한다. 증적은 `artifacts/emulator-5556-benchmarked-shop-locked-v1.png`다.
+- 실제 카드 3택과 열린 상점 구매 화면은 기존 저장 상태에서 진입할 수 없어 이번 정적 검증 범위에 포함하지 않았다. 해당 두 상태와 이벤트·결과 장면은 계속 `PARTIAL`로 판정한다.
+
 ## 근거 링크
 
 - Across the Obelisk: https://store.steampowered.com/app/1385380/Across_the_Obelisk/
