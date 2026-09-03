@@ -1722,20 +1722,27 @@ func _show_event() -> void:
 		overlay_subtitle.text = "이벤트 데이터를 불러오지 못했습니다."
 		return
 	overlay_title.text = String(event.name)
-	overlay_subtitle.text = String(event.body)
+	overlay_subtitle.text = "협동 조우 · 두 대원의 선택을 비교한 뒤 결과를 함께 적용합니다."
 	var votes: Dictionary = run_coordinator.run.pending_event.votes
 	var event_header := HBoxContainer.new()
 	event_header.add_theme_constant_override("separation", 14)
-	var emblem := PanelContainer.new()
-	emblem.custom_minimum_size = Vector2(120, 100)
-	emblem.add_theme_stylebox_override("panel", _panel_style(Color("#8e66ff22"), 22, Color("#bc8cff"), 2, 10, 8))
+	var emblem := VBoxContainer.new()
+	emblem.custom_minimum_size = Vector2(156, 100)
+	emblem.add_theme_constant_override("separation", 2)
 	var emblem_label := Label.new()
-	emblem_label.text = "?"
+	emblem_label.text = "◌  SIGNAL"
 	emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emblem_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	emblem_label.add_theme_font_size_override("font_size", 54)
+	emblem_label.add_theme_font_size_override("font_size", 22)
 	emblem_label.add_theme_color_override("font_color", Color("#bc8cff"))
 	emblem.add_child(emblem_label)
+	var event_index := int(String(event.id).trim_prefix("event_"))
+	var signal_id := Label.new()
+	signal_id.text = "ANOMALY %02d" % event_index
+	signal_id.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	signal_id.add_theme_font_size_override("font_size", 13)
+	signal_id.add_theme_color_override("font_color", COLOR_MUTED)
+	emblem.add_child(signal_id)
 	event_header.add_child(emblem)
 	var status_column := VBoxContainer.new()
 	status_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1745,6 +1752,15 @@ func _show_event() -> void:
 		var voted := votes.has(slot) or votes.has(str(slot))
 		status_column.add_child(_status_chip("P%d  ·  %s" % [slot + 1, "선택 완료" if voted else "선택 중"], COLOR_BLUE if slot == 0 else COLOR_ORANGE))
 	overlay_content.add_child(event_header)
+	var risky_choice: Dictionary = event.choices[0]
+	var risk := int(risky_choice.risk)
+	var event_metrics := HBoxContainer.new()
+	event_metrics.add_theme_constant_override("separation", 12)
+	event_metrics.add_child(_metric_card("조사 성공률", "%d%%" % (65 - risk * 10), Color("#bc8cff")))
+	event_metrics.add_child(_metric_card("성공 보상", "각 +%d C" % (24 + risk * 8), COLOR_YELLOW))
+	event_metrics.add_child(_metric_card("실패 위험", "내구도 -%d" % (risk * 6), COLOR_RED))
+	event_metrics.add_child(_metric_card("안전 선택", "내구도 +4", COLOR_CYAN))
+	overlay_content.add_child(event_metrics)
 	var local_voted := votes.has(local_slot) or votes.has(str(local_slot))
 	if local_voted:
 		_info_panel("내 선택 확정", "동료의 결정을 기다리고 있습니다. 두 선택이 다르면 이벤트 규칙에 따라 절충 결과가 적용됩니다.", COLOR_CYAN)
@@ -1754,9 +1770,9 @@ func _show_event() -> void:
 	overlay_content.add_child(choices)
 	for choice_index in event.choices.size():
 		var choice: Dictionary = event.choices[choice_index]
-		var risk := int(choice.risk)
-		var risk_text := "안전 선택\n결과 변동이 적습니다" if risk == 0 else "위험도 %d\n성공 시 더 큰 보상" % risk
-		var accent := COLOR_BLUE if risk == 0 else COLOR_YELLOW
+		var choice_risk := int(choice.risk)
+		var risk_text := "확정 효과 · 팀 내구도 최대 +4" if choice_risk == 0 else "%d%% 성공 · 각 +%d C / 실패 내구도 -%d" % [65 - choice_risk * 10, 24 + choice_risk * 8, choice_risk * 6]
+		var accent := COLOR_BLUE if choice_risk == 0 else COLOR_YELLOW
 		var choice_button := _action_button("%s\n\n%s" % [choice.label, risk_text], _choose_event.bind(choice_index), accent, 132)
 		choice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		choices.add_child(choice_button)
@@ -1826,6 +1842,15 @@ func _show_run_outcome(victory: bool) -> void:
 	metrics.add_child(_metric_card("도달 스테이지", "%d / 3" % run_coordinator.run.stage, COLOR_BLUE))
 	overlay_content.add_child(metrics)
 	_info_panel("원정 기록 저장됨", "완료된 런의 편성·덱·항로 결과를 로컬 체크포인트에 반영했습니다.", outcome_color)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var deck_button := _action_button("▤  최종 덱 확인", _show_current_deck, COLOR_BLUE, 64)
+	deck_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(deck_button)
+	var main_button := _action_button("←  메인 화면으로", _return_to_main_menu, COLOR_CYAN, 64)
+	main_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(main_button)
+	overlay_content.add_child(actions)
 
 func _metric_card(title: String, value: String, accent: Color) -> PanelContainer:
 	var panel := PanelContainer.new()
