@@ -1135,6 +1135,14 @@ func _set_overlay_balanced() -> void:
 	overlay_panel.offset_top = 72
 	overlay_panel.offset_bottom = -148
 
+func _set_overlay_tall() -> void:
+	if overlay_panel == null:
+		return
+	overlay_panel.offset_left = 150
+	overlay_panel.offset_right = -150
+	overlay_panel.offset_top = 54
+	overlay_panel.offset_bottom = -66
+
 func _set_main_menu_visual(enabled: bool) -> void:
 	if overlay_panel == null or overlay_scrim == null or main_menu_backdrop == null or main_menu_shade == null:
 		return
@@ -2010,6 +2018,7 @@ func _finish_route_combat() -> void:
 
 func _show_event() -> void:
 	_clear_overlay()
+	_set_overlay_tall()
 	var event := run_coordinator.current_event()
 	if event.is_empty():
 		overlay_title.text = "이벤트 오류"
