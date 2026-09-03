@@ -1502,7 +1502,8 @@ func _show_roster() -> void:
 		row.add_theme_constant_override("separation", 10)
 		var identity := PanelContainer.new()
 		identity.custom_minimum_size = Vector2(190, 100)
-		identity.add_theme_stylebox_override("panel", _panel_style(Color("#111a31"), 16, COLOR_BLUE if slot == 0 else COLOR_ORANGE, 2, 8, 6))
+		var slot_accent := COLOR_BLUE if slot == 0 else COLOR_ORANGE
+		identity.add_theme_stylebox_override("panel", _panel_style(Color(slot_accent, 0.12), 16, Color.TRANSPARENT, 0, 8, 6))
 		var identity_row := HBoxContainer.new()
 		identity.add_child(identity_row)
 		var portrait := TextureRect.new()
@@ -1513,7 +1514,7 @@ func _show_roster() -> void:
 		identity_row.add_child(portrait)
 		var slot_label := Label.new()
 		slot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot_label.text = "P%d\n%s" % [slot + 1, _character_name(run_coordinator.run.characters[slot])]
+		slot_label.text = "P%d\n%s\n덱 %d장" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), run_coordinator.run.decks[slot].size()]
 		slot_label.add_theme_font_size_override("font_size", 17)
 		slot_label.add_theme_color_override("font_color", COLOR_BLUE if slot == 0 else COLOR_ORANGE)
 		identity_row.add_child(slot_label)
@@ -1522,16 +1523,16 @@ func _show_roster() -> void:
 		for character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
 			var button := Button.new()
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			button.custom_minimum_size.y = 112
-			button.text = "%s\n%s" % [_character_name(character_id), _character_role(character_id)]
+			button.custom_minimum_size.y = 118
+			button.text = "%s\n%s\n%s" % [_character_name(character_id), _character_role(character_id), _starter_deck_profile(character_id)]
 			button.icon = load(_character_portrait(character_id))
 			button.expand_icon = true
 			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			var is_current: bool = run_coordinator.run.characters[slot] == character_id
 			button.disabled = not selection_open or not can_edit or is_current or run_coordinator.run.characters[1 - slot] == character_id
-			_set_button_accessibility(button, "P%d %s 선택" % [slot + 1, _character_name(character_id)], "%s. %s" % [_character_role(character_id), _disabled_character_reason(slot, character_id, selection_open, can_edit)])
-			button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 14, _character_color(character_id), 2, 8, 6))
-			button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, _character_color(character_id), 3, 8, 6))
+			_set_button_accessibility(button, "P%d %s 선택" % [slot + 1, _character_name(character_id)], "%s. %s. %s" % [_character_role(character_id), _starter_deck_profile(character_id), _disabled_character_reason(slot, character_id, selection_open, can_edit)])
+			button.add_theme_stylebox_override("normal", _panel_style(Color("#101725a8"), 14, Color.TRANSPARENT, 0, 8, 6))
+			button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, Color.TRANSPARENT, 0, 8, 6))
 			button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.22) if is_current else Color("#101725"), 14, Color.TRANSPARENT, 0, 8, 6))
 			button.add_theme_color_override("font_disabled_color", Color.WHITE if is_current else Color("#76839a"))
 			button.pressed.connect(_select_character.bind(slot, character_id))
@@ -1574,6 +1575,28 @@ func _refresh_character_identity() -> void:
 
 func _character_name(character_id: StringName) -> String:
 	return {&"guardian": "수호자", &"engineer": "기술자", &"hacker": "해커", &"assault": "강습병"}.get(character_id, String(character_id))
+
+func _starter_deck_profile(character_id: StringName) -> String:
+	var deck := run_coordinator.starter_deck_for(character_id)
+	var attack := 0
+	var defense := 0
+	var support := 0
+	for card_id in deck:
+		if not catalog.has(StringName(card_id)):
+			continue
+		var card: CardData = catalog[StringName(card_id)]
+		var kind := "support"
+		for candidate in ["damage", "block", "heal", "energy"]:
+			if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == candidate):
+				kind = candidate
+				break
+		if kind == "damage":
+			attack += 1
+		elif kind == "block":
+			defense += 1
+		else:
+			support += 1
+	return "시작덱 %d · 공%d 방%d 지%d" % [deck.size(), attack, defense, support]
 
 func _character_role(character_id: StringName) -> String:
 	return {

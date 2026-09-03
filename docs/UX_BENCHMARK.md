@@ -45,7 +45,7 @@
 | 메인 | Hades, Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
 | Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 2대의 역할·준비 상태 시각 검증 |
 | 함선 메뉴 | MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
-| 편성 | Legends of Runeterra | PARTIAL | 직업 선택 전후 캐릭터 아트 중심 비교 강화 |
+| 편성 | Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 항로 | Slay the Spire, Across the Obelisk | PARTIAL | 분기 위험·보상 미리보기의 지도형 공간화 |
 | 전투 | Slay the Spire, Into the Breach | PASS | Galaxy 2대 동시 확정·말풍선 검증 |
 | 현재 덱 | Slay the Spire | PARTIAL | 카드 역할 분포와 드로우 상태 시각화 |
@@ -97,6 +97,13 @@
 - 다음 행동은 대기 이벤트, 완료 결과, 보스 브리핑, 미수령 카드 보상, 열린 상점, 선택 완료 항로, 일반 항로 순으로 현재 런 상태에서 자동 결정한다. 보조 기능 6개는 2열 3행에서 3열 2행으로 바꿔 지표 행을 추가하고도 전체 메뉴 높이를 늘리지 않았다.
 - 현재 체크포인트에서는 `STAGE 1 · 구간 4/8`, 팀 내구도 66/70, 열쇠 0/3과 `선택 노드 진입`이 첫 행에 표시된다. `artifacts/emulator-5556-benchmarked-hub-v1.png`와 동명 XML에서 총 15개 접근성 항목과 모든 조작의 무잘림을 확인했다.
 - 새 1차 CTA를 실제 실행해 STAGE 1-04의 드론 정예 2 전투, 적 내구도 96/96, 예고 피해 15로 전환되는 것을 접근성 상태 트리에서 검증했다.
+
+### 2026-09-03 편성 전술 비교 개편
+
+- Legends of Runeterra의 챔피언 정체성과 덱 성향을 함께 고르는 원칙을 적용해 역할 설명 아래 시작 덱 8장의 공격·방어·지원 분포를 고정했다. 수호자는 공4·방4·지0, 기술자는 공3·방2·지3, 해커와 강습병은 공3·방4·지1이다.
+- 모든 선택 카드의 상시 외곽선을 제거하고 현재 P1/P2 캐릭터만 직업색 내부 배경으로 표시한다. 왼쪽 현재 편성에는 초상·직업·실제 덱 장수를 함께 노출해 선택 후보와 결과를 같은 행에서 비교한다.
+- 첫 항로 검증 사본에서 4직업×2슬롯 선택지와 제목·안내·닫기, 총 11개 접근성 항목이 2400×1080 화면에 잘림 없이 유지되는지 `artifacts/emulator-5556-benchmarked-roster-v3.png`와 동명 XML로 확인했다.
+- P1을 수호자에서 해커로 실제 변경해 초상·보라색 선택면·시작 덱이 갱신되고, P1 해커와 P2 기술자가 각각 현재 선택으로 고정되는지 `artifacts/emulator-5556-benchmarked-roster-selected-v1.png`와 동명 XML로 검증했다. 이후 원래 체크포인트 체크섬으로 복원했다.
 
 ## 근거 링크
 
