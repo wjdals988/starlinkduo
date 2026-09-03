@@ -404,6 +404,7 @@ func _show_hub() -> void:
 
 func _confirm_return_to_main() -> void:
 	_clear_overlay()
+	_set_overlay_minimal()
 	overlay_title.text = "메인 화면으로 돌아가기"
 	overlay_subtitle.text = "현재 진행은 마지막 체크포인트에 저장됩니다. Bluetooth 연결은 종료됩니다."
 	_info_panel("진행 중인 행동", "아직 확정하지 않은 카드 선택은 취소됩니다. 확정된 전투·보상·상점 결과는 유지됩니다.", COLOR_YELLOW)
@@ -509,6 +510,7 @@ func _show_current_deck() -> void:
 
 func _show_quick_chat() -> void:
 	_clear_overlay()
+	_set_overlay_compact(true, true)
 	overlay_title.text = "빠른 메시지"
 	overlay_subtitle.text = "짧은 전술 메시지를 선택하세요. 자유 입력 없이 안전한 문구만 전송합니다."
 	var grid := GridContainer.new()
@@ -1005,20 +1007,19 @@ func _build_overlay() -> void:
 
 func _show_mode() -> void:
 	_clear_overlay()
+	_set_overlay_compact(true, true)
 	overlay_title.text = "플레이 모드"
 	overlay_subtitle.text = "하나의 앱에서 협동 원정과 2인 결투를 선택합니다. Bluetooth 연결 시 호스트가 모드를 확정합니다."
 	var mode_row := HBoxContainer.new()
 	mode_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mode_row.add_theme_constant_override("separation", 18)
 	overlay_content.add_child(mode_row)
-	var expedition := _action_button("협동 원정\n\n두 대원이 하나의 항로를 완주합니다\n공동 체력 · 역할 조합 · 덱 성장\n\n3 STAGES  ·  45–60 MIN", _activate_mode.bind("cooperative"), COLOR_CYAN, 220)
+	var expedition := _action_button("협동 원정\n\n두 대원이 하나의 항로를 완주합니다\n공동 체력 · 역할 조합 · 덱 성장\n\n3 STAGES  ·  45–60 MIN", _activate_mode.bind("cooperative"), COLOR_CYAN, 170)
 	expedition.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mode_row.add_child(expedition)
-	var duel := _action_button("2인 결투\n\n같은 조건에서 전술을 겨룹니다\n개별 내구도 · 비공개 동시 계획\n\n36 HP  ·  FAIR DECK", _activate_mode.bind("duel"), COLOR_RED, 220)
+	var duel := _action_button("2인 결투\n\n같은 조건에서 전술을 겨룹니다\n개별 내구도 · 비공개 동시 계획\n\n36 HP  ·  FAIR DECK", _activate_mode.bind("duel"), COLOR_RED, 170)
 	duel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mode_row.add_child(duel)
-	var divider := HSeparator.new()
-	overlay_content.add_child(divider)
 	_add_connection_action("Bluetooth 연결 설정", _show_connection, COLOR_BLUE)
 
 func _activate_mode(mode: String) -> void:
@@ -1081,6 +1082,14 @@ func _set_overlay_compact(compact: bool, dense: bool = false) -> void:
 	else:
 		overlay_panel.offset_top = 92 if dense else 65
 		overlay_panel.offset_bottom = -218 if dense else -115
+
+func _set_overlay_minimal() -> void:
+	if overlay_panel == null:
+		return
+	overlay_panel.offset_left = 150
+	overlay_panel.offset_right = -150
+	overlay_panel.offset_top = 112
+	overlay_panel.offset_bottom = -300
 
 func _set_main_menu_visual(enabled: bool) -> void:
 	if overlay_panel == null or overlay_scrim == null or main_menu_backdrop == null or main_menu_shade == null:
@@ -2299,6 +2308,7 @@ func _show_remove_card_confirmation(deck_index: int, cost: int) -> void:
 	var card_id := StringName(run_coordinator.run.decks[local_slot][deck_index])
 	var card: CardData = catalog[card_id]
 	_clear_overlay()
+	_set_overlay_compact(true)
 	overlay_title.text = "카드 제거 확인"
 	overlay_subtitle.text = "%s을(를) 덱에서 영구 제거하고 %d C를 사용합니다." % [card.display_name, cost]
 	var row := HBoxContainer.new()
@@ -2326,6 +2336,7 @@ func _remove_shop_card(deck_index: int, cost: int) -> void:
 		overlay_subtitle.text = "카드를 제거하지 못했습니다. 크레딧과 덱 상태를 다시 확인해 주세요."
 		return
 	_clear_overlay()
+	_set_overlay_minimal()
 	overlay_title.text = "덱 정비 완료"
 	overlay_subtitle.text = "카드 1장을 제거했습니다. P%d 덱은 이제 %d장입니다." % [local_slot + 1, run_coordinator.run.decks[local_slot].size()]
 	_info_panel("체크포인트 저장 완료", "보유 크레딧 %d C · 이번 상점의 카드 제거 서비스를 사용했습니다." % run_coordinator.run.gold[local_slot], Color("#bc8cff"))
@@ -2336,6 +2347,7 @@ func _show_consumables() -> void:
 		_show_mode_locked_notice("아이템", "유물과 소비 아이템은 결투 밸런스에서 제외됩니다.")
 		return
 	_clear_overlay()
+	_set_overlay_compact(true)
 	overlay_title.text = "소비 아이템"
 	var relic_names: Array[String] = []
 	for relic_id in run_coordinator.run.relics[local_slot]:
@@ -2345,11 +2357,13 @@ func _show_consumables() -> void:
 				break
 	_add_connection_notice("활성 유물 %d개%s" % [relic_names.size(), " · " + ", ".join(relic_names) if not relic_names.is_empty() else ""], COLOR_CYAN)
 	if not active_route_combat or state.phase != CombatState.Phase.PLANNING:
+		_set_overlay_minimal()
 		overlay_subtitle.text = "소비 아이템은 항로 전투의 행동 선택 단계에서만 사용할 수 있습니다."
 		_info_panel("P%d 소지품 · %d / 3" % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()], "소비 아이템은 행동 선택 단계에서 사용하며 즉시 소모됩니다. 유물은 조건을 만족하면 자동으로 발동합니다.", Color("#bc8cff"))
 		return
 	overlay_subtitle.text = "P%d 소지품 %d / 3 · 사용 즉시 소모되고 체크포인트에 저장됩니다." % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()]
 	if run_coordinator.run.consumables[local_slot].is_empty():
+		_set_overlay_minimal()
 		_add_connection_notice("사용 가능한 소비 아이템이 없습니다.", COLOR_MUTED)
 		return
 	var content := RunContentCatalog.build()
@@ -2424,6 +2438,7 @@ func _route_chip(text: String, accent: Color) -> PanelContainer:
 
 func _show_mode_locked_notice(title: String, message: String) -> void:
 	_clear_overlay()
+	_set_overlay_minimal()
 	overlay_title.text = title
 	overlay_subtitle.text = message
 	_add_connection_action("플레이 모드로 이동", _show_mode, COLOR_CYAN)
@@ -2559,6 +2574,7 @@ func _show_duel_outcome() -> void:
 	if game_mode != "duel" or duel_state == null or duel_state.phase != DuelState.Phase.FINISHED:
 		return
 	_clear_overlay()
+	_set_overlay_compact(true, true)
 	overlay_title.text = "결투 종료 · 무승부" if duel_state.winner == -1 else "결투 종료 · P%d 승리" % (duel_state.winner + 1)
 	overlay_subtitle.text = "최종 내구도 P1 %d / %d · P2 %d / %d · %d턴" % [duel_state.health[0], duel_state.max_health[0], duel_state.health[1], duel_state.max_health[1], duel_state.turn]
 	var emblem := Label.new()

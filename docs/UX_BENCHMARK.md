@@ -45,6 +45,7 @@
 | 메인 | Hades, Legends of Runeterra | PASS | Galaxy TalkBack·큰 글씨 확인 |
 | Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 2대의 역할·준비 상태 시각 검증 |
 | 함선 메뉴 | MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
+| 플레이 모드 선택 | Hades, MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 편성 | Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 항로 | Slay the Spire, Across the Obelisk | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
 | 전투 | Slay the Spire, Into the Breach | PASS | Galaxy 2대 동시 확정·말풍선 검증 |
@@ -52,7 +53,10 @@
 | 이벤트 | Across the Obelisk | PASS | Galaxy 2대 선택 불일치 결과 검증 |
 | 보상 | Slay the Spire, Balatro | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 상점·카드 제거 | Balatro | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
+| 소비 아이템·제한 안내 | Slay the Spire | PASS | Galaxy 실기기 큰 글씨 확인 |
+| 빠른 메시지·메인 복귀 확인 | Android Accessibility | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 결과·보스 브리핑 | Hades | PASS | Galaxy 실기기 큰 글씨 확인 |
+| 결투 결과 | MARVEL SNAP | PARTIAL | 최신 결투 종료 체크포인트 실기 캡처 |
 | 설정 | Android Accessibility | PASS | 실제 Galaxy TalkBack 순서 확인 |
 
 ### 2026-09-03 대기실·편성·항로 1차 개편
@@ -112,6 +116,13 @@
 - 기존 설정은 상시 테두리 폭이 0이어도 네 개의 진한 색면과 하단 두 안내 패널이 연속되어 화면이 여섯 칸으로 분절돼 보였다. 설정 행 배경을 투명하게 바꾸고 켜짐 상태점·설명·토글만 남겼으며, 하단 안내는 색면 없는 다이아몬드 표식과 인라인 텍스트로 전환했다.
 - 큰 글씨 115%가 적용된 emulator-5556 2400×1080 화면에서 설정 4개와 안내 2개가 스크롤 없이 표시되고, 제목·설명·토글·안내를 포함한 접근성 조작 영역 13개가 노출되는지 `artifacts/emulator-5556-borderless-settings-v2.png`와 동명 XML로 확인했다.
 - 배경 박스를 제거해도 각 설정 행 높이 78px와 토글 최소 48px는 유지해 시각적 밀도 개선이 터치 면적 축소로 이어지지 않도록 했다.
+
+### 2026-09-03 보조 화면 공백 축소
+
+- 콘텐츠 양과 무관하게 636px 모달을 사용하던 보조 화면을 정보량에 따라 540px·410px·308px의 세 규격으로 분리했다. 기본 대비 각각 15.1%·35.5%·51.6% 낮은 높이다.
+- 플레이 모드 선택은 410px 규격으로 줄이고 선택 카드 높이를 220px에서 170px로 22.7% 축소했으며, 장식용 구분선을 제거했다. 제목·안내·닫기·모드 2개·Bluetooth 설정을 포함한 접근성 항목 6개가 한 화면에 유지되는지 `artifacts/emulator-5556-mode-density-v2.png`와 동명 XML로 확인했다.
+- 비활성 소비 아이템 화면은 308px 규격을 적용해 유물 수·소지품 수·사용 조건만 남겼다. 2400×1080에서 접근성 항목 4개와 본문 무잘림을 `artifacts/emulator-5556-consumables-density-v3.png`와 동명 XML로 확인했다.
+- 메인 복귀 확인, 빠른 메시지, 카드 제거 완료·확인, 모드 제한 안내, 결투 결과에도 콘텐츠 양에 맞는 높이 규격을 적용했다. 메인 복귀 확인의 두 CTA는 `artifacts/emulator-5556-return-main-density-v3.png`, 빠른 메시지 6개 문구는 `artifacts/emulator-5556-quick-chat-density-v2.png`와 각 동명 XML에서 한 화면 무잘림을 확인했다. 결투 결과는 최신 종료 상태의 정적 재검증이 남아 있다.
 
 ### 2026-09-03 보스 브리핑·런 결과 장면 개편
 
