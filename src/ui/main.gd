@@ -432,32 +432,62 @@ func _show_current_deck() -> void:
 	_clear_overlay()
 	overlay_title.text = "현재 덱"
 	var deck: Array = []
+	var hand_count := 0
+	var draw_count := 0
+	var discard_count := 0
+	var progression_deck_count := run_coordinator.run.decks[local_slot].size()
 	if game_mode == "duel" and duel_state != null:
 		var player := duel_state.players[local_slot]
 		deck.append_array(player.draw_pile)
 		deck.append_array(player.hand)
 		deck.append_array(player.discard_pile)
+		hand_count = player.hand.size()
+		draw_count = player.draw_pile.size()
+		discard_count = player.discard_pile.size()
+		progression_deck_count = deck.size()
+	elif state != null and state.players.size() > local_slot:
+		var player := state.players[local_slot]
+		deck.append_array(player.draw_pile)
+		deck.append_array(player.hand)
+		deck.append_array(player.discard_pile)
+		hand_count = player.hand.size()
+		draw_count = player.draw_pile.size()
+		discard_count = player.discard_pile.size()
 	else:
 		deck = run_coordinator.run.decks[local_slot].duplicate()
-	overlay_subtitle.text = "P%d · 총 %d장 · 전투 중에도 구성을 확인할 수 있습니다." % [local_slot + 1, deck.size()]
 	var counts := {}
 	for card_id in deck:
 		counts[StringName(card_id)] = int(counts.get(StringName(card_id), 0)) + 1
+	overlay_subtitle.text = "P%d · 이번 전투 %d장·%d종 · 손패 %d / 드로우 %d / 버림 %d" % [local_slot + 1, deck.size(), counts.size(), hand_count, draw_count, discard_count]
 	var total_cost := 0
 	var exclusive_count := 0
+	var attack_count := 0
+	var defense_count := 0
+	var support_count := 0
 	for card_id in deck:
 		if catalog.has(StringName(card_id)):
 			var deck_card: CardData = catalog[StringName(card_id)]
 			total_cost += deck_card.energy_cost
 			if deck_card.owner_scope != CardData.Scope.NEUTRAL:
 				exclusive_count += 1
+			match _card_tactical_role(deck_card):
+				"attack": attack_count += 1
+				"defense": defense_count += 1
+				_: support_count += 1
 	var deck_metrics := HBoxContainer.new()
 	deck_metrics.add_theme_constant_override("separation", 12)
-	deck_metrics.add_child(_metric_card("총 카드", "%d장" % deck.size(), COLOR_CYAN))
-	deck_metrics.add_child(_metric_card("고유 카드", "%d종" % counts.size(), COLOR_BLUE))
+	deck_metrics.add_child(_metric_card("원정 덱", "%d장" % progression_deck_count, COLOR_CYAN))
+	deck_metrics.add_child(_metric_card("이번 전투", "%d장" % deck.size(), COLOR_BLUE))
 	deck_metrics.add_child(_metric_card("평균 비용", "%.1f" % (float(total_cost) / maxf(float(deck.size()), 1.0)), COLOR_YELLOW))
 	deck_metrics.add_child(_metric_card("전용 / 공용", "%d / %d" % [exclusive_count, deck.size() - exclusive_count], COLOR_ORANGE))
 	overlay_content.add_child(deck_metrics)
+	var combat_metrics := HBoxContainer.new()
+	combat_metrics.add_theme_constant_override("separation", 12)
+	combat_metrics.add_child(_metric_card("공격", "%d장" % attack_count, COLOR_RED))
+	combat_metrics.add_child(_metric_card("방어", "%d장" % defense_count, COLOR_BLUE))
+	combat_metrics.add_child(_metric_card("지원", "%d장" % support_count, Color("#bc8cff")))
+	combat_metrics.add_child(_metric_card("전투 순환", "손 %d · 뽑 %d · 버 %d" % [hand_count, draw_count, discard_count], COLOR_CYAN))
+	overlay_content.add_child(combat_metrics)
 	var ids := counts.keys()
 	ids.sort_custom(func(a: Variant, b: Variant) -> bool: return String(a) < String(b))
 	var grid := GridContainer.new()
@@ -1585,18 +1615,21 @@ func _starter_deck_profile(character_id: StringName) -> String:
 		if not catalog.has(StringName(card_id)):
 			continue
 		var card: CardData = catalog[StringName(card_id)]
-		var kind := "support"
-		for candidate in ["damage", "block", "heal", "energy"]:
-			if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == candidate):
-				kind = candidate
-				break
-		if kind == "damage":
+		var kind := _card_tactical_role(card)
+		if kind == "attack":
 			attack += 1
-		elif kind == "block":
+		elif kind == "defense":
 			defense += 1
 		else:
 			support += 1
 	return "시작덱 %d · 공%d 방%d 지%d" % [deck.size(), attack, defense, support]
+
+func _card_tactical_role(card: CardData) -> String:
+	if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == "damage"):
+		return "attack"
+	if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == "block"):
+		return "defense"
+	return "support"
 
 func _character_role(character_id: StringName) -> String:
 	return {

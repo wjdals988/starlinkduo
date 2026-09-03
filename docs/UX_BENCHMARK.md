@@ -48,7 +48,7 @@
 | 편성 | Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 항로 | Slay the Spire, Across the Obelisk | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
 | 전투 | Slay the Spire, Into the Breach | PASS | Galaxy 2대 동시 확정·말풍선 검증 |
-| 현재 덱 | Slay the Spire | PARTIAL | 카드 역할 분포와 드로우 상태 시각화 |
+| 현재 덱 | Slay the Spire | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
 | 이벤트 | Across the Obelisk | PASS | Galaxy 2대 선택 불일치 결과 검증 |
 | 보상 | Slay the Spire, Balatro | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 상점·카드 제거 | Balatro | PASS | Galaxy 실기기 스크롤·큰 글씨 확인 |
@@ -91,6 +91,12 @@
 - 보상 카드 `성간 갑주`를 실제 선택해 덱이 `10장 → 11장`으로 증가하고 나머지 2개 선택지가 사라지는지 확인했다. 1차 완료 화면에서 발견한 하단 공백은 모달을 636px 규격에서 540px 고밀도 규격으로 줄였고, 최종 증적은 `artifacts/emulator-5556-benchmarked-reward-acquired-v2.png`와 동명 XML이다.
 - 상점에서 `위협 유도`를 `75 C`에 구매해 보유 크레딧이 `202 C → 127 C`로 감소하고 해당 카드만 `판매 완료`·비활성으로 전환되는지 `artifacts/emulator-5556-benchmarked-shop-purchased-v1.png`와 동명 XML로 확인했다. 다른 카드 4장과 정비 서비스의 구매 가능 상태는 유지됐다.
 - 세 검증은 기존 체크포인트의 별도 사본에서 수행했으며, 종료 후 원본 SHA-256 `928c0a239b98714bcc73ee55d0a92678ebff8405c10250534e24723be6eb34ee`로 복원했다.
+
+### 2026-09-03 전투 덱 판단 정보 개편
+
+- Slay the Spire의 전투 중 드로우·버림 더미 확인 구조를 적용해 현재 덱을 원정 성장 덱과 이번 전투 덱으로 분리했다. 훈련 전투 기준 원정 덱 `10장`, 이번 전투 `6장·5종`을 같은 행에서 비교한다.
+- 이번 전투 카드 6장을 공격 `3장`, 방어 `3장`, 지원 `0장`으로 분류하고, 전투 순환은 손패 `5장`·드로우 `1장`·버림 `0장`으로 표시한다. 같은 분류 함수를 편성의 시작 덱 역할 분포에도 재사용한다.
+- emulator-5556의 2400×1080 화면에서 지표 8개와 실제 카드 5종이 겹침 없이 노출되고 세로 스크롤이 유지되는지 `artifacts/emulator-5556-benchmarked-deck-v3.png`와 동명 XML로 확인했다.
 
 ### 2026-09-03 보스 브리핑·런 결과 장면 개편
 
