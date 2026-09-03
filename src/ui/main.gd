@@ -35,6 +35,9 @@ var haptics_enabled := true
 var glow_enabled := true
 var large_text_enabled := false
 var system_font_scale := 1.0
+var game_started := false
+var in_multiplayer_lobby := false
+var lobby_signature := ""
 
 var team_health_label: Label
 var team_health_bar: ProgressBar
@@ -53,9 +56,11 @@ var ready_button: Button
 var turn_label: Label
 var log_label: Label
 var overlay: Control
+var overlay_scrim: ColorRect
 var overlay_title: Label
 var overlay_subtitle: Label
 var overlay_content: VBoxContainer
+var overlay_close_button: Button
 var connection_label: Label
 var encounter_label: Label
 var enemy_name_label: Label
@@ -99,8 +104,7 @@ func _ready() -> void:
 	_apply_text_scale_tree(self)
 	_refresh()
 	_sync_android_accessibility.call_deferred()
-	if not run_coordinator.run.pending_event.is_empty():
-		_show_event.call_deferred()
+	_show_main_menu.call_deferred()
 
 func _exit_tree() -> void:
 	if cooperative_session != null:
@@ -117,7 +121,10 @@ func _on_go_back_requested() -> void:
 	handling_back_request = true
 	_reset_back_request_guard.call_deferred()
 	if overlay != null and overlay.visible:
-		_close_overlay()
+		if overlay_title.text == "STARLINK DUO":
+			get_tree().quit()
+		else:
+			_close_overlay()
 	else:
 		get_tree().quit()
 
@@ -140,6 +147,10 @@ func _process(_delta: float) -> void:
 		var next_text := _connection_status_text()
 		if connection_label.text != next_text:
 			connection_label.text = next_text
+	if in_multiplayer_lobby and overlay != null and overlay.visible:
+		var next_lobby_signature := "%s:%s:%s" % [bluetooth_transport.get_state(), cooperative_session != null and cooperative_session.handshake_complete, cooperative_session != null and cooperative_session.handshake_failed]
+		if next_lobby_signature != lobby_signature:
+			_show_multiplayer_lobby()
 
 func _build_interface() -> void:
 	var backdrop := TextureRect.new()
@@ -224,6 +235,40 @@ func _build_top_bar() -> Control:
 	menu.pressed.connect(_show_hub)
 	row.add_child(menu)
 	return panel
+
+func _show_main_menu() -> void:
+	game_started = false
+	_clear_overlay()
+	overlay_close_button.hide()
+	overlay_title.text = "STARLINK DUO"
+	overlay_subtitle.text = "두 대원이 만드는 오프라인 우주 원정 · 플레이 방식을 선택하세요."
+	var mode_row := HBoxContainer.new()
+	mode_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mode_row.add_theme_constant_override("separation", 18)
+	overlay_content.add_child(mode_row)
+	var single := _action_button("✦  싱글플레이\n\n혼자 두 대원을 지휘합니다\n바로 이어서 플레이\n\nOFFLINE  ·  1 PLAYER", _start_singleplayer, COLOR_CYAN, 260)
+	single.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_row.add_child(single)
+	var multiplayer := _action_button("◈  멀티플레이\n\nBluetooth로 가까운 친구와 연결합니다\n방 만들기 · 참가하기 · 대기실\n\nOFFLINE  ·  2 PLAYERS", _show_connection, COLOR_BLUE, 260)
+	multiplayer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_row.add_child(multiplayer)
+	_add_connection_action("⚙  설정", _show_settings, COLOR_MUTED)
+
+func _start_singleplayer() -> void:
+	game_started = true
+	game_mode = "cooperative"
+	local_slot = 0
+	if cooperative_session != null:
+		cooperative_session.close()
+		cooperative_session = null
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	log_label.text = "싱글플레이 · 두 대원을 직접 지휘합니다."
+	_close_overlay()
+	_refresh()
+	if not run_coordinator.run.pending_event.is_empty():
+		_show_event.call_deferred()
 
 func _show_hub() -> void:
 	_clear_overlay()
@@ -572,11 +617,11 @@ func _build_overlay() -> void:
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.visible = false
 	add_child(overlay)
-	var scrim := ColorRect.new()
-	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	scrim.color = Color("#020713c2")
-	scrim.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.add_child(scrim)
+	overlay_scrim = ColorRect.new()
+	overlay_scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay_scrim.color = Color("#020713c2")
+	overlay_scrim.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(overlay_scrim)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.offset_left = 150
@@ -606,14 +651,14 @@ func _build_overlay() -> void:
 	overlay_subtitle.accessibility_name = "대화상자 안내"
 	overlay_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	titles.add_child(overlay_subtitle)
-	var close := Button.new()
-	close.text = "×  닫기"
-	_set_button_accessibility(close, "닫기", "현재 대화상자를 닫고 전투 화면으로 돌아갑니다")
-	close.custom_minimum_size = Vector2(104, 48)
-	close.add_theme_stylebox_override("normal", _panel_style(Color("#192541"), 24, Color("#91a5c655"), 1, 16, 8))
-	close.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 24))
-	close.pressed.connect(_close_overlay)
-	header.add_child(close)
+	overlay_close_button = Button.new()
+	overlay_close_button.text = "×  닫기"
+	_set_button_accessibility(overlay_close_button, "닫기", "이전 화면으로 돌아갑니다")
+	overlay_close_button.custom_minimum_size = Vector2(104, 48)
+	overlay_close_button.add_theme_stylebox_override("normal", _panel_style(Color("#192541"), 24, Color("#91a5c655"), 1, 16, 8))
+	overlay_close_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 24))
+	overlay_close_button.pressed.connect(_close_overlay)
+	header.add_child(overlay_close_button)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -671,6 +716,11 @@ func _activate_mode(mode: String) -> void:
 	_refresh()
 
 func _clear_overlay() -> void:
+	in_multiplayer_lobby = false
+	if overlay_scrim != null:
+		overlay_scrim.color = Color("#020713ff") if not game_started else Color("#020713c2")
+	if overlay_close_button != null:
+		overlay_close_button.show()
 	if not overlay.visible:
 		previous_focus_owner = get_viewport().gui_get_focus_owner()
 		background_focus_modes.clear()
@@ -684,6 +734,12 @@ func _clear_overlay() -> void:
 	_sync_android_accessibility.call_deferred()
 
 func _close_overlay() -> void:
+	if not game_started:
+		if in_multiplayer_lobby and cooperative_session != null:
+			cooperative_session.close()
+			cooperative_session = null
+		_show_main_menu()
+		return
 	overlay.hide()
 	for control in background_focus_modes:
 		if is_instance_valid(control):
@@ -729,7 +785,7 @@ func _focus_first_overlay_control() -> void:
 
 func _show_connection() -> void:
 	_clear_overlay()
-	overlay_title.text = "근거리 2인 연결"
+	overlay_title.text = "멀티플레이 · 방 만들기 / 참가하기"
 	var steps := HBoxContainer.new()
 	steps.add_theme_constant_override("separation", 8)
 	steps.add_child(_status_chip("1  Bluetooth 켜기", COLOR_CYAN))
@@ -751,12 +807,13 @@ func _show_connection() -> void:
 		_info_panel("권한 안내", "Android 12 이상에서는 Bluetooth 연결에 주변 기기 권한이 필요합니다. 앱은 위치나 인터넷 연결을 사용하지 않습니다.", COLOR_BLUE)
 		_add_connection_action("주변 기기 권한 허용", _request_bluetooth_permissions, COLOR_CYAN)
 		return
-	overlay_subtitle.text = "한 명은 방 만들기, 다른 한 명은 아래의 페어링된 기기를 선택하세요."
+	overlay_subtitle.text = "방장은 방을 만들고, 참가자는 페어링된 방장의 기기를 선택하세요. 연결되면 대기실로 이동합니다."
 	var host_button := _add_connection_action("방 만들기 · 이 기기가 호스트", _start_bluetooth_host, COLOR_BLUE)
 	host_button.tooltip_text = "연결을 기다리며 전투 결과를 판정합니다."
 	var divider := HSeparator.new()
 	overlay_content.add_child(divider)
 	var paired := bluetooth_transport.get_paired_devices()
+	_info_panel("참가하기", "아래에서 방장의 기기를 선택합니다. 목록에 없다면 Android Bluetooth 설정에서 먼저 페어링하세요.", COLOR_ORANGE)
 	if paired.is_empty():
 		_info_panel("페어링된 기기 없음", "Android 설정에서 상대 Galaxy를 먼저 페어링하세요. 한 명만 방을 만들고 다른 한 명은 표시된 기기 이름을 선택해야 합니다.", COLOR_YELLOW)
 	else:
@@ -781,7 +838,8 @@ func _start_bluetooth_host() -> void:
 				cooperative_session.duel_state = duel_state
 			else:
 				cooperative_session.set_game_mode(game_mode)
-		overlay_subtitle.text = "참가자를 기다리는 중… 기존 세션이 있으면 현재 턴에서 복구합니다."
+		_bind_session_ui_signals()
+		_show_multiplayer_lobby()
 	else:
 		overlay_subtitle.text = "방을 만들지 못했습니다. 권한과 Bluetooth 상태를 확인하세요."
 
@@ -795,9 +853,78 @@ func _join_bluetooth_host(address: String) -> void:
 			cooperative_session.duel_snapshot_received.connect(_on_remote_duel_snapshot)
 			cooperative_session.game_mode_changed.connect(_on_remote_game_mode)
 			cooperative_session.session_error.connect(_on_session_error)
-		overlay_subtitle.text = "호스트에 연결하는 중… 기존 세션이면 현재 턴을 다시 받습니다."
+		_bind_session_ui_signals()
+		_show_multiplayer_lobby()
 	else:
 		overlay_subtitle.text = "연결을 시작하지 못했습니다. 페어링 상태를 확인하세요."
+
+func _bind_session_ui_signals() -> void:
+	if cooperative_session == null:
+		return
+	if not cooperative_session.game_started.is_connected(_on_multiplayer_game_started):
+		cooperative_session.game_started.connect(_on_multiplayer_game_started)
+
+func _show_multiplayer_lobby() -> void:
+	_clear_overlay()
+	in_multiplayer_lobby = true
+	overlay_title.text = "멀티플레이 대기실"
+	var is_host := cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST
+	var transport_state := bluetooth_transport.get_state()
+	var verified := cooperative_session != null and cooperative_session.handshake_complete
+	lobby_signature = "%s:%s:%s" % [transport_state, verified, cooperative_session != null and cooperative_session.handshake_failed]
+	overlay_subtitle.text = "참가자를 기다리는 중입니다. 이 화면을 유지하세요." if is_host and not verified else ("방장에게 연결하는 중입니다. 이 화면을 유지하세요." if not verified else "두 기기의 연결과 콘텐츠 호환성 확인이 완료되었습니다.")
+	var steps := HBoxContainer.new()
+	steps.add_theme_constant_override("separation", 8)
+	steps.add_child(_status_chip("1  방 생성" if is_host else "1  방 참가", COLOR_BLUE))
+	steps.add_child(_status_chip("✓  연결 확인" if verified else "2  연결 확인", COLOR_CYAN if verified else COLOR_MUTED))
+	steps.add_child(_status_chip("3  방장 시작", COLOR_ORANGE))
+	overlay_content.add_child(steps)
+	_info_panel("대기실 상태", "%s\n역할 · %s\n호환 코드 · %s" % [_connection_status_text(), "방장" if is_host else "참가자", GameCompatibility.code()], COLOR_CYAN if verified else COLOR_BLUE)
+	if cooperative_session != null and cooperative_session.handshake_failed:
+		_info_panel("입장 실패", "두 기기에 같은 버전의 APK를 설치한 뒤 다시 연결하세요.", COLOR_RED)
+		return
+	if not verified:
+		_info_panel("대기 중", "방장은 이 화면에서 기다리고, 참가자는 방장의 기기를 선택해야 합니다. 연결 중에는 앱을 닫지 마세요.", COLOR_YELLOW)
+		return
+	if is_host:
+		var modes := HBoxContainer.new()
+		modes.add_theme_constant_override("separation", 12)
+		modes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		overlay_content.add_child(modes)
+		var expedition := _action_button("협동 원정 시작\n공동 체력 · 역할 조합", _start_multiplayer_game.bind("cooperative"), COLOR_CYAN, 96)
+		expedition.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		modes.add_child(expedition)
+		var duel := _action_button("2인 결투 시작\n비공개 동시 계획", _start_multiplayer_game.bind("duel"), COLOR_RED, 96)
+		duel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		modes.add_child(duel)
+	else:
+		_info_panel("방장 선택 대기", "방장이 협동 원정 또는 2인 결투를 선택하면 두 기기가 함께 게임으로 이동합니다.", COLOR_ORANGE)
+
+func _start_multiplayer_game(mode: String) -> void:
+	if cooperative_session == null:
+		overlay_subtitle.text = "세션이 없습니다. 메인 화면에서 다시 연결해 주세요."
+		return
+	var result := cooperative_session.start_game(mode)
+	if not result.ok:
+		overlay_subtitle.text = "게임을 시작하지 못했습니다: %s" % result.error
+
+func _on_multiplayer_game_started(mode: String) -> void:
+	_enter_started_game(mode)
+
+func _enter_started_game(mode: String) -> void:
+	game_started = true
+	game_mode = mode
+	if cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST:
+		state = cooperative_session.combat_state
+		if mode == "duel":
+			duel_engine = cooperative_session.duel_engine
+			duel_state = cooperative_session.duel_state
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	log_label.text = "멀티플레이 %s 시작 · 연결된 두 기기가 같은 상태를 사용합니다." % ("2인 결투" if mode == "duel" else "협동 원정")
+	_close_overlay()
+	_refresh()
 
 func _add_connection_action(text: String, callback: Callable, accent: Color) -> Button:
 	var button := _action_button(text, callback, accent, 64)

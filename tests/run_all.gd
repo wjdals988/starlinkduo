@@ -304,7 +304,13 @@ func _test_host_authoritative_session() -> void:
 	host.poll()
 	guest.poll()
 	var hashes: Array[String] = []
+	var started_modes: Array[String] = []
 	guest.snapshot_received.connect(func(_snapshot: Dictionary, state_hash: String) -> void: hashes.append(state_hash))
+	guest.game_started.connect(func(mode: String) -> void: started_modes.append(mode))
+	_expect(host.start_game("cooperative").ok, "verified host can start the multiplayer lobby game")
+	guest.poll()
+	_expect(started_modes == ["cooperative"], "guest leaves the lobby only after the host start message")
+	_expect(not guest.start_game("duel").ok, "guest cannot start the multiplayer lobby game")
 	_expect(guest.submit_plan(1, [{"card_id": "engineer_bolt", "target": 0}]).ok, "guest sends intent without mutating host directly")
 	host.poll()
 	_expect(state.players[1].ready, "host validates and accepts guest plan")

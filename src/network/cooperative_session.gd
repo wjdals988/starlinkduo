@@ -7,6 +7,7 @@ signal snapshot_received(snapshot: Dictionary, state_hash: String)
 signal run_snapshot_received(snapshot: Dictionary)
 signal duel_snapshot_received(snapshot: Dictionary, state_hash: String)
 signal game_mode_changed(mode: String)
+signal game_started(mode: String)
 signal session_error(code: String, detail: String)
 signal peer_ready(slot: int, ready: bool)
 
@@ -100,6 +101,19 @@ func set_game_mode(mode: String) -> Dictionary:
 			_publish_duel_snapshot("duel_started")
 		else:
 			_publish_snapshot("cooperative_resumed")
+	return {"ok": true, "mode": game_mode}
+
+func start_game(mode: String) -> Dictionary:
+	if role != Role.HOST:
+		return _error("host_only_start")
+	if not handshake_complete:
+		return _error("handshake_required")
+	var mode_result := set_game_mode(mode)
+	if not mode_result.ok:
+		return mode_result
+	if not _send("game_start", {"mode": game_mode}):
+		return _error("send_failed")
+	game_started.emit(game_mode)
 	return {"ok": true, "mode": game_mode}
 
 func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
@@ -424,6 +438,12 @@ func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 				duel_state = null
 				_clear_guest_duel_commitment()
 			game_mode_changed.emit(game_mode)
+		"game_start":
+			var started_mode := String(payload.get("mode", ""))
+			if not started_mode in ["cooperative", "duel"] or started_mode != game_mode:
+				session_error.emit("invalid_game_start", started_mode)
+				return
+			game_started.emit(started_mode)
 		"duel_snapshot":
 			var duel_snapshot: Variant = payload.get("state", null)
 			var duel_hash := String(payload.get("state_hash", ""))
