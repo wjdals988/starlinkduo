@@ -26,7 +26,7 @@
 
 | 운영 제품 | 확인한 구성 원리 | 적용 화면 | 반영 규칙 |
 |---|---|---|---|
-| MARVEL SNAP | 짧은 매치의 핵심 행동을 전면에 두고 수집·덱·상점은 보조 탐색으로 분리 | 메인, 전투 | 첫 화면의 1차 CTA는 하나만 강조하고 나머지는 낮은 명도의 보조 행동으로 둔다 |
+| MARVEL SNAP | 짧은 매치의 핵심 행동을 전면에 두고 메인 덱 선택에서 덱 내용을 바로 미리 봄 | 메인, 전투, 덱 | 첫 화면의 1차 CTA는 하나만 강조하고 현재 진행·덱 판단 정보는 별도 화면 이동 전에 제공한다 |
 | Legends of Runeterra · Path of Champions | 챔피언과 세계관 아트를 화면의 중심 맥락으로 사용하고 경로·강화·보상을 단계별 화면으로 분리 | 메인, 편성, 항로, 보상 | 캐릭터 아트가 장식이 아니라 현재 선택과 다음 행동을 설명하도록 한다 |
 | Across the Obelisk | 협동 파티, 분기 경로, 카드·아이템 성장을 별도 의사결정 단계로 제공 | 대기실, 편성, 항로, 이벤트 | 두 플레이어의 상태와 합의 필요 여부를 항상 같은 위치에서 비교한다 |
 | Slay the Spire | 전투 중 체력·의도·손패·에너지에 집중하고 메타 진행은 전투 밖으로 분리 | 전투, 덱, 보상 | 전투 화면에서 다음 판단에 필요하지 않은 메뉴는 한 단계 뒤로 숨긴다 |
@@ -34,7 +34,7 @@
 | Into the Breach | 예측 가능한 적 행동과 결과를 행동 전에 명시 | 전투, 이벤트 | 의도·대상·예상 비용·위험을 확정 CTA보다 먼저 읽게 한다 |
 | Balatro | 강한 테마를 유지하면서 카드·상점·보상의 조작 문법을 반복 사용 | 카드, 보상, 상점 | 동일 카드 컴포넌트와 구매·선택 상태를 화면마다 같은 위치에 둔다 |
 
-공식 근거: [MARVEL SNAP Google Play](https://play.google.com/store/apps/details?id=com.nvsgames.snap), [Legends of Runeterra Google Play](https://play.google.com/store/apps/details?id=com.riotgames.legendsofruneterra), [Across the Obelisk 공식 페이지](https://www.paradoxinteractive.com/games/across-the-obelisk/about), [Slay the Spire Google Play](https://play.google.com/store/apps/details?id=com.humble.SlayTheSpire), [Hades 공식 페이지](https://www.supergiantgames.com/games/hades/), [Into the Breach 공식 페이지](https://subsetgames.com/itb.html), [Balatro Google Play](https://play.google.com/store/apps/details?id=com.playstack.balatro.android).
+공식 근거: [MARVEL SNAP 2026-01-06 패치 노트](https://marvelsnap.com/patch-notes-january-6-2026/), [MARVEL SNAP Google Play](https://play.google.com/store/apps/details?id=com.nvsgames.snap), [Legends of Runeterra Google Play](https://play.google.com/store/apps/details?id=com.riotgames.legendsofruneterra), [Across the Obelisk 공식 페이지](https://www.paradoxinteractive.com/games/across-the-obelisk/about), [Slay the Spire Google Play](https://play.google.com/store/apps/details?id=com.humble.SlayTheSpire), [Hades 공식 페이지](https://www.supergiantgames.com/games/hades/), [Into the Breach 공식 페이지](https://subsetgames.com/itb.html), [Balatro Google Play](https://play.google.com/store/apps/details?id=com.playstack.balatro.android).
 
 ### 전체 화면 엄격 감사표
 
@@ -131,6 +131,12 @@
 - `tests/generate_duel_visual_fixture.gd`는 실제 `DuelEngine`과 `DuelSaveStore`를 거쳐 P2 승리·8턴 종료 상태를 생성한다. 이를 앱 저장소에 임시 적용해 메인 결과 CTA부터 결투 종료 화면까지 복원 경로를 검증하고, 종료 후 테스트 파일을 제거했다.
 - 결투 결과에는 빠져 있던 `P2 VICTORY` 접근성 표식을 추가하고 결과 지표 3개·재대결·협동 전환을 같은 화면에 배치했다. 480px 검증본에서 남은 우측 스크롤바를 제거하기 위해 최종 높이를 500px로 조정했고, `artifacts/emulator-5556-duel-outcome-v5.png`와 동명 XML에서 접근성 항목 10개와 전체 CTA 무잘림을 확인했다.
 - `협동 원정으로 전환`은 디스크 저장뿐 아니라 메모리의 결투 상태도 제거한다. 결과 화면에서 협동 전환 후 함선 메뉴를 거쳐 메인으로 복귀했을 때 조건부 결과 CTA가 사라지고 기본 접근성 항목 5개만 남는지 `artifacts/emulator-5556-main-after-duel-clear-v1.png`와 동명 XML로 검증했으며, 앱 저장소의 `active_duel` 파일 부재도 확인했다.
+
+### 2026-09-03 메인 원정 진행 정보 개편
+
+- MARVEL SNAP은 2026-01-06 공식 패치에서 메인 덱 선택 캐러셀에 덱 내용을 직접 미리 보여 컬렉션 화면 왕복을 줄였다고 설명한다. 이 원칙을 적용해 Starlink Duo도 저장 원정이 있으면 일반적인 `싱글플레이 시작` 대신 `싱글플레이 계속`과 현재 `STAGE·구간·P1/P2 덱 장수`를 1차 CTA에 표시한다.
+- 신규 원정 여부는 별도 추정값이 아니라 캐릭터 선택 가능·STAGE 1·구간 1·미선택 항로를 검사하는 기존 `RunCoordinator.can_select_characters()`를 사용한다. 완료·실패 상태는 `원정 결과 보기`로 구분한다.
+- 진행 중 CTA를 누르면 훈련 전투로 바로 덮지 않고 상태 기반 함선 허브를 연다. 현재 체크포인트의 `STAGE 1 · 구간 4/8 · 덱 10+8장`이 메인에서 보이고, 탭 후 `선택 노드 진입`이 1차 행동인 허브로 전환되는지 `artifacts/emulator-5556-main-run-progress-v1.png`, `artifacts/emulator-5556-hub-from-main-progress-v1.png`와 각 동명 XML로 확인했다.
 
 ### 2026-09-03 보스 브리핑·런 결과 장면 개편
 

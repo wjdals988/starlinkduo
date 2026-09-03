@@ -313,7 +313,13 @@ func _show_main_menu() -> void:
 		var resume_title := "↻  최근 결투 결과 보기" if duel_state.phase == DuelState.Phase.FINISHED else "▶  결투 이어하기"
 		var resume_hint := "P%d 승리 · %d턴" % [duel_state.winner + 1, duel_state.turn] if duel_state.phase == DuelState.Phase.FINISHED and duel_state.winner >= 0 else ("무승부 · %d턴" % duel_state.turn if duel_state.phase == DuelState.Phase.FINISHED else "TURN %02d · P1 %d / P2 %d" % [duel_state.turn, duel_state.health[0], duel_state.health[1]])
 		actions.add_child(_main_action_button(resume_title, resume_hint, _resume_saved_duel, COLOR_RED, false))
-	actions.add_child(_main_action_button("▶  싱글플레이 시작", "혼자 두 대원을 지휘합니다", _start_singleplayer, COLOR_CYAN, true))
+	var fresh_run := run_coordinator.can_select_characters()
+	var single_title := "▶  싱글플레이 시작"
+	var single_hint := "혼자 두 대원을 지휘합니다"
+	if not fresh_run:
+		single_title = "▶  원정 결과 보기" if run_coordinator.run.phase in ["completed", "failed"] else "▶  싱글플레이 계속"
+		single_hint = "STAGE %d · 구간 %d/8 · 덱 %d+%d장" % [run_coordinator.run.stage, mini(run_coordinator.run.step + 1, 8), run_coordinator.run.decks[0].size(), run_coordinator.run.decks[1].size()]
+	actions.add_child(_main_action_button(single_title, single_hint, _start_singleplayer, COLOR_CYAN, true))
 	actions.add_child(_main_action_button("◇  Bluetooth 멀티플레이", "방 만들기 · 참가하기 · 대기실", _show_connection, COLOR_BLUE, false))
 	var settings := Button.new()
 	settings.text = "⚙  화면 · 조작 설정"
@@ -344,6 +350,7 @@ func _resume_saved_duel() -> void:
 	_refresh()
 
 func _start_singleplayer() -> void:
+	var resume_hub := not run_coordinator.can_select_characters()
 	game_started = true
 	game_mode = "cooperative"
 	local_slot = 0
@@ -358,6 +365,8 @@ func _start_singleplayer() -> void:
 	_refresh()
 	if not run_coordinator.run.pending_event.is_empty():
 		_show_event.call_deferred()
+	elif resume_hub:
+		_show_hub.call_deferred()
 
 func _show_hub() -> void:
 	_clear_overlay()
