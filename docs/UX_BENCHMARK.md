@@ -55,6 +55,13 @@
 | 결과·보스 브리핑 | Hades | PARTIAL | 적·대원 아트와 결과 지표의 전용 장면화 |
 | 설정 | Android Accessibility | PASS | 실제 Galaxy TalkBack 순서 확인 |
 
+### 2026-09-03 대기실·편성·항로 1차 개편
+
+- Across the Obelisk의 파티 역할 비교 원칙을 적용해 Bluetooth 진입을 `방 만들기`와 `참가하기`의 2열 선택으로 바꾸고, 대기실에는 P1/P2 초상·방장/참가자 역할·연결 완료 여부를 동시에 표시한다. Bluetooth OFF 복구 화면은 `artifacts/emulator-5556-benchmarked-bluetooth-entry-v2.png`와 동명 접근성 트리로 확인했다.
+- Legends of Runeterra의 챔피언 중심 선택 원칙을 적용해 편성 화면의 현재 P1/P2 대원은 초상과 역할로 표시하고 선택된 직업은 해당 직업색 내부 배경으로 구분한다. 정적 증적은 `artifacts/emulator-5556-benchmarked-roster-v2.png`와 동명 접근성 트리다.
+- Slay the Spire와 Into the Breach의 사전 판단 원칙을 적용해 항로 진입 전에 현재 구간·팀 내구도·열쇠 지표와 `위험 보통/높음/매우 높음`, 예상 보상을 문자로 제공한다. 정적 증적은 `artifacts/emulator-5556-benchmarked-route-v1.png`와 동명 접근성 트리다.
+- Bluetooth 역할 선택과 실제 대기실 양쪽 상태는 에뮬레이터 한 대만으로 완료 판정하지 않으며 Galaxy 2대 검증 전까지 `PARTIAL`을 유지한다.
+
 ## 근거 링크
 
 - Across the Obelisk: https://store.steampowered.com/app/1385380/Across_the_Obelisk/

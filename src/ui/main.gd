@@ -948,7 +948,7 @@ func _clear_overlay() -> void:
 	_apply_text_scale_tree.call_deferred(overlay)
 	_sync_android_accessibility.call_deferred()
 
-func _set_overlay_compact(compact: bool) -> void:
+func _set_overlay_compact(compact: bool, dense: bool = false) -> void:
 	if overlay_panel == null:
 		return
 	overlay_panel.offset_left = 150
@@ -957,8 +957,8 @@ func _set_overlay_compact(compact: bool) -> void:
 		overlay_panel.offset_top = 42
 		overlay_panel.offset_bottom = -42
 	else:
-		overlay_panel.offset_top = 65
-		overlay_panel.offset_bottom = -115
+		overlay_panel.offset_top = 92 if dense else 65
+		overlay_panel.offset_bottom = -218 if dense else -115
 
 func _set_main_menu_visual(enabled: bool) -> void:
 	if overlay_panel == null or overlay_scrim == null or main_menu_backdrop == null or main_menu_shade == null:
@@ -1023,6 +1023,7 @@ func _focus_first_overlay_control() -> void:
 
 func _show_connection() -> void:
 	_clear_overlay()
+	_set_overlay_compact(true)
 	overlay_title.text = "멀티플레이 · 방 만들기 / 참가하기"
 	var steps := HBoxContainer.new()
 	steps.add_theme_constant_override("separation", 8)
@@ -1046,18 +1047,38 @@ func _show_connection() -> void:
 		_add_connection_action("주변 기기 권한 허용", _request_bluetooth_permissions, COLOR_CYAN)
 		return
 	overlay_subtitle.text = "방장은 방을 만들고, 참가자는 페어링된 방장의 기기를 선택하세요. 연결되면 대기실로 이동합니다."
-	var host_button := _add_connection_action("방 만들기 · 이 기기가 호스트", _start_bluetooth_host, COLOR_BLUE)
+	var roles := HBoxContainer.new()
+	roles.add_theme_constant_override("separation", 16)
+	roles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	overlay_content.add_child(roles)
+	var host_button := _action_button("①  방 만들기\n이 기기가 판정하고 참가자를 기다립니다", _start_bluetooth_host, COLOR_BLUE, 108)
+	host_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	host_button.tooltip_text = "연결을 기다리며 전투 결과를 판정합니다."
-	var divider := HSeparator.new()
-	overlay_content.add_child(divider)
+	roles.add_child(host_button)
+	var join_column := VBoxContainer.new()
+	join_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	join_column.add_theme_constant_override("separation", 8)
+	roles.add_child(join_column)
+	var join_title := Label.new()
+	join_title.text = "②  참가하기\n페어링된 방장의 기기를 선택합니다"
+	join_title.add_theme_font_size_override("font_size", 16)
+	join_title.add_theme_color_override("font_color", COLOR_ORANGE)
+	join_column.add_child(join_title)
 	var paired := bluetooth_transport.get_paired_devices()
-	_info_panel("참가하기", "아래에서 방장의 기기를 선택합니다. 목록에 없다면 Android Bluetooth 설정에서 먼저 페어링하세요.", COLOR_ORANGE)
 	if paired.is_empty():
-		_info_panel("페어링된 기기 없음", "Android 설정에서 상대 Galaxy를 먼저 페어링하세요. 한 명만 방을 만들고 다른 한 명은 표시된 기기 이름을 선택해야 합니다.", COLOR_YELLOW)
+		var empty := Label.new()
+		empty.text = "페어링된 기기 없음\nAndroid 설정에서 상대 Galaxy를 먼저 페어링하세요."
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty.add_theme_font_size_override("font_size", 14)
+		empty.add_theme_color_override("font_color", COLOR_MUTED)
+		join_column.add_child(empty)
 	else:
 		for device in paired:
 			var label := "%s\n%s" % [device.name, device.address]
-			_add_connection_action(label, _join_bluetooth_host.bind(device.address), COLOR_ORANGE)
+			var device_button := _action_button(label, _join_bluetooth_host.bind(device.address), COLOR_ORANGE, 72)
+			device_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			join_column.add_child(device_button)
+	_info_panel("연결 전 확인", "두 기기에 같은 APK가 설치되어 있어야 합니다. 연결 후 12자리 호환 코드가 일치하면 방장이 게임을 시작합니다.", COLOR_CYAN)
 
 func _request_bluetooth_permissions() -> void:
 	bluetooth_transport.request_permissions()
@@ -1106,6 +1127,7 @@ func _bind_session_ui_signals() -> void:
 
 func _show_multiplayer_lobby() -> void:
 	_clear_overlay()
+	_set_overlay_compact(true)
 	in_multiplayer_lobby = true
 	overlay_title.text = "멀티플레이 대기실"
 	var is_host := cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST
@@ -1119,6 +1141,11 @@ func _show_multiplayer_lobby() -> void:
 	steps.add_child(_status_chip("✓  연결 확인" if verified else "2  연결 확인", COLOR_CYAN if verified else COLOR_MUTED))
 	steps.add_child(_status_chip("3  방장 시작", COLOR_ORANGE))
 	overlay_content.add_child(steps)
+	var stations := HBoxContainer.new()
+	stations.add_theme_constant_override("separation", 14)
+	stations.add_child(_lobby_player_card("P1 · 방장", "연결 완료" if verified else "참가자 기다리는 중", run_coordinator.run.characters[0], COLOR_BLUE, verified or is_host))
+	stations.add_child(_lobby_player_card("P2 · 참가자", "호환 확인 완료" if verified else "방장에게 연결 중", run_coordinator.run.characters[1], COLOR_ORANGE, verified))
+	overlay_content.add_child(stations)
 	_info_panel("대기실 상태", "%s\n역할 · %s\n호환 코드 · %s" % [_connection_status_text(), "방장" if is_host else "참가자", GameCompatibility.code()], COLOR_CYAN if verified else COLOR_BLUE)
 	if cooperative_session != null and cooperative_session.handshake_failed:
 		_info_panel("입장 실패", "두 기기에 같은 버전의 APK를 설치한 뒤 다시 연결하세요.", COLOR_RED)
@@ -1186,6 +1213,30 @@ func _main_action_button(title: String, subtitle: String, callback: Callable, ac
 	_set_button_accessibility(button, title, subtitle)
 	button.pressed.connect(callback)
 	return button
+
+func _lobby_player_card(title: String, state_text: String, character_id: StringName, accent: Color, ready: bool) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.custom_minimum_size.y = 96
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.12 if ready else 0.05), 18, Color.TRANSPARENT, 0, 14, 8))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+	var portrait := TextureRect.new()
+	portrait.custom_minimum_size = Vector2(70, 82)
+	portrait.texture = load(_character_portrait(character_id))
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(portrait)
+	var label := Label.new()
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.text = "%s\n%s  %s\n%s" % [title, "●" if ready else "○", state_text, _character_name(character_id)]
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", accent if ready else COLOR_MUTED)
+	row.add_child(label)
+	return panel
 
 func _build_main_menu_art() -> Control:
 	var stage := Control.new()
@@ -1384,6 +1435,7 @@ func _show_roster() -> void:
 		_show_mode_locked_notice("편성", "결투를 종료하고 협동 모드에서 다음 결투의 승무원을 편성하세요.")
 		return
 	_clear_overlay()
+	_set_overlay_compact(true, true)
 	overlay_title.text = "승무원 편성"
 	var selection_open := run_coordinator.can_select_characters()
 	overlay_subtitle.text = "서로 다른 직업 2개를 선택하세요 · 항로 선택 전까지만 변경할 수 있습니다." if selection_open else "현재 런의 편성이 확정되었습니다 · 새 런의 첫 항로 선택 전에 변경할 수 있습니다."
@@ -1412,13 +1464,18 @@ func _show_roster() -> void:
 		for character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
 			var button := Button.new()
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			button.custom_minimum_size.y = 100
+			button.custom_minimum_size.y = 112
 			button.text = "%s\n%s" % [_character_name(character_id), _character_role(character_id)]
-			button.disabled = not selection_open or not can_edit or run_coordinator.run.characters[slot] == character_id or run_coordinator.run.characters[1 - slot] == character_id
+			button.icon = load(_character_portrait(character_id))
+			button.expand_icon = true
+			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			var is_current: bool = run_coordinator.run.characters[slot] == character_id
+			button.disabled = not selection_open or not can_edit or is_current or run_coordinator.run.characters[1 - slot] == character_id
 			_set_button_accessibility(button, "P%d %s 선택" % [slot + 1, _character_name(character_id)], "%s. %s" % [_character_role(character_id), _disabled_character_reason(slot, character_id, selection_open, can_edit)])
 			button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 14, _character_color(character_id), 2, 8, 6))
 			button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, _character_color(character_id), 3, 8, 6))
-			button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 14, Color("#4d5a71"), 1, 8, 6))
+			button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.22) if is_current else Color("#101725"), 14, Color.TRANSPARENT, 0, 8, 6))
+			button.add_theme_color_override("font_disabled_color", Color.WHITE if is_current else Color("#76839a"))
 			button.pressed.connect(_select_character.bind(slot, character_id))
 			row.add_child(button)
 		overlay_content.add_child(row)
@@ -1502,6 +1559,12 @@ func _show_map() -> void:
 	if run.phase == "completed" or run.phase == "failed":
 		_show_run_outcome(run.phase == "completed")
 		return
+	var route_metrics := HBoxContainer.new()
+	route_metrics.add_theme_constant_override("separation", 12)
+	route_metrics.add_child(_metric_card("현재 구간", "%d / 8" % [run.step + 1], COLOR_CYAN))
+	route_metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_BLUE))
+	route_metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
+	overlay_content.add_child(route_metrics)
 	if run.pending_routes.size() == 2:
 		_add_connection_action("선택 완료 · 노드 진입", _enter_selected_routes, COLOR_CYAN)
 	var stage: Dictionary = run.map.stages[run.stage - 1]
@@ -1517,7 +1580,7 @@ func _show_map() -> void:
 		var is_current := int(step_data.index) == run.step
 		if step_data.kind == "common":
 			if is_current and run.pending_routes.is_empty():
-				row.add_child(_route_button("%s  공동 · %s 선택" % [_node_icon(step_data.options[0].type), _node_label(step_data.options[0].type)], COLOR_CYAN, _choose_route.bind(local_slot, step_data.options[0].id)))
+				row.add_child(_route_button("%s  공동 · %s 선택\n%s" % [_node_icon(step_data.options[0].type), _node_label(step_data.options[0].type), _node_preview(step_data.options[0].type)], COLOR_CYAN, _choose_route.bind(local_slot, step_data.options[0].id)))
 			else:
 				row.add_child(_route_chip("%s  공동 · %s" % [_node_icon(step_data.options[0].type), _node_label(step_data.options[0].type)], COLOR_CYAN))
 		else:
@@ -1527,7 +1590,7 @@ func _show_map() -> void:
 					var choices := VBoxContainer.new()
 					choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 					for option in step_data.lanes[slot].options:
-						choices.add_child(_route_button("%s  P%d · %s" % [_node_icon(option.type), slot + 1, _node_label(option.type)], accent, _choose_route.bind(slot, option.id)))
+						choices.add_child(_route_button("%s  P%d · %s\n%s" % [_node_icon(option.type), slot + 1, _node_label(option.type), _node_preview(option.type)], accent, _choose_route.bind(slot, option.id)))
 					row.add_child(choices)
 				else:
 					var option_texts: Array[String] = []
@@ -2023,7 +2086,7 @@ func _show_mode_locked_notice(title: String, message: String) -> void:
 func _route_button(text: String, accent: Color, callback: Callable) -> Button:
 	var button := Button.new()
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.custom_minimum_size.y = 48
+	button.custom_minimum_size.y = 58 if "\n" in text else 48
 	button.text = text
 	_set_button_accessibility(button, _first_text_line(text), "%s. 두 번 탭하여 이 항로를 선택합니다" % _remaining_text_lines(text))
 	button.add_theme_font_size_override("font_size", 16)
@@ -2038,6 +2101,16 @@ func _node_label(type: String) -> String:
 
 func _node_icon(type: String) -> String:
 	return {"combat": "⚔", "event": "?", "shop": "▣", "rest": "＋", "elite": "◆", "key_challenge": "✦", "boss": "☠", "true_boss": "☄"}.get(type, "·")
+
+func _node_preview(type: String) -> String:
+	return {
+		"combat": "위험 보통 · 카드 보상",
+		"event": "결과 변동 · 협동 선택",
+		"shop": "안전 · 카드와 장비 구매",
+		"rest": "안전 · 팀 내구도 회복",
+		"elite": "위험 높음 · 강화 보상",
+		"key_challenge": "위험 매우 높음 · 열쇠 획득",
+	}.get(type, "경로 정보를 확인하세요")
 
 func _refresh() -> void:
 	_refresh_character_identity()
