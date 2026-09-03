@@ -2441,23 +2441,52 @@ func _show_consumables() -> void:
 				relic_names.append(String(relic.name))
 				break
 	_add_connection_notice("활성 유물 %d개%s" % [relic_names.size(), " · " + ", ".join(relic_names) if not relic_names.is_empty() else ""], COLOR_CYAN)
+	var content := RunContentCatalog.build()
+	var can_use := active_route_combat and state.phase == CombatState.Phase.PLANNING
+	overlay_content.add_child(_consumable_slot_row(content, can_use))
 	if not active_route_combat or state.phase != CombatState.Phase.PLANNING:
-		_set_overlay_minimal()
+		_set_overlay_compact(true, true)
+		overlay_panel.offset_bottom = -260
 		overlay_subtitle.text = "소비 아이템은 항로 전투의 행동 선택 단계에서만 사용할 수 있습니다."
 		_info_panel("P%d 소지품 · %d / 3" % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()], "소비 아이템은 행동 선택 단계에서 사용하며 즉시 소모됩니다. 유물은 조건을 만족하면 자동으로 발동합니다.", Color("#bc8cff"))
 		return
 	overlay_subtitle.text = "P%d 소지품 %d / 3 · 사용 즉시 소모되고 체크포인트에 저장됩니다." % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()]
 	if run_coordinator.run.consumables[local_slot].is_empty():
-		_set_overlay_minimal()
 		_add_connection_notice("사용 가능한 소비 아이템이 없습니다.", COLOR_MUTED)
 		return
-	var content := RunContentCatalog.build()
-	for item_index in run_coordinator.run.consumables[local_slot].size():
-		var item_id := String(run_coordinator.run.consumables[local_slot][item_index])
-		for item in content.consumables:
-			if String(item.id) == item_id:
-				_add_connection_action("%s\n%s" % [item.name, _consumable_effect_text(item)], _use_consumable.bind(item_index), COLOR_ORANGE)
-				break
+
+func _consumable_slot_row(content: Dictionary, can_use: bool) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var inventory: Array = run_coordinator.run.consumables[local_slot]
+	for slot in 3:
+		var item: Dictionary = {}
+		if slot < inventory.size():
+			for candidate in content.consumables:
+				if String(candidate.id) == String(inventory[slot]):
+					item = candidate
+					break
+		if not item.is_empty() and can_use:
+			var action := _action_button("◆ SLOT %d · %s\n%s" % [slot + 1, item.name, _consumable_effect_text(item)], _use_consumable.bind(slot), COLOR_ORANGE, 76)
+			action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(action)
+			continue
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size.y = 76
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", _panel_style(Color("#ffffff08") if item.is_empty() else Color("#bc8cff14"), 16, Color.TRANSPARENT, 0, 14, 8))
+		var label := Label.new()
+		label.text = "○ SLOT %d\n비어 있음" % (slot + 1) if item.is_empty() else "◆ SLOT %d · %s\n%s" % [slot + 1, item.name, _consumable_effect_text(item)]
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_color_override("font_color", COLOR_MUTED if item.is_empty() else COLOR_TEXT)
+		label.accessibility_name = "소지품 슬롯 %d" % (slot + 1)
+		label.accessibility_description = "비어 있음" if item.is_empty() else "%s. %s. 전투 행동 선택 단계에서 사용 가능" % [item.name, _consumable_effect_text(item)]
+		panel.add_child(label)
+		row.add_child(panel)
+	return row
 
 func _use_consumable(item_index: int) -> void:
 	var is_guest := cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST
