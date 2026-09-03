@@ -22,7 +22,12 @@ func request_permissions() -> void:
 		_plugin.requestBluetoothPermissions()
 
 func has_permissions() -> bool:
-	return _plugin != null and _plugin.hasBluetoothPermissions()
+	if _plugin == null:
+		return false
+	if _plugin.hasBluetoothPermissions():
+		return true
+	var granted := OS.get_granted_permissions()
+	return granted.has("android.permission.BLUETOOTH_CONNECT") and granted.has("android.permission.BLUETOOTH_SCAN")
 
 func is_enabled() -> bool:
 	return _plugin != null and _plugin.isBluetoothEnabled()

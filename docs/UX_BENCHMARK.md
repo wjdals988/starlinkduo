@@ -42,7 +42,7 @@
 
 | 화면 | 기준 제품 | 현재 판정 | 다음 개선 게이트 |
 |---|---|---|---|
-| 메인 | Hades, Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
+| 메인 | Hades, Legends of Runeterra | PASS | Galaxy TalkBack·큰 글씨 확인 |
 | Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 2대의 역할·준비 상태 시각 검증 |
 | 함선 메뉴 | MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 편성 | Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
@@ -97,6 +97,15 @@
 - Slay the Spire의 전투 중 드로우·버림 더미 확인 구조를 적용해 현재 덱을 원정 성장 덱과 이번 전투 덱으로 분리했다. 훈련 전투 기준 원정 덱 `10장`, 이번 전투 `6장·5종`을 같은 행에서 비교한다.
 - 이번 전투 카드 6장을 공격 `3장`, 방어 `3장`, 지원 `0장`으로 분류하고, 전투 순환은 손패 `5장`·드로우 `1장`·버림 `0장`으로 표시한다. 같은 분류 함수를 편성의 시작 덱 역할 분포에도 재사용한다.
 - emulator-5556의 2400×1080 화면에서 지표 8개와 실제 카드 5종이 겹침 없이 노출되고 세로 스크롤이 유지되는지 `artifacts/emulator-5556-benchmarked-deck-v3.png`와 동명 XML로 확인했다.
+
+### 2026-09-03 Galaxy S25 메인·Bluetooth 실기 검증
+
+- Samsung Galaxy S25 `SM-S931N`, 2340×1080 가로 화면, 시스템 글자 100%, Bluetooth ON 환경에 현재 APK를 설치했다. 메인의 단일 강조 CTA·보조 멀티플레이·설정과 양쪽 대원 아트가 잘림 없이 유지되는지 `artifacts/galaxy-s25-benchmarked-main-v1.png`와 동명 XML로 확인했다.
+- 최초 주변 기기 권한 허용 뒤 Android 패키지는 `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_ADVERTISE`를 모두 허용했지만 플러그인 단일 판정값이 허용 상태를 즉시 반영하지 못하는 실기기 문제를 발견했다. Godot OS 권한 목록을 보조 판정으로 추가하고 권한 요청 후 최대 10초 자동 갱신하도록 수정했다.
+- 수정 APK 재설치 후 수동 새로고침 없이 방 만들기·참가하기 화면에 바로 진입했다. 기존 540px 모달을 410px 고밀도 규격으로 24.1% 줄여 역할 선택 아래의 불필요한 빈 공간을 제거했으며, 최종 배치는 `artifacts/galaxy-s25-benchmarked-multiplayer-ready-v2.png`와 동명 XML이다.
+- 실제 `방 만들기`를 실행해 전송 상태 `WAITING`, P1 방장·수호자, P2 참가자·기술자, 12자리 호환 코드가 한 화면에 표시되는지 `artifacts/galaxy-s25-benchmarked-host-lobby-v1.png`와 동명 XML로 확인했다. 검증 후 앱을 강제 종료해 호스트 소켓을 닫았고 권한 3개는 허용 상태로 유지했다.
+- 대원 카드와 공통 정보 패널에는 역할·상태·안내 본문 접근성 이름을 추가했다. 변경 후 Galaxy 재캡처 도중 전면 앱이 외부 앱으로 전환되어 사용 중인 기기 조작을 중단했으므로, 새 노드의 실제 TalkBack 순서는 완료 증적으로 판정하지 않는다.
+- 두 번째 Bluetooth 실기기가 없어 참가자 접속·호환성 핸드셰이크·양쪽 준비 완료·동시 메시지 수신은 확인하지 못했으므로 Bluetooth 화면은 `PARTIAL`을 유지한다.
 
 ### 2026-09-03 보스 브리핑·런 결과 장면 개편
 

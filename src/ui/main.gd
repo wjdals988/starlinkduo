@@ -1111,7 +1111,7 @@ func _focus_first_overlay_control() -> void:
 
 func _show_connection() -> void:
 	_clear_overlay()
-	_set_overlay_compact(true)
+	_set_overlay_compact(true, true)
 	overlay_title.text = "멀티플레이 · 방 만들기 / 참가하기"
 	var steps := HBoxContainer.new()
 	steps.add_theme_constant_override("separation", 8)
@@ -1172,6 +1172,14 @@ func _request_bluetooth_permissions() -> void:
 	bluetooth_transport.request_permissions()
 	overlay_subtitle.text = "권한 요청을 보냈습니다. 허용 후 상태 새로고침을 누르세요."
 	_add_connection_action("상태 새로고침", _show_connection, COLOR_CYAN)
+	_sync_android_accessibility.call_deferred()
+	for attempt in 20:
+		await get_tree().create_timer(0.5).timeout
+		if not overlay.visible:
+			return
+		if bluetooth_transport.has_permissions():
+			_show_connection()
+			return
 
 func _start_bluetooth_host() -> void:
 	if bluetooth_transport.start_host(SERVICE_UUID):
@@ -1320,6 +1328,8 @@ func _lobby_player_card(title: String, state_text: String, character_id: StringN
 	var label := Label.new()
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text = "%s\n%s  %s\n%s" % [title, "●" if ready else "○", state_text, _character_name(character_id)]
+	label.accessibility_name = title
+	label.accessibility_description = "%s. 캐릭터 %s" % [state_text, _character_name(character_id)]
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", accent if ready else COLOR_MUTED)
@@ -1446,6 +1456,8 @@ func _info_panel(title: String, body: String, accent: Color) -> PanelContainer:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.08), 16, Color(accent, 0.55), 1, 18, 14))
 	var label := Label.new()
 	label.text = "%s\n%s" % [title, body]
+	label.accessibility_name = title
+	label.accessibility_description = body
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", COLOR_TEXT)
