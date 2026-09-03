@@ -374,7 +374,7 @@ func _start_singleplayer() -> void:
 
 func _show_hub() -> void:
 	_clear_overlay()
-	_set_overlay_compact(true)
+	_set_overlay_balanced()
 	overlay_title.text = "함선 메뉴"
 	var run := run_coordinator.run
 	overlay_subtitle.text = "STAGE %d · 구간 %d/8 · 전투 진행 상태는 유지됩니다." % [run.stage, mini(run.step + 1, 8)]
@@ -430,8 +430,10 @@ func _show_hub() -> void:
 		var button := _menu_link_button(item[0], item[1], item[2])
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
-	overlay_content.add_child(_menu_link_button("⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED))
-	overlay_content.add_child(_menu_link_button("←  메인 화면으로 돌아가기", _confirm_return_to_main, COLOR_RED))
+	for item in [["⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED], ["←  메인 화면으로", _confirm_return_to_main, COLOR_RED]]:
+		var button := _menu_link_button(item[0], item[1], item[2])
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(button)
 
 func _confirm_return_to_main() -> void:
 	_clear_overlay()
