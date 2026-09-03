@@ -58,6 +58,8 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	meta.add_child(rarity)
 	var art := TextureRect.new()
 	art.custom_minimum_size.y = 28
+	art.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	art.size_flags_stretch_ratio = 1.0
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.texture = CardArt.texture_for(card.owner_scope, effect_kind)
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -82,7 +84,6 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	var resolved_footer := footer_text if not footer_text.is_empty() else ("◆ 선택됨" if is_selected else "탭하여 선택")
 	var state_label := _label(resolved_footer, 10, accent if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	state_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	state_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	column.add_child(state_label)
 	queue_redraw()

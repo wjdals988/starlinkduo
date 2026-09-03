@@ -1885,6 +1885,19 @@ func _show_reward() -> void:
 		overlay_content.add_child(reward_metrics)
 		_info_panel("다음 보상 흐름", "전투에서 승리한 뒤 3장 중 1장을 선택합니다. 선택 즉시 덱과 체크포인트에 반영되고 나머지 카드는 사라집니다.", COLOR_YELLOW)
 		return
+	_set_overlay_compact(true)
+	var deck := run_coordinator.run.decks[local_slot]
+	var total_cost := 0
+	for card_id in deck:
+		if catalog.has(StringName(card_id)):
+			total_cost += (catalog[StringName(card_id)] as CardData).energy_cost
+	var reward_metrics := HBoxContainer.new()
+	reward_metrics.add_theme_constant_override("separation", 12)
+	reward_metrics.add_child(_metric_card("현재 덱", "%d장" % deck.size(), COLOR_BLUE))
+	reward_metrics.add_child(_metric_card("평균 비용", "%.1f" % (float(total_cost) / maxf(float(deck.size()), 1.0)), COLOR_CYAN))
+	reward_metrics.add_child(_metric_card("획득 가능", "3장 중 1장", COLOR_YELLOW))
+	reward_metrics.add_child(_metric_card("저장 시점", "선택 즉시", COLOR_ORANGE))
+	overlay_content.add_child(reward_metrics)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 18)
@@ -1892,7 +1905,7 @@ func _show_reward() -> void:
 	for card_id in rewards:
 		var card: CardData = catalog[card_id]
 		var button := preload("res://src/ui/card_button.gd").new()
-		button.custom_minimum_size = Vector2(260, 220)
+		button.custom_minimum_size = Vector2(250, 190)
 		var accent := _scope_color(card.owner_scope)
 		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "＋ 이 카드 획득")
 		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 18, accent, 3, 14, 10))
