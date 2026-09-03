@@ -279,7 +279,7 @@ func _build_top_bar() -> Control:
 func _show_main_menu() -> void:
 	game_started = false
 	_clear_overlay()
-	_set_overlay_compact(true)
+	_set_overlay_compact(duel_state == null)
 	_set_main_menu_visual(true)
 	overlay_close_button.hide()
 	overlay_title.text = "STARLINK DUO"
@@ -309,6 +309,10 @@ func _show_main_menu() -> void:
 	description.add_theme_font_size_override("font_size", 15)
 	description.add_theme_color_override("font_color", COLOR_MUTED)
 	actions.add_child(description)
+	if duel_state != null:
+		var resume_title := "↻  최근 결투 결과 보기" if duel_state.phase == DuelState.Phase.FINISHED else "▶  결투 이어하기"
+		var resume_hint := "P%d 승리 · %d턴" % [duel_state.winner + 1, duel_state.turn] if duel_state.phase == DuelState.Phase.FINISHED and duel_state.winner >= 0 else ("무승부 · %d턴" % duel_state.turn if duel_state.phase == DuelState.Phase.FINISHED else "TURN %02d · P1 %d / P2 %d" % [duel_state.turn, duel_state.health[0], duel_state.health[1]])
+		actions.add_child(_main_action_button(resume_title, resume_hint, _resume_saved_duel, COLOR_RED, false))
 	actions.add_child(_main_action_button("▶  싱글플레이 시작", "혼자 두 대원을 지휘합니다", _start_singleplayer, COLOR_CYAN, true))
 	actions.add_child(_main_action_button("◇  Bluetooth 멀티플레이", "방 만들기 · 참가하기 · 대기실", _show_connection, COLOR_BLUE, false))
 	var settings := Button.new()
@@ -324,6 +328,20 @@ func _show_main_menu() -> void:
 	settings.pressed.connect(_show_settings)
 	actions.add_child(settings)
 	hero.add_child(_build_main_menu_art())
+
+func _resume_saved_duel() -> void:
+	if duel_state == null:
+		_show_main_menu()
+		return
+	game_started = true
+	game_mode = "duel"
+	local_slot = 0
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	log_label.text = "저장된 결투 결과를 불러왔습니다." if duel_state.phase == DuelState.Phase.FINISHED else "저장된 결투를 이어서 진행합니다."
+	_close_overlay()
+	_refresh()
 
 func _start_singleplayer() -> void:
 	game_started = true
@@ -1090,6 +1108,14 @@ func _set_overlay_minimal() -> void:
 	overlay_panel.offset_right = -150
 	overlay_panel.offset_top = 112
 	overlay_panel.offset_bottom = -300
+
+func _set_overlay_balanced() -> void:
+	if overlay_panel == null:
+		return
+	overlay_panel.offset_left = 150
+	overlay_panel.offset_right = -150
+	overlay_panel.offset_top = 72
+	overlay_panel.offset_bottom = -148
 
 func _set_main_menu_visual(enabled: bool) -> void:
 	if overlay_panel == null or overlay_scrim == null or main_menu_backdrop == null or main_menu_shade == null:
@@ -2574,11 +2600,13 @@ func _show_duel_outcome() -> void:
 	if game_mode != "duel" or duel_state == null or duel_state.phase != DuelState.Phase.FINISHED:
 		return
 	_clear_overlay()
-	_set_overlay_compact(true, true)
+	_set_overlay_balanced()
 	overlay_title.text = "결투 종료 · 무승부" if duel_state.winner == -1 else "결투 종료 · P%d 승리" % (duel_state.winner + 1)
 	overlay_subtitle.text = "최종 내구도 P1 %d / %d · P2 %d / %d · %d턴" % [duel_state.health[0], duel_state.max_health[0], duel_state.health[1], duel_state.max_health[1], duel_state.turn]
 	var emblem := Label.new()
 	emblem.text = "DRAW" if duel_state.winner == -1 else "P%d  VICTORY" % (duel_state.winner + 1)
+	emblem.accessibility_name = "결투 결과"
+	emblem.accessibility_description = "무승부" if duel_state.winner == -1 else "P%d 승리" % (duel_state.winner + 1)
 	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emblem.add_theme_font_size_override("font_size", 52)
 	emblem.add_theme_color_override("font_color", COLOR_MUTED if duel_state.winner == -1 else (COLOR_BLUE if duel_state.winner == 0 else COLOR_ORANGE))
