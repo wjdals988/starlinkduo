@@ -1140,7 +1140,7 @@ func _set_main_menu_visual(enabled: bool) -> void:
 	main_menu_shade.visible = enabled
 	if enabled:
 		overlay_scrim.color = Color.TRANSPARENT
-		overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color("#071426b8"), 32, Color.TRANSPARENT, 0, 30, 24))
+		overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 30, 24))
 	else:
 		overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color("#0c1730fa"), 28, Color.TRANSPARENT, 0, 28, 22))
 
