@@ -1560,12 +1560,14 @@ func _show_map() -> void:
 	overlay_title.text = "항로 선택 · STAGE %d" % run.stage
 	overlay_subtitle.text = "진행 %d / 8   ·   열쇠 %d / 3   ·   런 %s" % [run.step, run.keys.count(true), run.run_id]
 	if run.phase == "stage_boss":
+		_set_overlay_compact(true)
 		overlay_title.text = "스테이지 보스 · STAGE %d" % run.stage
 		overlay_subtitle.text = "8개 항로 완료 · 보스를 격파해야 다음 스테이지로 이동합니다."
 		_show_boss_briefing(false)
 		_add_connection_action("스테이지 보스 진입", _start_boss_encounter.bind(false), COLOR_RED)
 		return
 	if run.phase == "true_boss":
+		_set_overlay_compact(true)
 		overlay_title.text = "진 최종 보스 해금"
 		overlay_subtitle.text = "3개 열쇠 확보 완료 · 마지막 협동 전투입니다."
 		_show_boss_briefing(true)
@@ -1618,20 +1620,55 @@ func _show_map() -> void:
 func _show_boss_briefing(true_boss: bool) -> void:
 	var run := run_coordinator.run
 	var accent := COLOR_YELLOW if true_boss else COLOR_RED
-	var emblem := Label.new()
-	emblem.text = "✦" if true_boss else "◆"
-	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emblem.add_theme_font_size_override("font_size", 68)
-	emblem.add_theme_color_override("font_color", accent)
-	overlay_content.add_child(emblem)
+	var content := RunContentCatalog.build()
+	var enemy: Dictionary = content.true_boss if true_boss else content.stages[run.stage - 1].boss
+	var route_types: Array[String] = ["true_boss" if true_boss else "boss"]
+	var enemy_profile := EnemyVisuals.profile(StringName(enemy.id), route_types)
+	var confrontation := HBoxContainer.new()
+	confrontation.alignment = BoxContainer.ALIGNMENT_CENTER
+	confrontation.add_theme_constant_override("separation", 28)
+	confrontation.add_child(_briefing_actor(_character_portrait(run.characters[0]), "P1 · %s" % _character_name(run.characters[0]), "덱 %d장" % run.decks[0].size(), COLOR_BLUE, Vector2(150, 150)))
+	confrontation.add_child(_briefing_actor(String(enemy_profile.texture), String(enemy.name), "보스 교전", accent, Vector2(300, 150)))
+	confrontation.add_child(_briefing_actor(_character_portrait(run.characters[1]), "P2 · %s" % _character_name(run.characters[1]), "덱 %d장" % run.decks[1].size(), COLOR_ORANGE, Vector2(150, 150)))
+	overlay_content.add_child(confrontation)
 	var metrics := HBoxContainer.new()
 	metrics.add_theme_constant_override("separation", 12)
+	metrics.add_child(_metric_card("적 내구도", "%d" % int(enemy.health), accent))
+	metrics.add_child(_metric_card("예고 피해", "팀에 %d" % int(enemy.intent_damage), COLOR_RED))
 	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_CYAN))
 	metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
-	metrics.add_child(_metric_card("보유 크레딧", "%d + %d C" % [run.gold[0], run.gold[1]], COLOR_BLUE))
 	overlay_content.add_child(metrics)
-	var warning := "승리하면 런을 완주합니다. 패배 시 현재 체크포인트에서 다시 준비할 수 있습니다." if true_boss else "승리하면 다음 스테이지가 열립니다. 진입 전 덱·유물·소비품을 점검하세요."
+	var warning := "승리하면 런을 완주합니다. 패배 시 현재 체크포인트에서 다시 준비할 수 있습니다." if true_boss else "승리하면 다음 스테이지가 열립니다. P1/P2 보유 크레딧 %d + %d C · 진입 전 덱과 소비품을 점검하세요." % [run.gold[0], run.gold[1]]
 	_info_panel("최종 교전 브리핑" if true_boss else "보스 교전 브리핑", warning, accent)
+
+func _briefing_actor(texture_path: String, title: String, subtitle: String, accent: Color, minimum_size: Vector2) -> VBoxContainer:
+	var actor := VBoxContainer.new()
+	actor.custom_minimum_size = minimum_size
+	actor.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actor.add_theme_constant_override("separation", 2)
+	var art := TextureRect.new()
+	art.custom_minimum_size.y = minimum_size.y - 46
+	art.texture = load(texture_path)
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	actor.add_child(art)
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.accessibility_name = "브리핑 인물"
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_size_override("font_size", 16)
+	title_label.add_theme_color_override("font_color", accent)
+	actor.add_child(title_label)
+	var subtitle_label := Label.new()
+	subtitle_label.text = subtitle
+	subtitle_label.accessibility_name = "%s 상태" % title
+	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle_label.add_theme_font_size_override("font_size", 12)
+	subtitle_label.add_theme_color_override("font_color", COLOR_MUTED)
+	actor.add_child(subtitle_label)
+	return actor
 
 func _choose_route(slot: int, node_id: String) -> void:
 	var result := cooperative_session.select_route(slot, node_id) if cooperative_session != null else run_coordinator.choose_route(slot, node_id)
@@ -1829,17 +1866,31 @@ func _show_run_outcome(victory: bool) -> void:
 	overlay_title.text = "런 완주 · 두 별의 승리" if victory else "런 종료 · 열쇠 부족"
 	overlay_subtitle.text = "별을 삼키는 자를 격파했습니다. 최종 기록이 저장되었습니다." if victory else "3개 열쇠를 모두 확보하지 못해 진 최종 보스에 진입할 수 없습니다."
 	var outcome_color := COLOR_CYAN if victory else COLOR_RED
-	var emblem := Label.new()
-	emblem.text = "✦" if victory else "◇"
-	emblem.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emblem.add_theme_font_size_override("font_size", 84)
-	emblem.add_theme_color_override("font_color", outcome_color)
-	overlay_content.add_child(emblem)
+	var crew := HBoxContainer.new()
+	crew.alignment = BoxContainer.ALIGNMENT_CENTER
+	crew.add_theme_constant_override("separation", 24)
+	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[0]), "P1 · %s" % _character_name(run_coordinator.run.characters[0]), "최종 덱 %d장" % run_coordinator.run.decks[0].size(), COLOR_BLUE, Vector2(210, 150)))
+	var outcome_mark := VBoxContainer.new()
+	outcome_mark.custom_minimum_size = Vector2(240, 130)
+	var outcome_label := Label.new()
+	outcome_label.text = "MISSION\nCOMPLETE" if victory else "KEY GATE\nCLOSED"
+	outcome_label.accessibility_name = "원정 성공" if victory else "열쇠 관문 진입 실패"
+	outcome_label.accessibility_description = "최종 원정 결과"
+	outcome_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	outcome_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	outcome_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outcome_label.add_theme_font_size_override("font_size", 26)
+	outcome_label.add_theme_color_override("font_color", outcome_color)
+	outcome_mark.add_child(outcome_label)
+	crew.add_child(outcome_mark)
+	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[1]), "P2 · %s" % _character_name(run_coordinator.run.characters[1]), "최종 덱 %d장" % run_coordinator.run.decks[1].size(), COLOR_ORANGE, Vector2(210, 150)))
+	overlay_content.add_child(crew)
 	var metrics := HBoxContainer.new()
 	metrics.add_theme_constant_override("separation", 12)
 	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], outcome_color))
 	metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run_coordinator.run.keys.count(true), COLOR_YELLOW))
 	metrics.add_child(_metric_card("도달 스테이지", "%d / 3" % run_coordinator.run.stage, COLOR_BLUE))
+	metrics.add_child(_metric_card("최종 재화", "%d + %d C" % [run_coordinator.run.gold[0], run_coordinator.run.gold[1]], COLOR_ORANGE))
 	overlay_content.add_child(metrics)
 	_info_panel("원정 기록 저장됨", "완료된 런의 편성·덱·항로 결과를 로컬 체크포인트에 반영했습니다.", outcome_color)
 	var actions := HBoxContainer.new()
@@ -1859,6 +1910,8 @@ func _metric_card(title: String, value: String, accent: Color) -> PanelContainer
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.09), 16, Color(accent, 0.60), 1, 12, 10))
 	var label := Label.new()
 	label.text = "%s\n%s" % [title, value]
+	label.accessibility_name = title
+	label.accessibility_description = value
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 16)
