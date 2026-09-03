@@ -345,9 +345,52 @@ func _show_hub() -> void:
 	_clear_overlay()
 	_set_overlay_compact(true)
 	overlay_title.text = "함선 메뉴"
-	overlay_subtitle.text = "원정 정보와 장비를 확인합니다. 전투 진행 상태는 유지됩니다."
+	var run := run_coordinator.run
+	overlay_subtitle.text = "STAGE %d · 구간 %d/8 · 전투 진행 상태는 유지됩니다." % [run.stage, mini(run.step + 1, 8)]
+	var next_title := "다음 항로 선택"
+	var next_hint := "분기 위험과 보상 확인"
+	var next_action: Callable = _show_map
+	var next_accent := COLOR_CYAN
+	if not run.pending_event.is_empty():
+		next_title = "이벤트 선택 계속"
+		next_hint = "두 대원의 결정을 완료"
+		next_action = _show_event
+		next_accent = Color("#bc8cff")
+	elif run.phase in ["completed", "failed"]:
+		next_title = "원정 결과 확인"
+		next_hint = "최종 기록과 덱 보기"
+		next_action = _show_map
+		next_accent = COLOR_YELLOW if run.phase == "completed" else COLOR_RED
+	elif run.phase in ["stage_boss", "true_boss"]:
+		next_title = "보스 브리핑"
+		next_hint = "진입 전 전력 비교"
+		next_action = _show_map
+		next_accent = COLOR_RED
+	elif run.pending_card_rewards[local_slot]:
+		next_title = "카드 보상 선택"
+		next_hint = "3장 중 1장 획득"
+		next_action = _show_reward
+		next_accent = COLOR_YELLOW
+	elif run.shop_open[local_slot]:
+		next_title = "상점 이용 가능"
+		next_hint = "%d C로 덱 정비" % run.gold[local_slot]
+		next_action = _show_shop
+		next_accent = COLOR_ORANGE
+	elif run.pending_routes.size() == 2:
+		next_title = "선택 노드 진입"
+		next_hint = "P1/P2 항로 선택 완료"
+		next_action = _enter_selected_routes
+	var summary := HBoxContainer.new()
+	summary.add_theme_constant_override("separation", 12)
+	summary.add_child(_metric_card("원정 진행", "%d-%02d" % [run.stage, mini(run.step + 1, 8)], COLOR_BLUE))
+	summary.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_CYAN))
+	summary.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
+	var next_button := _action_button("▶  %s\n%s" % [next_title, next_hint], next_action, next_accent, 82)
+	next_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	summary.add_child(next_button)
+	overlay_content.add_child(summary)
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = 3
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 12)

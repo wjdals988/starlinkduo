@@ -44,7 +44,7 @@
 |---|---|---|---|
 | 메인 | Hades, Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
 | Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 2대의 역할·준비 상태 시각 검증 |
-| 함선 메뉴 | MARVEL SNAP | PARTIAL | 현재 원정 요약과 가장 가까운 다음 행동 추가 |
+| 함선 메뉴 | MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 편성 | Legends of Runeterra | PARTIAL | 직업 선택 전후 캐릭터 아트 중심 비교 강화 |
 | 항로 | Slay the Spire, Across the Obelisk | PARTIAL | 분기 위험·보상 미리보기의 지도형 공간화 |
 | 전투 | Slay the Spire, Into the Breach | PASS | Galaxy 2대 동시 확정·말풍선 검증 |
@@ -90,6 +90,13 @@
 - 스테이지 보스 브리핑은 드론 지휘체 내구도 150, 예고 피해 17, 팀 내구도 66/70, 열쇠 0/3과 양쪽 덱 10장·8장을 진입 전에 동시에 보여준다. 하단 빈 공간을 줄이기 위해 보스 단계 모달 높이도 일반 항로보다 축소했으며 최종 배치는 `artifacts/emulator-5556-benchmarked-boss-briefing-v3.png`와 동명 XML로 검증했다.
 - 승리 결과는 팀 내구도 38/70, 열쇠 3/3, 스테이지 3/3, 최종 재화 286+254 C를, 열쇠 부족 결과는 24/70, 2/3, 3/3, 218+196 C를 같은 위치에서 표시한다. 각각 `artifacts/emulator-5556-benchmarked-run-victory-v2.png`, `artifacts/emulator-5556-benchmarked-run-failed-v2.png`와 동명 XML로 검증했다.
 - 공통 지표 카드와 P1/P2/보스·결과 표식에는 시각 문구와 같은 접근성 이름·설명을 추가했다. 최종 덱 확인과 메인 화면 복귀는 성공·실패 양쪽에서 동일한 위치를 유지한다.
+
+### 2026-09-03 상태 기반 함선 허브 개편
+
+- MARVEL SNAP의 핵심 행동 우선 허브 원칙을 적용해 단순 기능 링크 8개보다 현재 원정 진행·팀 내구도·열쇠와 가장 가까운 다음 행동을 먼저 읽도록 재구성했다.
+- 다음 행동은 대기 이벤트, 완료 결과, 보스 브리핑, 미수령 카드 보상, 열린 상점, 선택 완료 항로, 일반 항로 순으로 현재 런 상태에서 자동 결정한다. 보조 기능 6개는 2열 3행에서 3열 2행으로 바꿔 지표 행을 추가하고도 전체 메뉴 높이를 늘리지 않았다.
+- 현재 체크포인트에서는 `STAGE 1 · 구간 4/8`, 팀 내구도 66/70, 열쇠 0/3과 `선택 노드 진입`이 첫 행에 표시된다. `artifacts/emulator-5556-benchmarked-hub-v1.png`와 동명 XML에서 총 15개 접근성 항목과 모든 조작의 무잘림을 확인했다.
+- 새 1차 CTA를 실제 실행해 STAGE 1-04의 드론 정예 2 전투, 적 내구도 96/96, 예고 피해 15로 전환되는 것을 접근성 상태 트리에서 검증했다.
 
 ## 근거 링크
 
