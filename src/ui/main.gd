@@ -224,6 +224,24 @@ func _build_top_bar() -> Control:
 	connection_label.add_theme_color_override("font_color", COLOR_CYAN)
 	connection_label.accessibility_name = "연결 상태"
 	row.add_child(connection_label)
+	var deck_button := Button.new()
+	deck_button.text = "▤  덱"
+	_set_button_accessibility(deck_button, "현재 덱 보기", "보유 카드와 남은 카드 구성을 확인합니다")
+	deck_button.custom_minimum_size = Vector2(76, 48)
+	deck_button.add_theme_stylebox_override("normal", _panel_style(Color("#14213ddf"), 12, Color.TRANSPARENT, 0, 12, 8))
+	deck_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 12, Color.TRANSPARENT, 0, 12, 8))
+	deck_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 12))
+	deck_button.pressed.connect(_show_current_deck)
+	row.add_child(deck_button)
+	var chat_button := Button.new()
+	chat_button.text = "◌  메시지"
+	_set_button_accessibility(chat_button, "빠른 메시지", "미리 정한 짧은 메시지를 동료에게 보냅니다")
+	chat_button.custom_minimum_size = Vector2(102, 48)
+	chat_button.add_theme_stylebox_override("normal", _panel_style(Color("#14213ddf"), 12, Color.TRANSPARENT, 0, 12, 8))
+	chat_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 12, Color.TRANSPARENT, 0, 12, 8))
+	chat_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 12))
+	chat_button.pressed.connect(_show_quick_chat)
+	row.add_child(chat_button)
 	var menu := Button.new()
 	menu.text = "☰  메뉴"
 	_set_button_accessibility(menu, "함선 메뉴", "원정 정보, 편성, 항로, 보상, 상점, 설정을 엽니다")
@@ -285,6 +303,96 @@ func _show_hub() -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
 	_add_connection_action("⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED)
+	_add_connection_action("←  메인 화면으로 돌아가기", _confirm_return_to_main, COLOR_RED)
+
+func _confirm_return_to_main() -> void:
+	_clear_overlay()
+	overlay_title.text = "메인 화면으로 돌아가기"
+	overlay_subtitle.text = "현재 진행은 마지막 체크포인트에 저장됩니다. Bluetooth 연결은 종료됩니다."
+	_info_panel("진행 중인 행동", "아직 확정하지 않은 카드 선택은 취소됩니다. 확정된 전투·보상·상점 결과는 유지됩니다.", COLOR_YELLOW)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var cancel := _action_button("계속 플레이", _close_overlay, COLOR_CYAN, 64)
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(cancel)
+	var leave := _action_button("메인 화면으로", _return_to_main_menu, COLOR_RED, 64)
+	leave.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(leave)
+	overlay_content.add_child(actions)
+
+func _return_to_main_menu() -> void:
+	if cooperative_session != null:
+		cooperative_session.close()
+		cooperative_session = null
+	elif bluetooth_transport != null:
+		bluetooth_transport.close()
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	_show_main_menu()
+
+func _show_current_deck() -> void:
+	_clear_overlay()
+	overlay_title.text = "현재 덱"
+	var deck: Array = []
+	if game_mode == "duel" and duel_state != null:
+		var player := duel_state.players[local_slot]
+		deck.append_array(player.draw_pile)
+		deck.append_array(player.hand)
+		deck.append_array(player.discard_pile)
+	else:
+		deck = run_coordinator.run.decks[local_slot].duplicate()
+	overlay_subtitle.text = "P%d · 총 %d장 · 전투 중에도 구성을 확인할 수 있습니다." % [local_slot + 1, deck.size()]
+	var counts := {}
+	for card_id in deck:
+		counts[StringName(card_id)] = int(counts.get(StringName(card_id), 0)) + 1
+	var ids := counts.keys()
+	ids.sort_custom(func(a: Variant, b: Variant) -> bool: return String(a) < String(b))
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	overlay_content.add_child(grid)
+	for card_id in ids:
+		if not catalog.has(card_id):
+			continue
+		var card: CardData = catalog[card_id]
+		var preview := preload("res://src/ui/card_button.gd").new()
+		preview.custom_minimum_size = Vector2(245, 190)
+		var accent := _scope_color(card.owner_scope)
+		preview.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "보유 %d장" % int(counts[card_id]))
+		preview.disabled = true
+		preview.add_theme_stylebox_override("disabled", _panel_style(Color(accent, 0.10), 18, Color.TRANSPARENT, 0, 14, 10))
+		grid.add_child(preview)
+
+func _show_quick_chat() -> void:
+	_clear_overlay()
+	overlay_title.text = "빠른 메시지"
+	overlay_subtitle.text = "짧은 전술 메시지를 선택하세요. 자유 입력 없이 안전한 문구만 전송합니다."
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	overlay_content.add_child(grid)
+	for macro_id in ["ready", "wait", "attack", "defend", "nice", "sorry"]:
+		var button := _action_button(_macro_chat_text(macro_id), _send_quick_chat.bind(macro_id), COLOR_CYAN, 64)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(button)
+
+func _send_quick_chat(macro_id: String) -> void:
+	var text := _macro_chat_text(macro_id)
+	if cooperative_session == null:
+		log_label.text = "빠른 메시지 · %s" % text
+		overlay_subtitle.text = "싱글플레이에서는 전송되지 않고 전투 알림으로만 표시됩니다."
+		return
+	var result := cooperative_session.send_macro_chat(macro_id)
+	overlay_subtitle.text = "전송 완료 · %s" % text if result.ok else "전송 실패 · 연결 상태를 확인하세요."
+
+func _on_macro_chat_received(from_slot: int, macro_id: String) -> void:
+	log_label.text = "P%d 메시지 · %s" % [from_slot + 1, _macro_chat_text(macro_id)]
+
+func _macro_chat_text(macro_id: String) -> String:
+	return {"ready": "준비됐어요", "wait": "잠시만요", "attack": "공격에 집중해요", "defend": "방어가 필요해요", "nice": "좋아요!", "sorry": "미안해요"}.get(macro_id, macro_id)
 
 func _show_settings() -> void:
 	_clear_overlay()
@@ -863,6 +971,8 @@ func _bind_session_ui_signals() -> void:
 		return
 	if not cooperative_session.game_started.is_connected(_on_multiplayer_game_started):
 		cooperative_session.game_started.connect(_on_multiplayer_game_started)
+	if not cooperative_session.macro_chat_received.is_connected(_on_macro_chat_received):
+		cooperative_session.macro_chat_received.connect(_on_macro_chat_received)
 
 func _show_multiplayer_lobby() -> void:
 	_clear_overlay()
@@ -1875,20 +1985,16 @@ func _rebuild_hand() -> void:
 		var card: CardData = catalog[card_id]
 		var card_button := preload("res://src/ui/card_button.gd").new()
 		var selected := selected_hand_indices.has(hand_index)
-		card_button.custom_minimum_size = Vector2(178 if selected else 166, 148 if selected else 132)
+		card_button.custom_minimum_size = Vector2(166, 132)
 		var accent := _scope_color(card.owner_scope)
 		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected)
-		var base_color := COLOR_PANEL_SOFT if selected else COLOR_PANEL
-		var border_width := (4 if glow_enabled else 3) if selected else 2
-		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 16, accent, border_width, 12, 8))
-		card_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 16, accent, 3, 12, 8))
-		card_button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.30), 16, accent, 4, 12, 8))
+		var base_color := Color(accent, 0.22) if selected else COLOR_PANEL
+		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 16, Color.TRANSPARENT, 0, 12, 8))
+		card_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 16, Color.TRANSPARENT, 0, 12, 8))
+		card_button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.30), 16, Color.TRANSPARENT, 0, 12, 8))
 		card_button.add_theme_color_override("font_color", COLOR_TEXT)
 		card_button.pressed.connect(_on_card_pressed.bind(hand_index, card))
 		hand_container.add_child(card_button)
-		if selected and not reduce_motion:
-			card_button.modulate = Color(1.35, 1.35, 1.35, 0.25)
-			card_button.create_tween().tween_property(card_button, "modulate", Color.WHITE, 0.16)
 	_apply_text_scale_tree.call_deferred(hand_container)
 
 func _on_card_pressed(hand_index: int, card: CardData) -> void:
@@ -2143,11 +2249,12 @@ func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPA
 	style.corner_radius_top_right = radius
 	style.corner_radius_bottom_left = radius
 	style.corner_radius_bottom_right = radius
-	style.border_width_left = border_width
-	style.border_width_top = border_width
-	style.border_width_right = border_width
-	style.border_width_bottom = border_width
-	style.border_color = border_color
+	var subtle_border := mini(border_width, 1)
+	style.border_width_left = subtle_border
+	style.border_width_top = subtle_border
+	style.border_width_right = subtle_border
+	style.border_width_bottom = subtle_border
+	style.border_color = Color(border_color, minf(border_color.a, 0.42))
 	style.content_margin_left = horizontal_margin
 	style.content_margin_right = horizontal_margin
 	style.content_margin_top = vertical_margin
@@ -2155,4 +2262,7 @@ func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPA
 	return style
 
 func _focus_style(accent: Color, radius: int) -> StyleBoxFlat:
-	return _panel_style(Color(accent, 0.22), radius, Color.WHITE, 4, 18, 14)
+	var style := _panel_style(Color(accent, 0.22), radius, Color.WHITE, 0, 18, 14)
+	style.set_border_width_all(3)
+	style.border_color = Color.WHITE
+	return style

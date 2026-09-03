@@ -8,6 +8,7 @@ signal run_snapshot_received(snapshot: Dictionary)
 signal duel_snapshot_received(snapshot: Dictionary, state_hash: String)
 signal game_mode_changed(mode: String)
 signal game_started(mode: String)
+signal macro_chat_received(from_slot: int, macro_id: String)
 signal session_error(code: String, detail: String)
 signal peer_ready(slot: int, ready: bool)
 
@@ -30,6 +31,8 @@ var incoming_sequence := 0
 var compatibility_fingerprint: String
 var handshake_complete := false
 var handshake_failed := false
+
+const MACRO_CHAT_IDS := ["ready", "wait", "attack", "defend", "nice", "sorry"]
 
 func _init(session_role: Role, session_transport: SessionTransport, combat_engine: CombatEngine = null, initial_state: CombatState = null, coordinator: RunCoordinator = null, session_duel_store: DuelSaveStore = null, session_fingerprint: String = "") -> void:
 	role = session_role
@@ -115,6 +118,19 @@ func start_game(mode: String) -> Dictionary:
 		return _error("send_failed")
 	game_started.emit(game_mode)
 	return {"ok": true, "mode": game_mode}
+
+func send_macro_chat(macro_id: String) -> Dictionary:
+	if not macro_id in MACRO_CHAT_IDS:
+		return _error("invalid_macro_chat")
+	if not handshake_complete:
+		return _error("handshake_required")
+	var from_slot := 0 if role == Role.HOST else 1
+	if role == Role.HOST:
+		var sent := _send("macro_chat", {"from_slot": from_slot, "id": macro_id})
+		if sent:
+			macro_chat_received.emit(from_slot, macro_id)
+		return {"ok": sent}
+	return {"ok": _send("macro_chat", {"id": macro_id})}
 
 func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 	if game_mode != "duel":
@@ -308,10 +324,17 @@ func _handle_hello(payload: Dictionary) -> void:
 		_publish_run_snapshot("session_started")
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
-	if game_mode == "duel" and message_type not in ["duel_commit", "duel_reveal", "resync_request"]:
+	if game_mode == "duel" and message_type not in ["duel_commit", "duel_reveal", "resync_request", "macro_chat"]:
 		_send_rejection("cooperative_mode_inactive")
 		return
 	match message_type:
+		"macro_chat":
+			var macro_id := String(payload.get("id", ""))
+			if not macro_id in MACRO_CHAT_IDS:
+				_send_rejection("invalid_macro_chat")
+				return
+			macro_chat_received.emit(1, macro_id)
+			_send("macro_chat", {"from_slot": 1, "id": macro_id})
 		"duel_commit":
 			if game_mode != "duel" or duel_state == null or int(payload.get("slot", -1)) != 1:
 				_send_rejection("guest_duel_forbidden")
@@ -423,6 +446,13 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 
 func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"macro_chat":
+			var macro_id := String(payload.get("id", ""))
+			var from_slot := int(payload.get("from_slot", -1))
+			if not macro_id in MACRO_CHAT_IDS or from_slot not in [0, 1]:
+				session_error.emit("invalid_macro_chat", macro_id)
+				return
+			macro_chat_received.emit(from_slot, macro_id)
 		"duel_reveal_request":
 			if guest_pending_duel_plays.is_empty() or guest_duel_nonce.is_empty() or int(payload.get("turn", -1)) != _known_duel_turn():
 				session_error.emit("invalid_duel_reveal_request", "no matching commitment")

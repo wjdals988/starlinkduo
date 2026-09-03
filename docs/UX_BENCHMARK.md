@@ -173,6 +173,14 @@
 - emulator-5556에서 메인 → 멀티플레이 → 닫기 → 메인 → 싱글플레이 → 전투 왕복과 5개 메인 접근성 항목을 확인했다. Bluetooth OFF 안내 화면은 `artifacts/emulator-5556-multiplayer-entry-v1.png`로 확인했으며 녹화는 사용하지 않았다.
 - 호스트·참가자 대기실 시작 메시지는 LoopbackTransport 회귀 검사로 검증했다. 실제 Bluetooth 대기실의 양쪽 동시 전환은 Galaxy 2대 P0-04 증적이 필요하다.
 
+### 2026-09-03 전투 보조 동선과 시각 밀도 개선
+
+- 선택 카드의 크기 확대·내부 아트 높이 변화·선택 트윈을 제거했다. emulator-5556에서 선택 전후 첫 카드 경계가 `[592,822][841,1020]`으로 같고 손패 5장의 위치가 유지됨을 `artifacts/emulator-5556-card-selected-fixed-v1.png`와 동명 접근성 트리로 확인했다.
+- 전투 상단에 현재 덱과 빠른 메시지를 추가했다. 현재 덱은 동일 카드의 보유 수량을 묶어 표시하며 `artifacts/emulator-5556-current-deck-v1.png`에서 총 10장·7종을 확인했다.
+- 빠른 메시지는 2열로 준비·대기·공격·방어·칭찬·사과 6개를 제공한다. `artifacts/emulator-5556-quick-chat-v1.png`에서 6개 버튼과 총 9개 접근성 항목을 확인했고, 자유문자는 네트워크 계층에서 거부한다.
+- 함선 메뉴에 메인 화면 복귀를 추가하고, 미확정 카드 취소와 Bluetooth 종료를 알리는 확인 화면을 `artifacts/emulator-5556-return-main-confirm-v1.png`로 검증했다.
+- 상시 테두리는 최대 1px과 42% 이하 알파로 낮추고 선택은 카드 내부 배경과 `선택됨` 문자로 표현한다. 키보드·스위치 접근성 포커스만 흰색 3px 외곽선을 유지한다.
+
 ## 남은 출시 게이트
 
 - 실제 Galaxy 2대에서 기내모드·Wi-Fi OFF·모바일 데이터 OFF·Bluetooth ON 조건의 15개 P0 시나리오를 실행해야 한다.

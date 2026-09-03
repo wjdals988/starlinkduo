@@ -57,7 +57,7 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	rarity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	meta.add_child(rarity)
 	var art := TextureRect.new()
-	art.custom_minimum_size.y = 34 if is_selected else 26
+	art.custom_minimum_size.y = 28
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.texture = CardArt.texture_for(card.owner_scope, effect_kind)
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE

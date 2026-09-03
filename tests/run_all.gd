@@ -305,12 +305,24 @@ func _test_host_authoritative_session() -> void:
 	guest.poll()
 	var hashes: Array[String] = []
 	var started_modes: Array[String] = []
+	var host_messages: Array[String] = []
+	var guest_messages: Array[String] = []
 	guest.snapshot_received.connect(func(_snapshot: Dictionary, state_hash: String) -> void: hashes.append(state_hash))
 	guest.game_started.connect(func(mode: String) -> void: started_modes.append(mode))
+	host.macro_chat_received.connect(func(from_slot: int, macro_id: String) -> void: host_messages.append("%d:%s" % [from_slot, macro_id]))
+	guest.macro_chat_received.connect(func(from_slot: int, macro_id: String) -> void: guest_messages.append("%d:%s" % [from_slot, macro_id]))
 	_expect(host.start_game("cooperative").ok, "verified host can start the multiplayer lobby game")
 	guest.poll()
 	_expect(started_modes == ["cooperative"], "guest leaves the lobby only after the host start message")
 	_expect(not guest.start_game("duel").ok, "guest cannot start the multiplayer lobby game")
+	_expect(guest.send_macro_chat("wait").ok, "guest can send a whitelisted macro chat")
+	host.poll()
+	guest.poll()
+	_expect(host_messages == ["1:wait"] and guest_messages == ["1:wait"], "host validates and echoes the guest macro chat")
+	_expect(host.send_macro_chat("ready").ok, "host can send a whitelisted macro chat")
+	guest.poll()
+	_expect(host_messages == ["1:wait", "0:ready"] and guest_messages == ["1:wait", "0:ready"], "both peers receive the host macro chat")
+	_expect(not host.send_macro_chat("custom text").ok, "free-form or unknown macro chat is rejected")
 	_expect(guest.submit_plan(1, [{"card_id": "engineer_bolt", "target": 0}]).ok, "guest sends intent without mutating host directly")
 	host.poll()
 	_expect(state.players[1].ready, "host validates and accepts guest plan")

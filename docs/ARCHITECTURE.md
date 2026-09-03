@@ -27,6 +27,7 @@ Godot UI -> RunCoordinator -> CombatEngine
 - 참가자는 슬롯 1의 계획만 제출할 수 있고 호스트만 전투 해결 및 스냅샷 배포를 수행한다.
 - Bluetooth 연결과 게임 시작은 별도 상태다. 핸드셰이크가 끝나도 양쪽은 대기실에 남고, 호스트의 `game_start` 메시지를 받은 뒤에만 전투 UI로 전환한다.
 - `game_start`는 선택 모드와 일치해야 하며 참가자나 핸드셰이크 전 호스트의 시작 요청은 거부한다.
+- 빠른 메시지는 `ready`, `wait`, `attack`, `defend`, `nice`, `sorry`의 허용 목록만 전송한다. 호스트가 참가자 메시지를 검증해 양쪽에 중계하며 자유문자 payload는 거부한다.
 
 ## Android 전송
 
