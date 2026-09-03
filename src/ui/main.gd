@@ -57,6 +57,7 @@ var turn_label: Label
 var log_label: Label
 var overlay: Control
 var overlay_scrim: ColorRect
+var overlay_panel: PanelContainer
 var overlay_title: Label
 var overlay_subtitle: Label
 var overlay_content: VBoxContainer
@@ -276,6 +277,7 @@ func _build_top_bar() -> Control:
 func _show_main_menu() -> void:
 	game_started = false
 	_clear_overlay()
+	_set_overlay_compact(true)
 	overlay_close_button.hide()
 	overlay_title.text = "STARLINK DUO"
 	overlay_subtitle.text = "두 대원이 만드는 오프라인 우주 원정 · 플레이 방식을 선택하세요."
@@ -309,6 +311,7 @@ func _start_singleplayer() -> void:
 
 func _show_hub() -> void:
 	_clear_overlay()
+	_set_overlay_compact(true)
 	overlay_title.text = "함선 메뉴"
 	overlay_subtitle.text = "원정 정보와 장비를 확인합니다. 전투 진행 상태는 유지됩니다."
 	var grid := GridContainer.new()
@@ -786,18 +789,18 @@ func _build_overlay() -> void:
 	overlay_scrim.color = Color("#020713c2")
 	overlay_scrim.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.add_child(overlay_scrim)
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.offset_left = 150
-	panel.offset_top = 42
-	panel.offset_right = -150
-	panel.offset_bottom = -42
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.add_theme_stylebox_override("panel", _panel_style(Color("#0c1730fa"), 28, Color("#55e8dc88"), 1, 28, 22))
-	overlay.add_child(panel)
+	overlay_panel = PanelContainer.new()
+	overlay_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay_panel.offset_left = 150
+	overlay_panel.offset_top = 42
+	overlay_panel.offset_right = -150
+	overlay_panel.offset_bottom = -42
+	overlay_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color("#0c1730fa"), 28, Color("#55e8dc88"), 1, 28, 22))
+	overlay.add_child(overlay_panel)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 16)
-	panel.add_child(column)
+	overlay_panel.add_child(column)
 	var header := HBoxContainer.new()
 	column.add_child(header)
 	var titles := VBoxContainer.new()
@@ -881,6 +884,7 @@ func _activate_mode(mode: String) -> void:
 
 func _clear_overlay() -> void:
 	in_multiplayer_lobby = false
+	_set_overlay_compact(false)
 	if overlay_scrim != null:
 		overlay_scrim.color = Color("#020713ff") if not game_started else Color("#020713c2")
 	if overlay_close_button != null:
@@ -896,6 +900,18 @@ func _clear_overlay() -> void:
 	_focus_first_overlay_control.call_deferred()
 	_apply_text_scale_tree.call_deferred(overlay)
 	_sync_android_accessibility.call_deferred()
+
+func _set_overlay_compact(compact: bool) -> void:
+	if overlay_panel == null:
+		return
+	overlay_panel.offset_left = 150
+	overlay_panel.offset_right = -150
+	if not compact:
+		overlay_panel.offset_top = 42
+		overlay_panel.offset_bottom = -42
+	else:
+		overlay_panel.offset_top = 65
+		overlay_panel.offset_bottom = -115
 
 func _close_overlay() -> void:
 	if not game_started:
