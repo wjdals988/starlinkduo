@@ -20,6 +20,41 @@
 5. 협동 성장 재화가 대전 승률에 영향을 주지 않도록 대전은 표준 8장 덱과 36 내구도로 시작한다.
 6. 항로·편성·상점처럼 현재 모드에서 사용할 수 없는 기능은 무반응으로 두지 않고 이유와 복귀 경로를 제공한다.
 
+## 2026-09-03 운영 게임 교차 벤치마크
+
+단순히 기능 수를 비교하지 않고, 공식 스토어 화면과 공식 제품 페이지에서 반복되는 화면 구성 원리를 Starlink Duo의 화면 유형에 대응시켰다. 특정 게임의 외형을 복제하지 않고 정보 위계와 조작 구조만 차용한다.
+
+| 운영 제품 | 확인한 구성 원리 | 적용 화면 | 반영 규칙 |
+|---|---|---|---|
+| MARVEL SNAP | 짧은 매치의 핵심 행동을 전면에 두고 수집·덱·상점은 보조 탐색으로 분리 | 메인, 전투 | 첫 화면의 1차 CTA는 하나만 강조하고 나머지는 낮은 명도의 보조 행동으로 둔다 |
+| Legends of Runeterra · Path of Champions | 챔피언과 세계관 아트를 화면의 중심 맥락으로 사용하고 경로·강화·보상을 단계별 화면으로 분리 | 메인, 편성, 항로, 보상 | 캐릭터 아트가 장식이 아니라 현재 선택과 다음 행동을 설명하도록 한다 |
+| Across the Obelisk | 협동 파티, 분기 경로, 카드·아이템 성장을 별도 의사결정 단계로 제공 | 대기실, 편성, 항로, 이벤트 | 두 플레이어의 상태와 합의 필요 여부를 항상 같은 위치에서 비교한다 |
+| Slay the Spire | 전투 중 체력·의도·손패·에너지에 집중하고 메타 진행은 전투 밖으로 분리 | 전투, 덱, 보상 | 전투 화면에서 다음 판단에 필요하지 않은 메뉴는 한 단계 뒤로 숨긴다 |
+| Hades | 전체 화면 장면과 캐릭터를 먼저 보여주고 텍스트 메뉴는 한쪽 축에 간결하게 배치 | 메인, 결과 | 배경 장면 위에 단일 세로 행동 축을 만들고 불필요한 대칭 카드 배치를 피한다 |
+| Into the Breach | 예측 가능한 적 행동과 결과를 행동 전에 명시 | 전투, 이벤트 | 의도·대상·예상 비용·위험을 확정 CTA보다 먼저 읽게 한다 |
+| Balatro | 강한 테마를 유지하면서 카드·상점·보상의 조작 문법을 반복 사용 | 카드, 보상, 상점 | 동일 카드 컴포넌트와 구매·선택 상태를 화면마다 같은 위치에 둔다 |
+
+공식 근거: [MARVEL SNAP Google Play](https://play.google.com/store/apps/details?id=com.nvsgames.snap), [Legends of Runeterra Google Play](https://play.google.com/store/apps/details?id=com.riotgames.legendsofruneterra), [Across the Obelisk 공식 페이지](https://www.paradoxinteractive.com/games/across-the-obelisk/about), [Slay the Spire Google Play](https://play.google.com/store/apps/details?id=com.humble.SlayTheSpire), [Hades 공식 페이지](https://www.supergiantgames.com/games/hades/), [Into the Breach 공식 페이지](https://subsetgames.com/itb.html), [Balatro Google Play](https://play.google.com/store/apps/details?id=com.playstack.balatro.android).
+
+### 전체 화면 엄격 감사표
+
+판정 기준은 `PASS=전용 정보 위계·전용 시각 맥락·명확한 1차 CTA·48dp 조작·Android 정적 증적을 모두 충족`, `PARTIAL=기능과 접근성은 있으나 전용 시각 맥락 또는 실기 증적 부족`, `FAIL=핵심 동선 누락`이다.
+
+| 화면 | 기준 제품 | 현재 판정 | 다음 개선 게이트 |
+|---|---|---|---|
+| 메인 | Hades, Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
+| Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 2대의 역할·준비 상태 시각 검증 |
+| 함선 메뉴 | MARVEL SNAP | PARTIAL | 현재 원정 요약과 가장 가까운 다음 행동 추가 |
+| 편성 | Legends of Runeterra | PARTIAL | 직업 선택 전후 캐릭터 아트 중심 비교 강화 |
+| 항로 | Slay the Spire, Across the Obelisk | PARTIAL | 분기 위험·보상 미리보기의 지도형 공간화 |
+| 전투 | Slay the Spire, Into the Breach | PASS | Galaxy 2대 동시 확정·말풍선 검증 |
+| 현재 덱 | Slay the Spire | PARTIAL | 카드 역할 분포와 드로우 상태 시각화 |
+| 이벤트 | Across the Obelisk | PARTIAL | 양쪽 선택과 합의 결과의 장면형 연출 |
+| 보상 | Slay the Spire, Balatro | PARTIAL | 획득 전후 비교와 희귀도 연출 강화 |
+| 상점·카드 제거 | Balatro | PARTIAL | 재화 변화와 품절 상태의 공간적 피드백 강화 |
+| 결과·보스 브리핑 | Hades | PARTIAL | 적·대원 아트와 결과 지표의 전용 장면화 |
+| 설정 | Android Accessibility | PASS | 실제 Galaxy TalkBack 순서 확인 |
+
 ## 근거 링크
 
 - Across the Obelisk: https://store.steampowered.com/app/1385380/Across_the_Obelisk/

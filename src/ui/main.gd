@@ -57,6 +57,8 @@ var turn_label: Label
 var log_label: Label
 var overlay: Control
 var overlay_scrim: ColorRect
+var main_menu_backdrop: TextureRect
+var main_menu_shade: ColorRect
 var overlay_panel: PanelContainer
 var overlay_title: Label
 var overlay_subtitle: Label
@@ -278,20 +280,50 @@ func _show_main_menu() -> void:
 	game_started = false
 	_clear_overlay()
 	_set_overlay_compact(true)
+	_set_main_menu_visual(true)
 	overlay_close_button.hide()
 	overlay_title.text = "STARLINK DUO"
-	overlay_subtitle.text = "두 대원이 만드는 오프라인 우주 원정 · 플레이 방식을 선택하세요."
-	var mode_row := HBoxContainer.new()
-	mode_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mode_row.add_theme_constant_override("separation", 18)
-	overlay_content.add_child(mode_row)
-	var single := _action_button("✦  싱글플레이\n\n혼자 두 대원을 지휘합니다\n바로 이어서 플레이\n\nOFFLINE  ·  1 PLAYER", _start_singleplayer, COLOR_CYAN, 260)
-	single.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mode_row.add_child(single)
-	var multiplayer := _action_button("◈  멀티플레이\n\nBluetooth로 가까운 친구와 연결합니다\n방 만들기 · 참가하기 · 대기실\n\nOFFLINE  ·  2 PLAYERS", _show_connection, COLOR_BLUE, 260)
-	multiplayer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mode_row.add_child(multiplayer)
-	_add_connection_action("⚙  설정", _show_settings, COLOR_MUTED)
+	overlay_subtitle.text = "TACTICAL CO-OP DECKBUILDER  ·  OFFLINE 1–2 PLAYERS"
+	var hero := HBoxContainer.new()
+	hero.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hero.add_theme_constant_override("separation", 24)
+	overlay_content.add_child(hero)
+	var actions := VBoxContainer.new()
+	actions.custom_minimum_size.x = 500
+	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_theme_constant_override("separation", 8)
+	hero.add_child(actions)
+	var eyebrow := Label.new()
+	eyebrow.text = "ORBITAL EXPEDITION  /  READY"
+	eyebrow.add_theme_font_size_override("font_size", 14)
+	eyebrow.add_theme_color_override("font_color", COLOR_CYAN)
+	actions.add_child(eyebrow)
+	var pitch := Label.new()
+	pitch.text = "두 대원의 선택이\n하나의 항로를 바꿉니다"
+	pitch.add_theme_font_size_override("font_size", 24)
+	pitch.add_theme_color_override("font_color", COLOR_TEXT)
+	pitch.add_theme_constant_override("line_spacing", 4)
+	actions.add_child(pitch)
+	var description := Label.new()
+	description.text = "카드를 한 장씩 연결해 세 개의 성계를 돌파하세요."
+	description.add_theme_font_size_override("font_size", 15)
+	description.add_theme_color_override("font_color", COLOR_MUTED)
+	actions.add_child(description)
+	actions.add_child(_main_action_button("▶  싱글플레이 시작", "혼자 두 대원을 지휘합니다", _start_singleplayer, COLOR_CYAN, true))
+	actions.add_child(_main_action_button("◇  Bluetooth 멀티플레이", "방 만들기 · 참가하기 · 대기실", _show_connection, COLOR_BLUE, false))
+	var settings := Button.new()
+	settings.text = "⚙  화면 · 조작 설정"
+	settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	settings.custom_minimum_size.y = 42
+	settings.add_theme_font_size_override("font_size", 15)
+	settings.add_theme_color_override("font_color", COLOR_MUTED)
+	settings.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 12, Color.TRANSPARENT, 0, 14, 6))
+	settings.add_theme_stylebox_override("hover", _panel_style(Color("#ffffff12"), 12, Color.TRANSPARENT, 0, 14, 6))
+	settings.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 12))
+	_set_button_accessibility(settings, "설정", "화면과 조작 설정을 엽니다")
+	settings.pressed.connect(_show_settings)
+	actions.add_child(settings)
+	hero.add_child(_build_main_menu_art())
 
 func _start_singleplayer() -> void:
 	game_started = true
@@ -789,6 +821,20 @@ func _build_overlay() -> void:
 	overlay_scrim.color = Color("#020713c2")
 	overlay_scrim.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.add_child(overlay_scrim)
+	main_menu_backdrop = TextureRect.new()
+	main_menu_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main_menu_backdrop.texture = load("res://assets/art/orbital-battlefield-v2.png")
+	main_menu_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	main_menu_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	main_menu_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_menu_backdrop.visible = false
+	overlay.add_child(main_menu_backdrop)
+	main_menu_shade = ColorRect.new()
+	main_menu_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main_menu_shade.color = Color("#020a18a8")
+	main_menu_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_menu_shade.visible = false
+	overlay.add_child(main_menu_shade)
 	overlay_panel = PanelContainer.new()
 	overlay_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay_panel.offset_left = 150
@@ -887,6 +933,7 @@ func _clear_overlay() -> void:
 	_set_overlay_compact(false)
 	if overlay_scrim != null:
 		overlay_scrim.color = Color("#020713ff") if not game_started else Color("#020713c2")
+	_set_main_menu_visual(false)
 	if overlay_close_button != null:
 		overlay_close_button.show()
 	if not overlay.visible:
@@ -912,6 +959,17 @@ func _set_overlay_compact(compact: bool) -> void:
 	else:
 		overlay_panel.offset_top = 65
 		overlay_panel.offset_bottom = -115
+
+func _set_main_menu_visual(enabled: bool) -> void:
+	if overlay_panel == null or overlay_scrim == null or main_menu_backdrop == null or main_menu_shade == null:
+		return
+	main_menu_backdrop.visible = enabled
+	main_menu_shade.visible = enabled
+	if enabled:
+		overlay_scrim.color = Color.TRANSPARENT
+		overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color("#071426b8"), 32, Color.TRANSPARENT, 0, 30, 24))
+	else:
+		overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color("#0c1730fa"), 28, Color.TRANSPARENT, 0, 28, 22))
 
 func _close_overlay() -> void:
 	if not game_started:
@@ -1112,6 +1170,61 @@ func _add_connection_action(text: String, callback: Callable, accent: Color) -> 
 	var button := _action_button(text, callback, accent, 64)
 	overlay_content.add_child(button)
 	return button
+
+func _main_action_button(title: String, subtitle: String, callback: Callable, accent: Color, primary: bool) -> Button:
+	var button := Button.new()
+	button.text = "%s\n%s" % [title, subtitle]
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size.y = 72 if primary else 62
+	button.add_theme_font_size_override("font_size", 18 if primary else 16)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	var normal_color := Color(accent, 0.68) if primary else Color("#101d36dd")
+	button.add_theme_stylebox_override("normal", _panel_style(normal_color, 18, Color.TRANSPARENT, 0, 22, 10))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.82 if primary else 0.28), 18, Color.TRANSPARENT, 0, 22, 10))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.92 if primary else 0.4), 18, Color.TRANSPARENT, 0, 22, 10))
+	button.add_theme_stylebox_override("focus", _focus_style(Color.WHITE if primary else accent, 18))
+	_set_button_accessibility(button, title, subtitle)
+	button.pressed.connect(callback)
+	return button
+
+func _build_main_menu_art() -> Control:
+	var stage := Control.new()
+	stage.custom_minimum_size = Vector2(430, 330)
+	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stage.accessibility_name = "수호자와 기술자 원정대"
+	var guardian := TextureRect.new()
+	guardian.texture = load("res://assets/art/guardian-portrait.png")
+	guardian.set_anchor(SIDE_LEFT, -0.05)
+	guardian.set_anchor(SIDE_RIGHT, 0.57)
+	guardian.set_anchor(SIDE_TOP, 0.02)
+	guardian.set_anchor(SIDE_BOTTOM, 1.0)
+	guardian.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	guardian.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	guardian.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(guardian)
+	var engineer := TextureRect.new()
+	engineer.texture = load("res://assets/art/engineer-portrait.png")
+	engineer.set_anchor(SIDE_LEFT, 0.40)
+	engineer.set_anchor(SIDE_RIGHT, 1.04)
+	engineer.set_anchor(SIDE_TOP, 0.04)
+	engineer.set_anchor(SIDE_BOTTOM, 1.0)
+	engineer.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	engineer.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	engineer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(engineer)
+	var badge := Label.new()
+	badge.text = "P1  수호자    ×    P2  기술자"
+	badge.set_anchor(SIDE_LEFT, 0.12)
+	badge.set_anchor(SIDE_RIGHT, 0.88)
+	badge.set_anchor(SIDE_TOP, 0.87)
+	badge.set_anchor(SIDE_BOTTOM, 0.98)
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge.add_theme_font_size_override("font_size", 14)
+	badge.add_theme_color_override("font_color", COLOR_TEXT)
+	badge.add_theme_stylebox_override("normal", _panel_style(Color("#071426d9"), 18, Color.TRANSPARENT, 0, 12, 6))
+	stage.add_child(badge)
+	return stage
 
 func _menu_link_button(text: String, callback: Callable, accent: Color) -> Button:
 	var button := Button.new()
