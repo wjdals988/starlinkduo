@@ -25,6 +25,7 @@ var bluetooth_transport: AndroidBluetoothTransport
 var accessibility_bridge: AndroidAccessibilityBridge
 var cooperative_session: CooperativeSession
 var local_slot := 0
+var roster_edit_slot := 0
 var selected_plays: Array[Dictionary] = []
 var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
@@ -369,6 +370,8 @@ func _start_singleplayer() -> void:
 	_refresh()
 	if not run_coordinator.run.pending_event.is_empty():
 		_show_event.call_deferred()
+	elif not resume_hub:
+		_show_roster.call_deferred()
 	elif resume_hub:
 		_show_hub.call_deferred()
 
@@ -1662,51 +1665,60 @@ func _show_roster() -> void:
 		_show_mode_locked_notice("편성", "결투를 종료하고 협동 모드에서 다음 결투의 승무원을 편성하세요.")
 		return
 	_clear_overlay()
-	_set_overlay_compact(true, true)
-	overlay_title.text = "승무원 편성"
 	var selection_open := run_coordinator.can_select_characters()
-	overlay_subtitle.text = "서로 다른 직업 2개를 선택하세요 · 항로 선택 전까지만 변경할 수 있습니다." if selection_open else "현재 런의 편성이 확정되었습니다 · 새 런의 첫 항로 선택 전에 변경할 수 있습니다."
+	_set_overlay_balanced()
+	overlay_title.text = "승무원 편성"
+	if cooperative_session != null:
+		roster_edit_slot = local_slot
+	overlay_subtitle.text = "P%d 캐릭터 선택 · 서로 다른 직업 2개를 편성하세요." % (roster_edit_slot + 1) if selection_open else "현재 원정의 편성이 확정되었습니다 · 새 원정에서 다시 선택할 수 있습니다."
+	var crew_row := HBoxContainer.new()
+	crew_row.add_theme_constant_override("separation", 12)
 	for slot in 2:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 10)
-		var identity := PanelContainer.new()
-		identity.custom_minimum_size = Vector2(190, 100)
+		var identity := Button.new()
+		identity.custom_minimum_size = Vector2(0, 86)
+		identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var slot_accent := COLOR_BLUE if slot == 0 else COLOR_ORANGE
-		identity.add_theme_stylebox_override("panel", _panel_style(Color(slot_accent, 0.12), 16, Color.TRANSPARENT, 0, 8, 6))
-		var identity_row := HBoxContainer.new()
-		identity.add_child(identity_row)
-		var portrait := TextureRect.new()
-		portrait.custom_minimum_size = Vector2(72, 88)
-		portrait.texture = load(_character_portrait(run_coordinator.run.characters[slot]))
-		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		identity_row.add_child(portrait)
-		var slot_label := Label.new()
-		slot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slot_label.text = "P%d\n%s\n덱 %d장" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), run_coordinator.run.decks[slot].size()]
-		slot_label.add_theme_font_size_override("font_size", 17)
-		slot_label.add_theme_color_override("font_color", COLOR_BLUE if slot == 0 else COLOR_ORANGE)
-		identity_row.add_child(slot_label)
-		row.add_child(identity)
-		var can_edit := cooperative_session == null or slot == local_slot
-		for character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
-			var button := Button.new()
-			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			button.custom_minimum_size.y = 118
-			button.text = "%s\n%s\n%s" % [_character_name(character_id), _character_role(character_id), _starter_deck_profile(character_id)]
-			button.icon = load(_character_portrait(character_id))
-			button.expand_icon = true
-			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			var is_current: bool = run_coordinator.run.characters[slot] == character_id
-			button.disabled = not selection_open or not can_edit or is_current or run_coordinator.run.characters[1 - slot] == character_id
-			_set_button_accessibility(button, "P%d %s 선택" % [slot + 1, _character_name(character_id)], "%s. %s. %s" % [_character_role(character_id), _starter_deck_profile(character_id), _disabled_character_reason(slot, character_id, selection_open, can_edit)])
-			button.add_theme_stylebox_override("normal", _panel_style(Color("#101725a8"), 14, Color.TRANSPARENT, 0, 8, 6))
-			button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, Color.TRANSPARENT, 0, 8, 6))
-			button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.22) if is_current else Color("#101725"), 14, Color.TRANSPARENT, 0, 8, 6))
-			button.add_theme_color_override("font_disabled_color", Color.WHITE if is_current else Color("#76839a"))
-			button.pressed.connect(_select_character.bind(slot, character_id))
-			row.add_child(button)
-		overlay_content.add_child(row)
+		identity.text = "P%d  %s\n%s · 시작 덱 %d장" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), _character_role(run_coordinator.run.characters[slot]), run_coordinator.run.decks[slot].size()]
+		identity.icon = load(_character_portrait(run_coordinator.run.characters[slot]))
+		identity.expand_icon = true
+		identity.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		identity.disabled = cooperative_session != null or roster_edit_slot == slot or not selection_open
+		identity.add_theme_stylebox_override("normal", _panel_style(Color(slot_accent, 0.10), 16, Color.TRANSPARENT, 0, 10, 7))
+		identity.add_theme_stylebox_override("disabled", _panel_style(Color(slot_accent, 0.22) if roster_edit_slot == slot else Color(slot_accent, 0.08), 16, Color.TRANSPARENT, 0, 10, 7))
+		identity.add_theme_color_override("font_disabled_color", Color.WHITE)
+		_set_button_accessibility(identity, "P%d 편집" % (slot + 1), "%s. %s" % [_character_name(run_coordinator.run.characters[slot]), "현재 선택 중" if roster_edit_slot == slot else "탭하여 이 슬롯 편집"])
+		identity.pressed.connect(_set_roster_edit_slot.bind(slot))
+		crew_row.add_child(identity)
+	overlay_content.add_child(crew_row)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 10)
+	var can_edit := cooperative_session == null or roster_edit_slot == local_slot
+	for character_id in [&"guardian", &"engineer", &"hacker", &"assault", &"medic", &"navigator"]:
+		var button := Button.new()
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.custom_minimum_size.y = 118
+		button.text = "%s\n%s\n%s" % [_character_name(character_id), _character_role(character_id), _starter_deck_profile(character_id)]
+		button.icon = load(_character_portrait(character_id))
+		button.expand_icon = true
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var is_current: bool = run_coordinator.run.characters[roster_edit_slot] == character_id
+		button.disabled = not selection_open or not can_edit or is_current or run_coordinator.run.characters[1 - roster_edit_slot] == character_id
+		_set_button_accessibility(button, "P%d %s 선택" % [roster_edit_slot + 1, _character_name(character_id)], "%s. %s. %s" % [_character_role(character_id), _starter_deck_profile(character_id), _disabled_character_reason(roster_edit_slot, character_id, selection_open, can_edit)])
+		button.add_theme_stylebox_override("normal", _panel_style(Color("#101725a8"), 14, Color.TRANSPARENT, 0, 8, 6))
+		button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, Color.TRANSPARENT, 0, 8, 6))
+		button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.22) if is_current else Color("#101725"), 14, Color.TRANSPARENT, 0, 8, 6))
+		button.add_theme_color_override("font_disabled_color", Color.WHITE if is_current else Color("#76839a"))
+		button.pressed.connect(_select_character.bind(roster_edit_slot, character_id))
+		grid.add_child(button)
+	overlay_content.add_child(grid)
+	if selection_open and cooperative_session == null:
+		_add_connection_action("편성 완료 · 항로 선택", _show_hub, COLOR_CYAN)
+
+func _set_roster_edit_slot(slot: int) -> void:
+	roster_edit_slot = slot
+	_show_roster()
 
 func _select_character(slot: int, character_id: StringName) -> void:
 	var is_guest := cooperative_session != null and cooperative_session.role == CooperativeSession.Role.GUEST
@@ -1743,7 +1755,7 @@ func _refresh_character_identity() -> void:
 		player_status_visuals[slot].configure(_character_color(character_id))
 
 func _character_name(character_id: StringName) -> String:
-	return {&"guardian": "수호자", &"engineer": "기술자", &"hacker": "해커", &"assault": "강습병"}.get(character_id, String(character_id))
+	return {&"guardian": "수호자", &"engineer": "기술자", &"hacker": "해커", &"assault": "강습병", &"medic": "의무관", &"navigator": "항법사"}.get(character_id, String(character_id))
 
 func _starter_deck_profile(character_id: StringName) -> String:
 	var deck := run_coordinator.starter_deck_for(character_id)
@@ -1776,6 +1788,8 @@ func _character_role(character_id: StringName) -> String:
 		&"engineer": "에너지 지원 · 장치 제어",
 		&"hacker": "적 약화 · 행동 교란",
 		&"assault": "집중 화력 · 마무리 공격",
+		&"medic": "팀 회복 · 위기 안정화",
+		&"navigator": "선제 행동 · 에너지 순환",
 	}.get(character_id, "미확인 역할")
 
 func _character_portrait(character_id: StringName) -> String:
@@ -1787,6 +1801,8 @@ func _character_color(character_id: StringName) -> Color:
 		&"engineer": COLOR_ORANGE,
 		&"hacker": Color("#bc8cff"),
 		&"assault": COLOR_RED,
+		&"medic": Color("#55d99a"),
+		&"navigator": Color("#42d7d7"),
 	}.get(character_id, COLOR_CYAN)
 
 func _show_map() -> void:
@@ -2990,6 +3006,8 @@ func _scope_color(scope: CardData.Scope) -> Color:
 		CardData.Scope.ENGINEER: return COLOR_ORANGE
 		CardData.Scope.HACKER: return Color("#bc8cff")
 		CardData.Scope.ASSAULT: return COLOR_RED
+		CardData.Scope.MEDIC: return Color("#55d99a")
+		CardData.Scope.NAVIGATOR: return Color("#42d7d7")
 		_: return COLOR_CYAN
 
 func _panel_style(color: Color, radius: int, border_color: Color = Color.TRANSPARENT, border_width: int = 0, horizontal_margin: int = 18, vertical_margin: int = 14) -> StyleBoxFlat:

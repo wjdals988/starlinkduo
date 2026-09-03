@@ -51,20 +51,20 @@ func _init() -> void:
 func _test_reduced_motion_effect_cues() -> void:
 	var visual := CombatEffectVisual.new()
 	var signatures := {}
-	for character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
+	for character_id in [&"guardian", &"engineer", &"hacker", &"assault", &"medic", &"navigator"]:
 		for effect_type in ["damage", "block", "heal", "energy"]:
 			visual.configure(effect_type, 0, true, character_id)
 			_expect(visual.static_mode and is_equal_approx(visual.progress, 0.82), "reduced motion keeps a stable spatial cue for %s %s" % [character_id, effect_type])
 			_expect(visual.effect_description().contains(CombatEffectVisual.CHARACTER_PROFILES[character_id].name), "effect description names its source character")
 			signatures[CombatEffectVisual.profile_signature(character_id, effect_type)] = true
-	_expect(signatures.size() == 16, "four characters and four effects use sixteen distinct combat effect profiles")
+	_expect(signatures.size() == 24, "six characters and four effects use twenty-four distinct combat effect profiles")
 	visual.free()
 
 func _test_card_scope_frames() -> void:
 	var signatures := {}
 	for scope in CardData.Scope.values():
 		signatures[CardFrames.frame_signature(scope)] = true
-	_expect(signatures.size() == 5, "five card ownership scopes use five distinct geometric frame signatures")
+	_expect(signatures.size() == 7, "seven card ownership scopes use seven distinct geometric frame signatures")
 
 func _test_character_card_art_profiles() -> void:
 	var profile_keys := {}
@@ -76,9 +76,9 @@ func _test_character_card_art_profiles() -> void:
 			_expect(texture != null, "card art exists for scope %d and effect %s" % [scope, effect_kind])
 			if texture != null:
 				texture_paths[texture.resource_path] = true
-	_expect(CardArt.profile_count() == 20, "five scopes and four effects provide twenty card art profiles")
-	_expect(profile_keys.size() == 20, "all twenty card art profile keys are distinct")
-	_expect(texture_paths.size() == 20, "all twenty card art profiles use distinct texture resources")
+	_expect(CardArt.profile_count() == 20, "five dedicated scope sets provide twenty card art profiles")
+	_expect(profile_keys.size() == 28, "all twenty-eight card art profile keys are distinct")
+	_expect(texture_paths.size() == 20, "all dedicated card art profiles use distinct texture resources")
 
 func _test_initial_state() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())
@@ -425,11 +425,11 @@ func _test_combat_snapshot_round_trip() -> void:
 
 func _test_full_card_catalog() -> void:
 	var catalog := FullCardCatalog.build()
-	_expect(catalog.size() == 144, "full catalog contains exactly 144 cards")
+	_expect(catalog.size() == 192, "full catalog contains exactly 192 cards")
 	var identity_signatures := {}
 	for card in catalog.values():
 		identity_signatures[CardIdentity.geometry_signature(card.id)] = true
-	_expect(identity_signatures.size() == 144, "all 144 cards use distinct deterministic visual identity signatures")
+	_expect(identity_signatures.size() == 192, "all 192 cards use distinct deterministic visual identity signatures")
 	var fingerprint := GameCompatibility.fingerprint()
 	_expect(fingerprint.length() == 64 and fingerprint == GameCompatibility.fingerprint(), "complete game content produces one stable SHA-256 compatibility fingerprint")
 	_expect(GameCompatibility.code().length() == 12 and fingerprint.begins_with(GameCompatibility.code().to_lower()), "connection screen exposes a stable 12-character compatibility code")
@@ -634,9 +634,11 @@ func _test_character_selection_and_scope() -> void:
 	_expect(coordinator.select_character(1, &"hacker").ok, "second player can select hacker before route choice")
 	_expect(run.characters[1] == &"hacker" and run.decks[1].has("hacker_card_04"), "hacker selection installs hacker starter deck")
 	_expect(not coordinator.select_character(0, &"hacker").ok, "same character cannot be selected by both players")
+	_expect(coordinator.select_character(0, &"medic").ok and run.decks[0].has("medic_card_04"), "medic selection installs its healing starter deck")
+	_expect(coordinator.select_character(1, &"navigator").ok and run.decks[1].has("navigator_card_04"), "navigator selection installs its navigation starter deck")
 	run.pending_card_rewards[1] = true
 	var rewards := coordinator.current_card_reward(1)
-	_expect(rewards.size() == 3 and catalog[rewards[0]].owner_scope == CardData.Scope.HACKER and catalog[rewards[1]].owner_scope == CardData.Scope.HACKER and catalog[rewards[2]].owner_scope == CardData.Scope.NEUTRAL, "character reward contains two class cards and one neutral card")
+	_expect(rewards.size() == 3 and catalog[rewards[0]].owner_scope == CardData.Scope.NAVIGATOR and catalog[rewards[1]].owner_scope == CardData.Scope.NAVIGATOR and catalog[rewards[2]].owner_scope == CardData.Scope.NEUTRAL, "character reward contains two class cards and one neutral card")
 	var route_id := String(run.map.stages[0].steps[0].lanes[0].options[0].id)
 	_expect(coordinator.choose_route(0, route_id).ok and not coordinator.select_character(0, &"assault").ok, "character selection closes after route commitment")
 	store.clear()

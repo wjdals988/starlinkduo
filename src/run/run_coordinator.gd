@@ -24,7 +24,7 @@ func start_new(seed: int) -> RunState:
 func select_character(player_slot: int, character_id: StringName) -> Dictionary:
 	if not _valid_slot(player_slot) or not can_select_characters():
 		return {"ok": false, "error": "character_selection_closed"}
-	if not character_id in [&"guardian", &"engineer", &"hacker", &"assault"]:
+	if not character_id in [&"guardian", &"engineer", &"hacker", &"assault", &"medic", &"navigator"]:
 		return {"ok": false, "error": "unknown_character"}
 	if run.characters[1 - player_slot] == character_id:
 		return {"ok": false, "error": "character_already_taken"}
@@ -299,6 +299,8 @@ func _scope_for_slot(player_slot: int) -> CardData.Scope:
 		&"engineer": CardData.Scope.ENGINEER,
 		&"hacker": CardData.Scope.HACKER,
 		&"assault": CardData.Scope.ASSAULT,
+		&"medic": CardData.Scope.MEDIC,
+		&"navigator": CardData.Scope.NAVIGATOR,
 	}.get(run.characters[player_slot], CardData.Scope.NEUTRAL)
 
 func starter_deck_for(character_id: StringName) -> Array:
@@ -306,6 +308,10 @@ func starter_deck_for(character_id: StringName) -> Array:
 		return ["guardian_strike", "guardian_guard", "guardian_cover", "neutral_pulse", "guardian_strike", "guardian_guard", "neutral_barrier", "neutral_pulse"]
 	if character_id == &"engineer":
 		return ["engineer_bolt", "engineer_charge", "engineer_patch", "neutral_barrier", "engineer_bolt", "engineer_charge", "neutral_link", "neutral_pulse"]
+	if character_id == &"medic":
+		return ["medic_card_04", "medic_card_04", "medic_card_03", "medic_card_02", "medic_card_04", "medic_card_05", "neutral_barrier", "neutral_link"]
+	if character_id == &"navigator":
+		return ["navigator_card_01", "navigator_card_01", "navigator_card_04", "navigator_card_04", "navigator_card_05", "navigator_card_05", "neutral_pulse", "neutral_link"]
 	var prefix := String(character_id)
 	return [
 		"%s_card_01" % prefix, "%s_card_02" % prefix, "%s_card_03" % prefix,

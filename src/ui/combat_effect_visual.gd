@@ -15,6 +15,8 @@ const CHARACTER_PROFILES := {
 	&"engineer": {"name": "기술자", "color": Color("#ff9b45"), "damage": "리벳 드론", "block": "기계 브래킷", "heal": "수리 노드", "energy": "회전 코일"},
 	&"hacker": {"name": "해커", "color": Color("#bc8cff"), "damage": "데이터 칼날", "block": "암호 격자", "heal": "복구 패킷", "energy": "오버클럭 파형"},
 	&"assault": {"name": "강습병", "color": Color("#ff647c"), "damage": "쌍열 레일", "block": "반응 장갑", "heal": "전투 주입기", "energy": "탄창 펄스"},
+	&"medic": {"name": "의무관", "color": Color("#55d99a"), "damage": "살균 펄스", "block": "생체 장막", "heal": "재생 파동", "energy": "활력 주입"},
+	&"navigator": {"name": "항법사", "color": Color("#42d7d7"), "damage": "혜성 궤적", "block": "공간 편향", "heal": "귀환 좌표", "energy": "중력 가속"},
 }
 
 func configure(type: String, slot: int, reduced_motion: bool = false, source_character: StringName = &"guardian") -> void:

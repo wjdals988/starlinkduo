@@ -29,6 +29,18 @@ const CARD_NAMES := {
 		"쌍열 포화", "선제 타격", "방어 분쇄", "광폭 질주", "필살 조준", "유성 난사",
 		"초신성 탄환", "처형 명령", "무차별 포화", "붉은 궤적", "한계 돌파", "종말의 일격",
 	],
+	CardData.Scope.MEDIC: [
+		"생체 봉합", "응급 차폐", "구조 신호", "활력 주입", "회복 드론", "전장 진단",
+		"재생 촉진", "통증 억제", "나노 수혈", "생명선", "방역 장막", "전투 소생",
+		"맥박 안정", "치유 공명", "응급 후송", "백색 파동", "생체 증폭", "보호 처방",
+		"세포 재구축", "기적의 손", "불사 프로토콜", "완전 회복", "생명의 고리", "최후의 의료선",
+	],
+	CardData.Scope.NAVIGATOR: [
+		"성도 추적", "회피 항로", "좌표 공유", "중력 가속", "항법 비콘", "선회 기동",
+		"초공간 계산", "궤도 이탈", "별자리 표식", "순간 가속", "예측 항법", "차원 도약",
+		"혜성 진입", "항로 동기화", "시간 절약", "별빛 편향", "공간 접기", "선행 정찰",
+		"무중력 질주", "완벽한 좌표", "광속 항해", "운명 경로", "은하 지름길", "최후의 도약",
+	],
 	CardData.Scope.NEUTRAL: [
 		"응급 키트", "보조 배터리", "우주 식량", "신호 증폭기", "합금 장갑", "정찰 비콘",
 		"전술 재배치", "비상 점프", "예비 방벽", "협동 신호", "집중 호흡", "공용 포탑",
@@ -43,7 +55,7 @@ const CARD_NAMES := {
 
 static func build() -> Dictionary:
 	var cards := DemoCardCatalog.build()
-	for scope in [CardData.Scope.GUARDIAN, CardData.Scope.ENGINEER, CardData.Scope.HACKER, CardData.Scope.ASSAULT]:
+	for scope in [CardData.Scope.GUARDIAN, CardData.Scope.ENGINEER, CardData.Scope.HACKER, CardData.Scope.ASSAULT, CardData.Scope.MEDIC, CardData.Scope.NAVIGATOR]:
 		_fill_scope(cards, scope, TARGET_CHARACTER_CARDS)
 	_fill_scope(cards, CardData.Scope.NEUTRAL, TARGET_NEUTRAL_CARDS)
 	return cards
@@ -115,4 +127,9 @@ static func _count_scope(cards: Dictionary, scope: CardData.Scope) -> int:
 	return count
 
 static func _scope_prefix(scope: CardData.Scope) -> String:
-	return ["guardian", "engineer", "hacker", "assault", "neutral"][scope]
+	return {
+		CardData.Scope.GUARDIAN: "guardian", CardData.Scope.ENGINEER: "engineer",
+		CardData.Scope.HACKER: "hacker", CardData.Scope.ASSAULT: "assault",
+		CardData.Scope.NEUTRAL: "neutral", CardData.Scope.MEDIC: "medic",
+		CardData.Scope.NAVIGATOR: "navigator",
+	}.get(scope, "neutral")

@@ -2,7 +2,8 @@ class_name CardData
 extends Resource
 
 enum Rarity { COMMON, MAGIC, RARE, LEGENDARY }
-enum Scope { GUARDIAN, ENGINEER, HACKER, ASSAULT, NEUTRAL }
+# Keep existing numeric values stable because saved cards serialize this enum.
+enum Scope { GUARDIAN, ENGINEER, HACKER, ASSAULT, NEUTRAL, MEDIC, NAVIGATOR }
 enum Target { SELF, ALLY, ENEMY, TEAM }
 
 @export var id: StringName
@@ -31,4 +32,3 @@ func to_snapshot() -> Dictionary:
 		"effects": effects.duplicate(true),
 		"tags": Array(tags),
 	}
-

@@ -10,7 +10,7 @@ func configure(next_scope: CardData.Scope, next_accent: Color) -> void:
 	queue_redraw()
 
 static func frame_signature(value: CardData.Scope) -> String:
-	return ["double-shield", "circuit-bracket", "glitch-rail", "assault-slash", "orbit-arc"][value]
+	return ["double-shield", "circuit-bracket", "glitch-rail", "assault-slash", "orbit-arc", "medical-cross", "star-route"][value]
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -30,6 +30,10 @@ func _draw() -> void:
 			_draw_hacker(left, right, top, bottom)
 		CardData.Scope.ASSAULT:
 			_draw_assault(left, right, top, bottom)
+		CardData.Scope.MEDIC:
+			_draw_medic(left, right, top, bottom)
+		CardData.Scope.NAVIGATOR:
+			_draw_navigator(left, right, top, bottom)
 		_:
 			_draw_neutral(left, right, top, bottom)
 
@@ -64,6 +68,19 @@ func _draw_assault(left: float, right: float, top: float, bottom: float) -> void
 	for offset in [0.0, 8.0, 16.0]:
 		draw_line(Vector2(left + offset, bottom - 22), Vector2(left + 25 + offset, bottom), Color(accent, 0.95 - offset * 0.025), 4.0, true)
 		draw_line(Vector2(right - offset, top + 22), Vector2(right - 25 - offset, top), Color(accent, 0.95 - offset * 0.025), 4.0, true)
+
+func _draw_medic(left: float, right: float, top: float, bottom: float) -> void:
+	var center := Vector2((left + right) * 0.5, top + 13)
+	draw_line(center - Vector2(10, 0), center + Vector2(10, 0), Color(accent, 0.95), 4.0, true)
+	draw_line(center - Vector2(0, 10), center + Vector2(0, 10), Color(accent, 0.95), 4.0, true)
+	draw_arc(Vector2((left + right) * 0.5, bottom - 12), 18, PI, PI * 2.0, 16, Color(accent, 0.8), 3.0, true)
+
+func _draw_navigator(left: float, right: float, top: float, bottom: float) -> void:
+	var center := Vector2((left + right) * 0.5, top + 14)
+	for angle in [0.0, PI * 0.5, PI, PI * 1.5]:
+		draw_line(center + Vector2.from_angle(angle) * 6, center + Vector2.from_angle(angle) * 17, Color(accent, 0.9), 3.0, true)
+	draw_circle(center, 4.0, Color.WHITE)
+	draw_line(Vector2(left, bottom - 8), Vector2(right, bottom - 8), Color(accent, 0.72), 3.0, true)
 
 func _draw_neutral(left: float, right: float, top: float, bottom: float) -> void:
 	var radius := 19.0
