@@ -38,6 +38,7 @@ var system_font_scale := 1.0
 var game_started := false
 var in_multiplayer_lobby := false
 var lobby_signature := ""
+var lobby_preview_active := false
 
 var team_health_label: Label
 var team_health_bar: ProgressBar
@@ -111,6 +112,9 @@ func _ready() -> void:
 	_refresh()
 	_sync_android_accessibility.call_deferred()
 	_show_main_menu.call_deferred()
+	var lobby_preview := _debug_lobby_preview()
+	if not lobby_preview.is_empty():
+		_show_multiplayer_lobby.bind(lobby_preview).call_deferred()
 
 func _exit_tree() -> void:
 	if cooperative_session != null:
@@ -153,7 +157,7 @@ func _process(_delta: float) -> void:
 		var next_text := _connection_status_text()
 		if connection_label.text != next_text:
 			connection_label.text = next_text
-	if in_multiplayer_lobby and overlay != null and overlay.visible:
+	if in_multiplayer_lobby and not lobby_preview_active and overlay != null and overlay.visible:
 		var next_lobby_signature := "%s:%s:%s" % [bluetooth_transport.get_state(), cooperative_session != null and cooperative_session.handshake_complete, cooperative_session != null and cooperative_session.handshake_failed]
 		if next_lobby_signature != lobby_signature:
 			_show_multiplayer_lobby()
@@ -1082,6 +1086,7 @@ func _activate_mode(mode: String) -> void:
 
 func _clear_overlay() -> void:
 	in_multiplayer_lobby = false
+	lobby_preview_active = false
 	_set_overlay_compact(false)
 	if overlay_scrim != null:
 		overlay_scrim.color = Color("#020713ff") if not game_started else Color("#020713c2")
@@ -1301,15 +1306,19 @@ func _bind_session_ui_signals() -> void:
 	if not cooperative_session.macro_chat_received.is_connected(_on_macro_chat_received):
 		cooperative_session.macro_chat_received.connect(_on_macro_chat_received)
 
-func _show_multiplayer_lobby() -> void:
+func _show_multiplayer_lobby(preview: Dictionary = {}) -> void:
 	_clear_overlay()
 	_set_overlay_compact(true)
 	in_multiplayer_lobby = true
+	lobby_preview_active = not preview.is_empty()
 	overlay_title.text = "멀티플레이 대기실"
-	var is_host := cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST
-	var transport_state := bluetooth_transport.get_state()
-	var verified := cooperative_session != null and cooperative_session.handshake_complete
-	lobby_signature = "%s:%s:%s" % [transport_state, verified, cooperative_session != null and cooperative_session.handshake_failed]
+	var is_host := bool(preview.get("is_host", cooperative_session != null and cooperative_session.role == CooperativeSession.Role.HOST))
+	var transport_state := String(preview.get("transport_state", bluetooth_transport.get_state()))
+	var verified := bool(preview.get("verified", cooperative_session != null and cooperative_session.handshake_complete))
+	var handshake_failed := bool(preview.get("handshake_failed", cooperative_session != null and cooperative_session.handshake_failed))
+	if handshake_failed or transport_state == "error":
+		_set_overlay_compact(false)
+	lobby_signature = "%s:%s:%s" % [transport_state, verified, handshake_failed]
 	overlay_subtitle.text = "참가자를 기다리는 중입니다. 이 화면을 유지하세요." if is_host and not verified else ("방장에게 연결하는 중입니다. 이 화면을 유지하세요." if not verified else "두 기기의 연결과 콘텐츠 호환성 확인이 완료되었습니다.")
 	var steps := HBoxContainer.new()
 	steps.add_theme_constant_override("separation", 8)
@@ -1323,7 +1332,7 @@ func _show_multiplayer_lobby() -> void:
 	stations.add_child(_lobby_player_card("P2 · 참가자", "호환 확인 완료" if verified else "방장에게 연결 중", run_coordinator.run.characters[1], COLOR_ORANGE, verified))
 	overlay_content.add_child(stations)
 	_info_panel("대기실 상태", "%s\n역할 · %s\n호환 코드 · %s" % [_connection_status_text(), "방장" if is_host else "참가자", GameCompatibility.code()], COLOR_CYAN if verified else COLOR_BLUE)
-	if cooperative_session != null and cooperative_session.handshake_failed:
+	if handshake_failed:
 		_info_panel("입장 실패", "두 기기에 같은 버전의 APK를 설치한 뒤 다시 연결하세요.", COLOR_RED)
 		_add_connection_action("↻  연결 다시 설정", _reset_multiplayer_connection, COLOR_RED)
 		return
@@ -1347,6 +1356,19 @@ func _show_multiplayer_lobby() -> void:
 		modes.add_child(duel)
 	else:
 		_info_panel("방장 선택 대기", "방장이 협동 원정 또는 2인 결투를 선택하면 두 기기가 함께 게임으로 이동합니다.", COLOR_ORANGE)
+
+func _debug_lobby_preview() -> Dictionary:
+	if not OS.is_debug_build():
+		return {}
+	for argument in OS.get_cmdline_args():
+		if not argument.begins_with("--ui-preview="):
+			continue
+		match argument.trim_prefix("--ui-preview="):
+			"host_waiting": return {"is_host": true, "transport_state": "listening", "verified": false, "handshake_failed": false}
+			"guest_verified": return {"is_host": false, "transport_state": "connected", "verified": true, "handshake_failed": false}
+			"incompatible": return {"is_host": true, "transport_state": "connected", "verified": false, "handshake_failed": true}
+			"transport_error": return {"is_host": false, "transport_state": "error", "verified": false, "handshake_failed": false}
+	return {}
 
 func _reset_multiplayer_connection() -> void:
 	if cooperative_session != null:

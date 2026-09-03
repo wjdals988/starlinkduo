@@ -43,7 +43,7 @@
 | 화면 | 기준 제품 | 현재 판정 | 다음 개선 게이트 |
 |---|---|---|---|
 | 메인 | Hades, Legends of Runeterra | PASS | Galaxy TalkBack·큰 글씨 확인 |
-| Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 2대의 역할·준비 상태 시각 검증 |
+| Bluetooth 진입·대기실 | Across the Obelisk | PARTIAL | 실제 Android 2대의 연결·복구 왕복 검증 |
 | 함선 메뉴 | MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 플레이 모드 선택 | Hades, MARVEL SNAP | PASS | Galaxy 실기기 큰 글씨 확인 |
 | 편성 | Legends of Runeterra | PASS | Galaxy 실기기 큰 글씨 확인 |
@@ -143,6 +143,13 @@
 - Across the Obelisk 공식 소개는 플레이어가 덱 전략에 집중할 수 있도록 파티 구성 자체의 부담을 줄이는 것을 협동 설계 목표로 설명한다. 이 원칙에 따라 오류 안내만 읽고 상단 닫기를 추측해야 했던 Bluetooth 대기실 실패 상태에 명시적인 `연결 다시 설정` CTA를 추가했다.
 - 호환 코드 불일치와 전송 오류를 분리해 안내하고, 복구 CTA는 기존 세션과 Bluetooth 소켓을 닫은 뒤 로비 서명 상태를 비우고 `방 만들기 / 참가하기` 화면으로 돌아간다. 자동 프로토콜 테스트는 호환성 불일치 차단과 연결 상태 전이를 계속 검증한다.
 - 실제 Android 두 대에서 버전이 다른 APK·연결 중 Bluetooth OFF·상대 앱 종료를 재현한 왕복 검증은 남아 있으므로 Bluetooth 진입·대기실 판정은 `PARTIAL`을 유지한다.
+
+### 2026-09-03 Bluetooth 대기실 상태별 정적 검증
+
+- 실제 무선 연결 여부와 화면 구현 여부를 분리해 검증하기 위해 디버그 빌드에서만 동작하는 `--ui-preview` 경로를 추가했다. `OS.is_debug_build()`와 명시적 인자가 모두 있어야 활성화되며, 최종 Android 내보내기 설정에는 인자를 남기지 않는다.
+- 방장 대기와 참가자 호환 확인 완료는 각각 `artifacts/emulator-5556-lobby-preview-host-waiting-v1.png`, `artifacts/emulator-5556-lobby-preview-guest-verified-v1.png` 및 동명 XML에서 확인했다. 두 화면은 제목·안내·닫기·P1/P2 상태·대기실 상태·다음 행동 안내의 접근성 항목 7개를 노출한다.
+- 호환 코드 불일치와 Bluetooth 전송 오류는 각각 `artifacts/emulator-5556-lobby-preview-incompatible-v2.png`, `artifacts/emulator-5556-lobby-preview-transport-error-v2.png` 및 동명 XML에서 확인했다. 오류 화면만 모달을 540px에서 636px로 17.8% 확장해 `연결 다시 설정`을 스크롤 없이 노출하며, 접근성 항목은 8개다.
+- 이 증적은 2400×1080 Android에서 네 가지 UI 상태의 배치·문구·접근성 노드를 검증한다. Bluetooth 소켓, 핸드셰이크, 실제 두 기기의 동시 전환을 증명하지 않으므로 감사표의 판정은 `PARTIAL`을 유지한다.
 
 ### 2026-09-03 보스 브리핑·런 결과 장면 개편
 
