@@ -2051,6 +2051,19 @@ func _show_roster() -> void:
 		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		art.modulate = Color.WHITE if not is_teammate else Color(0.62, 0.68, 0.78, 0.72)
 		art_frame.add_child(art)
+		var portrait_button := Button.new()
+		portrait_button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		portrait_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		portrait_button.disabled = not selection_open or not can_edit or is_current or is_teammate
+		portrait_button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 22, Color.TRANSPARENT, 0))
+		portrait_button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.10), 22, _character_color(character_id), 2))
+		portrait_button.add_theme_stylebox_override("pressed", _panel_style(Color(_character_color(character_id), 0.20), 22, _character_color(character_id), 3))
+		portrait_button.add_theme_stylebox_override("disabled", _panel_style(Color.TRANSPARENT, 22, Color.TRANSPARENT, 0))
+		portrait_button.add_theme_stylebox_override("focus", _focus_style(_character_color(character_id), 22))
+		_set_button_accessibility(portrait_button, "%s 초상화 선택" % _character_name(character_id), "%s. %s. 두 번 탭하여 P%d 캐릭터로 선택합니다" % [_character_role(character_id), _starter_deck_profile(character_id), roster_edit_slot + 1])
+		if not portrait_button.disabled:
+			portrait_button.pressed.connect(_select_character.bind(roster_edit_slot, character_id))
+		art_frame.add_child(portrait_button)
 		candidate.add_child(art_frame)
 		var assignment := Label.new()
 		assignment.text = "◆ P%d SELECTED" % [roster_edit_slot + 1] if is_current else ("P%d 편성됨" % [2 - roster_edit_slot] if is_teammate else " ")
