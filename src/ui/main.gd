@@ -11,9 +11,15 @@ const COLOR_ORANGE := Color("#ffac5f")
 const COLOR_RED := Color("#ff667d")
 const COLOR_YELLOW := Color("#ffd45f")
 const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
-const CURRENT_VERSION := "0.1.2"
+const CURRENT_VERSION := "0.1.3"
 const VERSION_FEED_URL := "https://coldbrewventi.vercel.app/starlink-duo/latest.json"
 const DOWNLOAD_PAGE_URL := "https://coldbrewventi.vercel.app/projects/starlink-duo"
+const RELEASE_HISTORY := [
+	{"version": "0.1.3", "date": "2026.09.05", "notes": ["카드 비용·이름·효과 정보 위계 개선", "통신 휠 형태의 빠른 메시지", "카드 더미 형태의 남은 덱 표시", "버전별 게임 내 업데이트 기록"]},
+	{"version": "0.1.2", "date": "2026.09.05", "notes": ["현재 버전 표시와 신규 업데이트 감지", "업데이트 레드닷·최초 1회 안내", "대시보드 다운로드와 변경 기록 연결"]},
+	{"version": "0.1.1", "date": "2026.09.05", "notes": ["공통 첫 전투 뒤 4갈래 항로 선택", "덱 카드 최대 6열·세로 스크롤", "Android 맵·덱 화면 검증"]},
+	{"version": "0.1.0", "date": "2026.09.04", "notes": ["싱글 원정과 캐릭터 편성", "분기형 성계 지도와 순차 카드 전투", "Bluetooth 대기실·빠른 메시지 기반"]},
+]
 const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
 const StarRouteMapView := preload("res://src/ui/star_route_map.gd")
 
@@ -59,8 +65,7 @@ var player_panels: Array[PanelContainer] = []
 var player_status_visuals: Array[PlayerStatusVisual] = []
 var player_status_badges: Array[Label] = []
 var hand_container: HBoxContainer
-var draw_pile_badge: PanelContainer
-var draw_pile_label: Label
+var draw_pile_badge: DrawPileVisual
 var status_label: Label
 var ready_button: Button
 var turn_label: Label
@@ -490,25 +495,65 @@ func _compare_versions(left: String, right: String) -> int:
 
 func _show_version_info() -> void:
 	_clear_overlay()
-	_set_overlay_compact(true)
+	_set_overlay_immersive()
 	var update_available := _is_update_available()
 	var remote_version := str(latest_release.get("version", CURRENT_VERSION))
 	var newest_version := remote_version if update_available else CURRENT_VERSION
-	overlay_title.text = "새 업데이트 v%s" % newest_version if update_available else "VERSION %s" % CURRENT_VERSION
-	overlay_subtitle.text = "현재 v%s · 최신 v%s" % [CURRENT_VERSION, newest_version]
-	var notes: Array = latest_release.get("notes", []) if remote_version == CURRENT_VERSION or update_available else []
-	if notes.is_empty():
-		notes = ["현재 설치된 버전이 최신 버전입니다."]
-	_add_settings_note("업데이트 노트", "\n".join(notes), COLOR_RED if update_available else COLOR_CYAN)
+	overlay_title.text = "함선 업데이트 기록"
+	overlay_subtitle.text = "CURRENT  v%s    ·    LATEST  v%s" % [CURRENT_VERSION, newest_version]
+	var status := Label.new()
+	status.text = "●  새 항해 데이터가 도착했습니다" if update_available else "◆  모든 항해 데이터가 최신입니다"
+	status.add_theme_font_size_override("font_size", 17)
+	status.add_theme_color_override("font_color", COLOR_RED if update_available else COLOR_CYAN)
+	overlay_content.add_child(status)
+	var divider := HSeparator.new()
+	divider.modulate = Color(COLOR_CYAN, 0.32)
+	overlay_content.add_child(divider)
+	var history: Array = latest_release.get("releases", RELEASE_HISTORY)
+	for release in history:
+		_add_release_log(release, str(release.get("version", "")) == newest_version)
 	if update_available:
-		var download := _action_button("대시보드에서 APK 받기  ↗", _open_download_page, COLOR_RED, 58)
+		var download := _action_button("⇩  최신 항해 데이터 받기", _open_download_page, COLOR_RED, 58)
 		overlay_content.add_child(download)
-	else:
-		_add_settings_note("업데이트 상태", "현재 최신 버전을 사용하고 있습니다.", COLOR_CYAN)
-	var history := _action_button("전체 버전 업데이트 기록 보기  ↗", _open_download_page, COLOR_BLUE, 52)
-	overlay_content.add_child(history)
-	var back := _action_button("←  메인 화면으로", _show_main_menu, COLOR_MUTED, 48)
-	overlay_content.add_child(back)
+	var navigation := HBoxContainer.new()
+	navigation.alignment = BoxContainer.ALIGNMENT_END
+	navigation.add_theme_constant_override("separation", 16)
+	navigation.add_child(_log_link_button("↗  전체 기록", _open_download_page, COLOR_BLUE))
+	navigation.add_child(_log_link_button("←  메인 화면", _show_main_menu, COLOR_MUTED))
+	overlay_content.add_child(navigation)
+
+func _add_release_log(release: Dictionary, is_latest: bool) -> void:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = 66
+	row.add_theme_constant_override("separation", 22)
+	var version := Label.new()
+	version.text = "◈  v%s\n    %s" % [release.get("version", "-"), release.get("date", "")]
+	version.custom_minimum_size.x = 176
+	version.add_theme_font_size_override("font_size", 15)
+	version.add_theme_color_override("font_color", COLOR_CYAN if is_latest else COLOR_MUTED)
+	row.add_child(version)
+	var notes: Array = release.get("notes", [])
+	var copy := Label.new()
+	copy.text = "  ·  ".join(notes)
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	copy.add_theme_font_size_override("font_size", 14)
+	copy.add_theme_color_override("font_color", COLOR_TEXT)
+	row.add_child(copy)
+	overlay_content.add_child(row)
+
+func _log_link_button(text_value: String, callback: Callable, accent: Color) -> Button:
+	var button := Button.new()
+	button.text = text_value
+	button.custom_minimum_size = Vector2(170, 44)
+	button.add_theme_font_size_override("font_size", 14)
+	button.add_theme_color_override("font_color", accent)
+	button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 18, Color.TRANSPARENT, 0, 10, 5))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.14), 18, Color.TRANSPARENT, 0, 10, 5))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 18))
+	button.pressed.connect(callback)
+	return button
 
 func _open_download_page() -> void:
 	OS.shell_open(str(latest_release.get("downloadPageUrl", DOWNLOAD_PAGE_URL)))
@@ -843,18 +888,41 @@ func _show_current_deck() -> void:
 
 func _show_quick_chat() -> void:
 	_clear_overlay()
-	_set_overlay_compact(true, true)
-	overlay_title.text = "빠른 메시지"
-	overlay_subtitle.text = "짧은 전술 메시지를 선택하세요. 자유 입력 없이 안전한 문구만 전송합니다."
+	_set_overlay_immersive()
+	overlay_title.text = "✉  COMMS LINK"
+	overlay_subtitle.text = "동료에게 보낼 전술 신호를 선택하세요"
+	var comms_signal := Label.new()
+	comms_signal.text = "·  · ─── ◉ ─── ·  ·"
+	comms_signal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	comms_signal.add_theme_font_size_override("font_size", 24)
+	comms_signal.add_theme_color_override("font_color", COLOR_CYAN)
+	overlay_content.add_child(comms_signal)
 	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 18)
+	grid.add_theme_constant_override("v_separation", 18)
 	overlay_content.add_child(grid)
 	for macro_id in ["ready", "wait", "attack", "defend", "nice", "sorry"]:
-		var button := _action_button(_macro_chat_text(macro_id), _send_quick_chat.bind(macro_id), COLOR_CYAN, 64)
+		var button := _comms_button(macro_id)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
+
+func _comms_button(macro_id: String) -> Button:
+	var icons := {"ready": "✓", "wait": "⌛", "attack": "⚔", "defend": "⬡", "nice": "★", "sorry": "…"}
+	var accents := {"ready": COLOR_CYAN, "wait": COLOR_YELLOW, "attack": COLOR_RED, "defend": COLOR_BLUE, "nice": COLOR_ORANGE, "sorry": COLOR_MUTED}
+	var accent: Color = accents.get(macro_id, COLOR_CYAN)
+	var button := Button.new()
+	button.text = "%s\n%s" % [icons.get(macro_id, "✉"), _macro_chat_text(macro_id)]
+	button.custom_minimum_size = Vector2(250, 112)
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", COLOR_TEXT)
+	button.add_theme_stylebox_override("normal", _panel_style(Color(accent, 0.12), 56, Color.TRANSPARENT, 0, 18, 12))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.32), 56, Color.TRANSPARENT, 0, 18, 12))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.46), 56, Color.TRANSPARENT, 0, 18, 12))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 56))
+	_set_button_accessibility(button, "%s 메시지" % _macro_chat_text(macro_id), "동료에게 이 메시지를 전송합니다")
+	button.pressed.connect(_send_quick_chat.bind(macro_id))
+	return button
 
 func _send_quick_chat(macro_id: String) -> void:
 	var text := _macro_chat_text(macro_id)
@@ -1229,7 +1297,7 @@ func _build_hand_section() -> Control:
 
 	ready_button = Button.new()
 	var chat_button := Button.new()
-	chat_button.text = "◌"
+	chat_button.text = "✉"
 	chat_button.tooltip_text = "빠른 메시지"
 	_set_button_accessibility(chat_button, "빠른 메시지", "미리 정한 짧은 메시지를 동료에게 보냅니다")
 	chat_button.custom_minimum_size = Vector2(48, 48)
@@ -1263,17 +1331,12 @@ func _build_hand_section() -> Control:
 	var hand_row := HBoxContainer.new()
 	hand_row.add_theme_constant_override("separation", 10)
 	section.add_child(hand_row)
-	draw_pile_badge = PanelContainer.new()
-	draw_pile_badge.custom_minimum_size = Vector2(92, 132)
-	draw_pile_badge.add_theme_stylebox_override("panel", _panel_style(Color("#0c1930e8"), 14, COLOR_CYAN, 2, 10, 8))
-	draw_pile_label = Label.new()
-	draw_pile_label.text = "▤  덱\n0장"
-	draw_pile_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	draw_pile_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	draw_pile_label.add_theme_font_size_override("font_size", 15)
-	draw_pile_label.add_theme_color_override("font_color", COLOR_CYAN)
-	draw_pile_label.accessibility_name = "드로우 덱"
-	draw_pile_badge.add_child(draw_pile_label)
+	draw_pile_badge = preload("res://src/ui/draw_pile_visual.gd").new()
+	draw_pile_badge.custom_minimum_size = Vector2(112, 168)
+	draw_pile_badge.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 18, Color.TRANSPARENT, 0, 4, 4))
+	draw_pile_badge.add_theme_stylebox_override("hover", _panel_style(Color(COLOR_CYAN, 0.10), 18, Color.TRANSPARENT, 0, 4, 4))
+	draw_pile_badge.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 18))
+	draw_pile_badge.pressed.connect(_show_current_deck)
 	hand_row.add_child(draw_pile_badge)
 	hand_container = HBoxContainer.new()
 	hand_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3306,9 +3369,8 @@ func _rebuild_hand() -> void:
 	for child in hand_container.get_children():
 		child.queue_free()
 	var active_player: CombatantState = duel_state.players[local_slot] if game_mode == "duel" and duel_state != null else state.players[local_slot]
-	if draw_pile_label != null:
-		draw_pile_label.text = "▤  P%d 덱\n%d장" % [local_slot + 1, active_player.draw_pile.size()]
-		draw_pile_label.accessibility_description = "P%d의 남은 드로우 카드 %d장" % [local_slot + 1, active_player.draw_pile.size()]
+	if draw_pile_badge != null:
+		draw_pile_badge.configure(local_slot, active_player.draw_pile.size(), COLOR_BLUE if local_slot == 0 else COLOR_ORANGE)
 	for hand_index in active_player.hand.size():
 		var card_id: StringName = active_player.hand[hand_index]
 		var card: CardData = catalog[card_id]
