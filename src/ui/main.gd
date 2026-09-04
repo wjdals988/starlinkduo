@@ -392,15 +392,13 @@ func _show_main_menu() -> void:
 		var resume_title := "↻  최근 결투 결과 보기" if duel_state.phase == DuelState.Phase.FINISHED else "▶  결투 이어하기"
 		var resume_hint := "P%d 승리 · %d턴" % [duel_state.winner + 1, duel_state.turn] if duel_state.phase == DuelState.Phase.FINISHED and duel_state.winner >= 0 else ("무승부 · %d턴" % duel_state.turn if duel_state.phase == DuelState.Phase.FINISHED else "TURN %02d · P1 %d / P2 %d" % [duel_state.turn, duel_state.health[0], duel_state.health[1]])
 		actions.add_child(_main_action_button(resume_title, resume_hint, _resume_saved_duel, COLOR_RED, false))
-	var fresh_run := run_coordinator.can_select_characters()
+	var fresh_run := run_coordinator.is_pristine_run()
 	var single_title := "▶  싱글플레이 시작"
 	var single_hint := "혼자 두 대원을 지휘합니다"
 	if not fresh_run:
-		single_title = "▶  원정 결과 보기" if run_coordinator.run.phase in ["completed", "failed"] else "▶  싱글플레이 계속"
+		single_title = "▶  싱글플레이"
 		single_hint = "STAGE %d · 구간 %d/8 · 덱 %d+%d장" % [run_coordinator.run.stage, mini(run_coordinator.run.step + 1, 8), run_coordinator.run.decks[0].size(), run_coordinator.run.decks[1].size()]
 	actions.add_child(_main_action_button(single_title, single_hint, _start_singleplayer, COLOR_CYAN, true))
-	if not fresh_run:
-		actions.add_child(_main_action_button("↻  새 원정 시작", "현재 싱글 진행을 지우고 처음부터", _show_single_reset_confirmation, COLOR_RED, false))
 	actions.add_child(_main_action_button("◇  Bluetooth 멀티플레이", "방 만들기 · 참가하기 · 대기실", _show_connection, COLOR_BLUE, false))
 	var settings := Button.new()
 	settings.text = "⚙  화면 · 조작 설정"
@@ -443,6 +441,29 @@ func _resume_saved_duel() -> void:
 	_refresh()
 
 func _start_singleplayer() -> void:
+	if not run_coordinator.is_pristine_run():
+		_show_single_resume_confirmation()
+		return
+	_continue_singleplayer()
+
+func _show_single_resume_confirmation() -> void:
+	_clear_overlay()
+	_set_overlay_minimal()
+	overlay_title.text = "진행 중인 게임이 있습니다"
+	overlay_subtitle.text = "기존 원정을 이어하시겠습니까?"
+	var run := run_coordinator.run
+	_info_panel("저장된 원정", "STAGE %d · 구간 %d/8 · 팀 내구도 %d/%d\n덱 %d+%d장 · 스타 키 %d개" % [run.stage, mini(run.step + 1, 8), run.team_health, run.team_max_health, run.decks[0].size(), run.decks[1].size(), run.keys.count(true)], COLOR_CYAN)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var restart := _action_button("처음부터", _confirm_single_reset, COLOR_RED, 64)
+	restart.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(restart)
+	var resume := _action_button("이어하기", _continue_singleplayer, COLOR_CYAN, 64)
+	resume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(resume)
+	overlay_content.add_child(actions)
+
+func _continue_singleplayer() -> void:
 	var resume_hub := not run_coordinator.can_select_characters()
 	game_started = true
 	game_mode = "cooperative"

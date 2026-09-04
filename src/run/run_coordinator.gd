@@ -36,6 +36,14 @@ func select_character(player_slot: int, character_id: StringName) -> Dictionary:
 func can_select_characters() -> bool:
 	return run != null and run.phase == "traversal" and run.stage == 1 and run.step == 0 and run.pending_routes.is_empty()
 
+func is_pristine_run() -> bool:
+	return can_select_characters() \
+		and run.characters == [&"guardian", &"engineer"] \
+		and run.decks[0] == starter_deck_for(&"guardian") \
+		and run.decks[1] == starter_deck_for(&"engineer") \
+		and run.gold == [100, 100] \
+		and run.keys.count(true) == 0
+
 func resume_or_start(seed: int) -> RunState:
 	run = save_store.load_active()
 	return run if run != null else start_new(seed)
