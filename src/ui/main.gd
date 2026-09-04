@@ -2008,7 +2008,7 @@ func _show_roster() -> void:
 		return
 	_clear_overlay()
 	var selection_open := run_coordinator.can_select_characters()
-	_set_overlay_balanced()
+	_set_overlay_tall()
 	overlay_title.text = "승무원 편성"
 	if cooperative_session != null:
 		roster_edit_slot = local_slot
@@ -2017,7 +2017,7 @@ func _show_roster() -> void:
 	crew_row.add_theme_constant_override("separation", 12)
 	for slot in 2:
 		var identity := Button.new()
-		identity.custom_minimum_size = Vector2(0, 86)
+		identity.custom_minimum_size = Vector2(0, 68)
 		identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var slot_accent := COLOR_BLUE if slot == 0 else COLOR_ORANGE
 		identity.text = "P%d  %s\n%s · 시작 덱 %d장" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), _character_role(run_coordinator.run.characters[slot]), run_coordinator.run.decks[slot].size()]
@@ -2035,12 +2035,12 @@ func _show_roster() -> void:
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 10)
+	grid.add_theme_constant_override("v_separation", 8)
 	var can_edit := cooperative_session == null or roster_edit_slot == local_slot
 	for character_id in [&"guardian", &"engineer", &"hacker", &"assault", &"medic", &"navigator"]:
 		var button := Button.new()
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size.y = 118
+		button.custom_minimum_size.y = 92
 		button.text = "%s\n%s\n%s" % [_character_name(character_id), _character_role(character_id), _starter_deck_profile(character_id)]
 		button.icon = load(_character_portrait(character_id))
 		button.expand_icon = true
@@ -2056,7 +2056,7 @@ func _show_roster() -> void:
 		grid.add_child(button)
 	overlay_content.add_child(grid)
 	if selection_open and cooperative_session == null:
-		_add_connection_action("편성 완료 · 항로 선택", _show_hub, COLOR_CYAN)
+		_add_connection_action("편성 확정 · 첫 항로 보기", _show_map, COLOR_CYAN)
 
 func _set_roster_edit_slot(slot: int) -> void:
 	roster_edit_slot = slot
@@ -2172,73 +2172,85 @@ func _show_map() -> void:
 	if run.phase == "completed" or run.phase == "failed":
 		_show_run_outcome(run.phase == "completed")
 		return
-	var route_metrics := HBoxContainer.new()
-	route_metrics.add_theme_constant_override("separation", 12)
-	route_metrics.add_child(_metric_card("현재 구간", "%d / 8" % [run.step + 1], COLOR_CYAN))
-	route_metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_BLUE))
-	route_metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
-	overlay_content.add_child(route_metrics)
-	var progress_rail := HBoxContainer.new()
-	progress_rail.alignment = BoxContainer.ALIGNMENT_CENTER
-	progress_rail.add_theme_constant_override("separation", 5)
-	for route_index in 8:
-		var node_state := "완료" if route_index < run.step else ("현재" if route_index == run.step else "예정")
-		var node_accent := COLOR_CYAN if route_index == run.step else (COLOR_BLUE if route_index < run.step else COLOR_MUTED)
-		var node := PanelContainer.new()
-		node.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		node.custom_minimum_size.y = 42
-		node.add_theme_stylebox_override("panel", _panel_style(Color(node_accent, 0.18 if route_index == run.step else 0.07), 12, Color.TRANSPARENT, 0, 8, 4))
-		var node_label := Label.new()
-		node_label.text = "%s %02d" % ["▶" if route_index == run.step else ("✓" if route_index < run.step else "·"), route_index + 1]
-		node_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		node_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		node_label.add_theme_font_size_override("font_size", 14)
-		node_label.add_theme_color_override("font_color", node_accent)
-		node_label.accessibility_name = "항로 %d %s" % [route_index + 1, node_state]
-		node.add_child(node_label)
-		progress_rail.add_child(node)
-		if route_index < 7:
-			var connector := Label.new()
-			connector.text = "—"
-			connector.add_theme_color_override("font_color", COLOR_BLUE if route_index < run.step else Color("#4d5a71"))
-			progress_rail.add_child(connector)
-	overlay_content.add_child(progress_rail)
-	if run.pending_routes.size() == 2:
-		_add_connection_action("선택 완료 · 노드 진입", _enter_selected_routes, COLOR_CYAN)
 	var stage: Dictionary = run.map.stages[run.stage - 1]
+	var chart := PanelContainer.new()
+	chart.custom_minimum_size.y = 220
+	chart.add_theme_stylebox_override("panel", _panel_style(Color("#050d1dcc"), 28, Color.TRANSPARENT, 0, 20, 14))
+	var chart_column := VBoxContainer.new()
+	chart_column.add_theme_constant_override("separation", 10)
+	chart.add_child(chart_column)
+	var sector_status := Label.new()
+	sector_status.text = "SECTOR %d   ·   HULL %d/%d   ·   STAR KEYS %d/3" % [run.stage, run.team_health, run.team_max_health, run.keys.count(true)]
+	sector_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sector_status.add_theme_font_size_override("font_size", 14)
+	sector_status.add_theme_color_override("font_color", COLOR_CYAN)
+	chart_column.add_child(sector_status)
+	var constellation := HBoxContainer.new()
+	constellation.alignment = BoxContainer.ALIGNMENT_CENTER
+	constellation.add_theme_constant_override("separation", 2)
+	chart_column.add_child(constellation)
 	for step_data in stage.steps:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 10)
-		var marker := Label.new()
-		marker.custom_minimum_size.x = 106
 		var step_index := int(step_data.index)
-		var marker_state := "✓ 완료" if step_index < run.step else ("▶ 현재" if step_index == run.step else "· 예정")
-		marker.text = "%s  %02d" % [marker_state, step_index + 1]
-		marker.add_theme_font_size_override("font_size", 15)
-		marker.add_theme_color_override("font_color", COLOR_CYAN if step_index == run.step else (COLOR_BLUE if step_index < run.step else COLOR_MUTED))
-		row.add_child(marker)
-		var is_current := int(step_data.index) == run.step
+		var node_column := VBoxContainer.new()
+		node_column.custom_minimum_size.x = 82
+		node_column.alignment = BoxContainer.ALIGNMENT_CENTER
+		var node_state := "CLEARED" if step_index < run.step else ("YOU ARE HERE" if step_index == run.step else "UNCHARTED")
+		var node_accent := COLOR_CYAN if step_index == run.step else (COLOR_BLUE if step_index < run.step else Color("#58647a"))
+		var node_icon := Label.new()
+		node_icon.text = "✦" if step_index == run.step else ("●" if step_index < run.step else "○")
+		node_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		node_icon.add_theme_font_size_override("font_size", 28 if step_index == run.step else 21)
+		node_icon.add_theme_color_override("font_color", node_accent)
+		node_column.add_child(node_icon)
+		var type_icons: Array[String] = []
 		if step_data.kind == "common":
-			if is_current and run.pending_routes.is_empty():
-				row.add_child(_route_button("%s  공동 · %s 선택\n%s" % [_node_icon(step_data.options[0].type), _node_label(step_data.options[0].type), _node_preview(step_data.options[0].type)], COLOR_CYAN, _choose_route.bind(local_slot, step_data.options[0].id)))
-			else:
-				row.add_child(_route_chip("%s  공동 · %s" % [_node_icon(step_data.options[0].type), _node_label(step_data.options[0].type)], COLOR_CYAN))
+			type_icons.append(_node_icon(step_data.options[0].type))
 		else:
-			for slot in 2:
-				var accent := COLOR_BLUE if slot == 0 else COLOR_ORANGE
-				if is_current and slot == local_slot and not run.pending_routes.has(slot):
-					var choices := VBoxContainer.new()
-					choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-					for option in step_data.lanes[slot].options:
-						choices.add_child(_route_button("%s  P%d · %s\n%s" % [_node_icon(option.type), slot + 1, _node_label(option.type), _node_preview(option.type)], accent, _choose_route.bind(slot, option.id)))
-					row.add_child(choices)
-				else:
-					var option_texts: Array[String] = []
-					for option in step_data.lanes[slot].options:
-						option_texts.append(_node_label(option.type))
-					var prefix := "선택됨" if is_current and run.pending_routes.has(slot) else "P%d" % (slot + 1)
-					row.add_child(_route_chip("%s  %s" % [prefix, " / ".join(option_texts)], accent))
-		overlay_content.add_child(row)
+			for lane in step_data.lanes:
+				for option in lane.options:
+					if not type_icons.has(_node_icon(option.type)):
+						type_icons.append(_node_icon(option.type))
+		var node_caption := Label.new()
+		node_caption.text = "%02d  %s\n%s" % [step_index + 1, " ".join(type_icons), node_state]
+		node_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		node_caption.add_theme_font_size_override("font_size", 11)
+		node_caption.add_theme_color_override("font_color", node_accent)
+		node_column.add_child(node_caption)
+		constellation.add_child(node_column)
+		if step_index < MapGenerator.TRAVERSAL_STEPS - 1:
+			var connector := Label.new()
+			connector.text = "━━" if step_index < run.step else "╌╌"
+			connector.add_theme_color_override("font_color", COLOR_BLUE if step_index < run.step else Color("#344057"))
+			constellation.add_child(connector)
+	chart_column.add_child(_status_chip("✦  현재 위치 · %02d번째 항로" % [run.step + 1], COLOR_CYAN))
+	overlay_content.add_child(chart)
+	var current_step: Dictionary = stage.steps[run.step]
+	var choice_title := Label.new()
+	choice_title.text = "CHOOSE DESTINATION  /  다음 목적지"
+	choice_title.add_theme_font_size_override("font_size", 16)
+	choice_title.add_theme_color_override("font_color", COLOR_YELLOW)
+	overlay_content.add_child(choice_title)
+	var choices_row := HBoxContainer.new()
+	choices_row.add_theme_constant_override("separation", 14)
+	overlay_content.add_child(choices_row)
+	if current_step.kind == "common":
+		var option: Dictionary = current_step.options[0]
+		choices_row.add_child(_star_node_button(option, -1, COLOR_CYAN, not run.pending_routes.is_empty()))
+	else:
+		for slot in 2:
+			var lane := VBoxContainer.new()
+			lane.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lane.add_theme_constant_override("separation", 8)
+			var lane_label := Label.new()
+			lane_label.text = "P%d 항로" % [slot + 1]
+			lane_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			lane_label.add_theme_color_override("font_color", COLOR_BLUE if slot == 0 else COLOR_ORANGE)
+			lane.add_child(lane_label)
+			for option in current_step.lanes[slot].options:
+				lane.add_child(_star_node_button(option, slot, COLOR_BLUE if slot == 0 else COLOR_ORANGE, run.pending_routes.has(slot) or slot != local_slot))
+			choices_row.add_child(lane)
+	if run.pending_routes.size() == 2:
+		_add_connection_action("워프 좌표 확정 · 선택 노드 진입", _enter_selected_routes, COLOR_CYAN)
 
 func _show_boss_briefing(true_boss: bool) -> void:
 	var run := run_coordinator.run
@@ -3043,6 +3055,25 @@ func _route_button(text: String, accent: Color, callback: Callable) -> Button:
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.20), 24, accent, 3, 12, 6))
 	button.add_theme_stylebox_override("focus", _focus_style(accent, 24))
 	button.pressed.connect(callback)
+	return button
+
+func _star_node_button(option: Dictionary, slot: int, accent: Color, selected_or_locked: bool) -> Button:
+	var button := Button.new()
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.custom_minimum_size.y = 66
+	button.text = "%s   %s\n%s" % [_node_icon(String(option.type)), _node_label(String(option.type)), "✓ 좌표 선택됨" if selected_or_locked and run_coordinator.run.pending_routes.has(slot) else _node_preview(String(option.type))]
+	button.disabled = selected_or_locked
+	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_color_override("font_color", COLOR_TEXT)
+	button.add_theme_color_override("font_disabled_color", Color(accent, 0.72))
+	button.add_theme_stylebox_override("normal", _panel_style(Color(accent, 0.10), 30, Color.TRANSPARENT, 0, 16, 8))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.24), 30, accent, 2, 16, 8))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.34), 30, accent, 3, 16, 8))
+	button.add_theme_stylebox_override("disabled", _panel_style(Color(accent, 0.07), 30, Color.TRANSPARENT, 0, 16, 8))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 30))
+	_set_button_accessibility(button, "%s 노드" % _node_label(String(option.type)), "%s. 두 번 탭하여 목적지로 선택합니다" % _node_preview(String(option.type)))
+	if not selected_or_locked:
+		button.pressed.connect(_choose_route.bind(local_slot if slot < 0 else slot, String(option.id)))
 	return button
 
 func _node_label(type: String) -> String:
