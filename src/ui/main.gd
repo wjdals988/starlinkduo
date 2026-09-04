@@ -2014,15 +2014,13 @@ func _show_roster() -> void:
 		roster_edit_slot = local_slot
 	overlay_subtitle.text = "P%d 캐릭터 선택 · 서로 다른 직업 2개를 편성하세요." % (roster_edit_slot + 1) if selection_open else "현재 원정의 편성이 확정되었습니다 · 새 원정에서 다시 선택할 수 있습니다."
 	var crew_row := HBoxContainer.new()
-	crew_row.add_theme_constant_override("separation", 12)
+	crew_row.add_theme_constant_override("separation", 10)
 	for slot in 2:
 		var identity := Button.new()
-		identity.custom_minimum_size = Vector2(0, 68)
+		identity.custom_minimum_size = Vector2(0, 48)
 		identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var slot_accent := COLOR_BLUE if slot == 0 else COLOR_ORANGE
-		identity.text = "P%d  %s\n%s · 시작 덱 %d장" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), _character_role(run_coordinator.run.characters[slot]), run_coordinator.run.decks[slot].size()]
-		identity.icon = load(_character_portrait(run_coordinator.run.characters[slot]))
-		identity.expand_icon = true
+		identity.text = "P%d  %s   ·   %s" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), _character_role(run_coordinator.run.characters[slot])]
 		identity.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		identity.disabled = cooperative_session != null or roster_edit_slot == slot or not selection_open
 		identity.add_theme_stylebox_override("normal", _panel_style(Color(slot_accent, 0.10), 16, Color.TRANSPARENT, 0, 10, 7))
@@ -2032,29 +2030,49 @@ func _show_roster() -> void:
 		identity.pressed.connect(_set_roster_edit_slot.bind(slot))
 		crew_row.add_child(identity)
 	overlay_content.add_child(crew_row)
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 8)
+	var lineup := HBoxContainer.new()
+	lineup.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lineup.add_theme_constant_override("separation", 8)
 	var can_edit := cooperative_session == null or roster_edit_slot == local_slot
 	for character_id in [&"guardian", &"engineer", &"hacker", &"assault", &"medic", &"navigator"]:
+		var candidate := VBoxContainer.new()
+		candidate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		candidate.add_theme_constant_override("separation", 2)
+		var is_current: bool = run_coordinator.run.characters[roster_edit_slot] == character_id
+		var is_teammate: bool = run_coordinator.run.characters[1 - roster_edit_slot] == character_id
+		var art_frame := PanelContainer.new()
+		art_frame.custom_minimum_size.y = 190
+		art_frame.add_theme_stylebox_override("panel", _panel_style(Color(_character_color(character_id), 0.20 if is_current else 0.04), 22, _character_color(character_id) if is_current else Color.TRANSPARENT, 3 if is_current else 0, 2, 2))
+		var art := TextureRect.new()
+		art.texture = load(_character_portrait(character_id))
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art.modulate = Color.WHITE if not is_teammate else Color(0.62, 0.68, 0.78, 0.72)
+		art_frame.add_child(art)
+		candidate.add_child(art_frame)
+		var assignment := Label.new()
+		assignment.text = "◆ P%d SELECTED" % [roster_edit_slot + 1] if is_current else ("P%d 편성됨" % [2 - roster_edit_slot] if is_teammate else " ")
+		assignment.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		assignment.add_theme_font_size_override("font_size", 11)
+		assignment.add_theme_color_override("font_color", _character_color(character_id) if is_current else COLOR_MUTED)
+		candidate.add_child(assignment)
 		var button := Button.new()
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size.y = 92
-		button.text = "%s\n%s\n%s" % [_character_name(character_id), _character_role(character_id), _starter_deck_profile(character_id)]
-		button.icon = load(_character_portrait(character_id))
-		button.expand_icon = true
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var is_current: bool = run_coordinator.run.characters[roster_edit_slot] == character_id
-		button.disabled = not selection_open or not can_edit or is_current or run_coordinator.run.characters[1 - roster_edit_slot] == character_id
+		button.custom_minimum_size.y = 72
+		button.text = "%s\n%s" % [_character_name(character_id), _starter_deck_profile(character_id)]
+		button.disabled = not selection_open or not can_edit or is_current or is_teammate
 		_set_button_accessibility(button, "P%d %s 선택" % [roster_edit_slot + 1, _character_name(character_id)], "%s. %s. %s" % [_character_role(character_id), _starter_deck_profile(character_id), _disabled_character_reason(roster_edit_slot, character_id, selection_open, can_edit)])
-		button.add_theme_stylebox_override("normal", _panel_style(Color("#101725a8"), 14, Color.TRANSPARENT, 0, 8, 6))
-		button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.18), 14, Color.TRANSPARENT, 0, 8, 6))
-		button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.22) if is_current else Color("#101725"), 14, Color.TRANSPARENT, 0, 8, 6))
+		button.add_theme_font_size_override("font_size", 13)
+		button.add_theme_stylebox_override("normal", _panel_style(Color("#101725e8"), 10, Color.TRANSPARENT, 0, 6, 5))
+		button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.24), 10, _character_color(character_id), 2, 6, 5))
+		button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.24) if is_current else Color("#101725"), 10, Color.TRANSPARENT, 0, 6, 5))
 		button.add_theme_color_override("font_disabled_color", Color.WHITE if is_current else Color("#76839a"))
 		button.pressed.connect(_select_character.bind(roster_edit_slot, character_id))
-		grid.add_child(button)
-	overlay_content.add_child(grid)
+		candidate.add_child(button)
+		lineup.add_child(candidate)
+	overlay_content.add_child(lineup)
 	if selection_open and cooperative_session == null:
 		_add_connection_action("편성 확정 · 첫 항로 보기", _show_map, COLOR_CYAN)
 
