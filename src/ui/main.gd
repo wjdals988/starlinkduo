@@ -33,6 +33,7 @@ var active_route_types: Array[String] = []
 var active_route_combat := false
 var reduce_motion := false
 var haptics_enabled := true
+var ui_sound_enabled := true
 var glow_enabled := true
 var large_text_enabled := false
 var system_font_scale := 1.0
@@ -83,6 +84,8 @@ var enemy_aura: Control
 var chat_bubbles: Array[PanelContainer] = []
 var chat_bubble_labels: Array[Label] = []
 var chat_bubble_tokens := [0, 0]
+var ui_audio_players: Dictionary = {}
+var overlay_transition: Tween
 
 func _ready() -> void:
 	get_tree().set_auto_accept_quit(false)
@@ -91,6 +94,8 @@ func _ready() -> void:
 	accessibility_description = "두 명이 협동하거나 대전하는 오프라인 카드 게임"
 	_load_accessibility_settings()
 	_read_system_font_scale()
+	get_tree().node_added.connect(_on_ui_node_added)
+	_build_ui_audio()
 	catalog = FullCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
 	run_coordinator.resume_or_start(20260902)
@@ -126,6 +131,66 @@ func _exit_tree() -> void:
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), COLOR_VOID)
 
+func _build_ui_audio() -> void:
+	var specs := {
+		"tap": {"notes": [520.0], "duration": 0.055, "volume": -18.0},
+		"open": {"notes": [330.0, 495.0], "duration": 0.12, "volume": -17.0},
+		"confirm": {"notes": [440.0, 660.0, 880.0], "duration": 0.16, "volume": -15.0},
+		"cancel": {"notes": [390.0, 260.0], "duration": 0.11, "volume": -18.0},
+	}
+	for sound_name in specs:
+		var player := AudioStreamPlayer.new()
+		var spec: Dictionary = specs[sound_name]
+		player.stream = _synth_ui_tone(spec.notes, float(spec.duration))
+		player.volume_db = float(spec.volume)
+		player.bus = "Master"
+		add_child(player)
+		ui_audio_players[sound_name] = player
+
+func _synth_ui_tone(notes: Array, duration: float) -> AudioStreamWAV:
+	var stream := AudioStreamWAV.new()
+	var sample_rate := 22050
+	var sample_count := maxi(1, roundi(duration * sample_rate))
+	var bytes := PackedByteArray()
+	bytes.resize(sample_count * 2)
+	for sample_index in sample_count:
+		var time := float(sample_index) / sample_rate
+		var envelope := minf(1.0, time / 0.008) * pow(1.0 - float(sample_index) / sample_count, 2.2)
+		var value := 0.0
+		for note_index in notes.size():
+			var note_time := time - float(note_index) * duration * 0.18
+			if note_time >= 0.0:
+				value += sin(TAU * float(notes[note_index]) * note_time)
+		value = value / maxf(1.0, float(notes.size())) * envelope * 0.68
+		bytes.encode_s16(sample_index * 2, roundi(clampf(value, -1.0, 1.0) * 32767.0))
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = sample_rate
+	stream.stereo = false
+	stream.data = bytes
+	return stream
+
+func _on_ui_node_added(node: Node) -> void:
+	if node is BaseButton:
+		var button := node as BaseButton
+		if not button.pressed.is_connected(_play_button_sound.bind(button)):
+			button.pressed.connect(_play_button_sound.bind(button))
+
+func _play_button_sound(button: BaseButton) -> void:
+	var label: String = button.text.to_lower() if button is Button else button.accessibility_name.to_lower()
+	if "닫기" in label or "취소" in label or "메인" in label:
+		_play_ui_sound("cancel")
+	elif "확정" in label or "완료" in label or "시작" in label or "진입" in label or "구매" in label:
+		_play_ui_sound("confirm")
+	else:
+		_play_ui_sound("tap")
+
+func _play_ui_sound(sound_name: String) -> void:
+	if not ui_sound_enabled or not ui_audio_players.has(sound_name):
+		return
+	var player: AudioStreamPlayer = ui_audio_players[sound_name]
+	player.stop()
+	player.play()
+
 func _on_go_back_requested() -> void:
 	if handling_back_request:
 		return
@@ -135,6 +200,7 @@ func _on_go_back_requested() -> void:
 		if overlay_title.text == "STARLINK DUO":
 			get_tree().quit()
 		else:
+			_play_ui_sound("cancel")
 			_close_overlay()
 	else:
 		get_tree().quit()
@@ -603,17 +669,17 @@ func _macro_chat_text(macro_id: String) -> String:
 func _show_settings() -> void:
 	_clear_overlay()
 	overlay_title.text = "화면 · 조작 설정"
-	overlay_subtitle.text = "연출 강도와 진동을 기기별로 조절합니다. 변경 사항은 이 기기에 자동 저장됩니다."
+	overlay_subtitle.text = "연출 강도와 소리·진동을 기기별로 조절합니다. 변경 사항은 이 기기에 자동 저장됩니다."
 	_add_setting_toggle("큰 글씨", "앱 기본 확대 115%를 사용합니다. 시스템 글자 크기가 더 크면 안전 레이아웃이 우선합니다.", large_text_enabled, _set_large_text)
 	_add_setting_toggle("모션 줄이기", "카드 선택 전환을 즉시 표시해 화면 움직임을 줄입니다.", reduce_motion, _set_reduce_motion)
 	_add_setting_toggle("진동 피드백", "카드를 선택하거나 취소할 때 짧은 햅틱 신호를 사용합니다.", haptics_enabled, _set_haptics)
+	_add_setting_toggle("효과음", "화면 전환·선택·확정·취소에 짧은 전술 신호음을 사용합니다.", ui_sound_enabled, _set_ui_sound)
 	_add_setting_toggle("선택 카드 발광", "선택 카드의 강조 테두리 강도를 높입니다.", glow_enabled, _set_glow)
-	_add_settings_note("글자 크기 연동", "Android 시스템 %d%% 감지 · 게임 HUD %d%% 적용" % [roundi(system_font_scale * 100.0), roundi(_effective_text_scale() * 100.0)], COLOR_CYAN)
-	_add_settings_note("접근성 기준", "주요 터치 영역 48dp 이상 · 상태를 색상과 문자로 함께 표시 · 모달 외부 전투 입력 차단", COLOR_BLUE)
+	_add_settings_note("접근성 적용", "Android 글자 %d%% · HUD %d%% · 터치 48dp 이상 · 색상과 문자로 상태 병기" % [roundi(system_font_scale * 100.0), roundi(_effective_text_scale() * 100.0)], COLOR_CYAN)
 
 func _add_setting_toggle(title: String, description: String, value: bool, callback: Callable) -> void:
 	var row := PanelContainer.new()
-	row.custom_minimum_size.y = 78
+	row.custom_minimum_size.y = 68
 	row.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 16, 10))
 	var content := HBoxContainer.new()
 	content.add_theme_constant_override("separation", 14)
@@ -678,6 +744,12 @@ func _set_haptics(enabled: bool) -> void:
 	haptics_enabled = enabled
 	_save_accessibility_settings()
 
+func _set_ui_sound(enabled: bool) -> void:
+	ui_sound_enabled = enabled
+	_save_accessibility_settings()
+	if enabled:
+		_play_ui_sound("confirm")
+
 func _set_glow(enabled: bool) -> void:
 	glow_enabled = enabled
 	_save_accessibility_settings()
@@ -694,6 +766,7 @@ func _load_accessibility_settings() -> void:
 		return
 	reduce_motion = bool(config.get_value("presentation", "reduce_motion", false))
 	haptics_enabled = bool(config.get_value("presentation", "haptics", true))
+	ui_sound_enabled = bool(config.get_value("presentation", "ui_sound", true))
 	glow_enabled = bool(config.get_value("presentation", "glow", true))
 	large_text_enabled = bool(config.get_value("presentation", "large_text", false))
 
@@ -710,6 +783,7 @@ func _save_accessibility_settings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("presentation", "reduce_motion", reduce_motion)
 	config.set_value("presentation", "haptics", haptics_enabled)
+	config.set_value("presentation", "ui_sound", ui_sound_enabled)
 	config.set_value("presentation", "glow", glow_enabled)
 	config.set_value("presentation", "large_text", large_text_enabled)
 	config.save("user://accessibility.cfg")
@@ -1105,6 +1179,7 @@ func _clear_overlay() -> void:
 	for child in overlay_content.get_children():
 		child.queue_free()
 	overlay.show()
+	_animate_overlay_in.call_deferred()
 	overlay.queue_accessibility_update()
 	_focus_first_overlay_control.call_deferred()
 	_apply_text_scale_tree.call_deferred(overlay)
@@ -1162,9 +1237,40 @@ func _close_overlay() -> void:
 		if in_multiplayer_lobby and cooperative_session != null:
 			cooperative_session.close()
 			cooperative_session = null
-		_show_main_menu()
+			_show_main_menu()
+			return
+	if reduce_motion:
+		_finish_close_overlay()
 		return
+	if overlay_transition != null and overlay_transition.is_valid():
+		overlay_transition.kill()
+	overlay_panel.pivot_offset = overlay_panel.size * 0.5
+	overlay_transition = create_tween().set_parallel(true)
+	overlay_transition.tween_property(overlay_panel, "modulate:a", 0.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	overlay_transition.tween_property(overlay_panel, "scale", Vector2(0.985, 0.985), 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	overlay_transition.chain().tween_callback(_finish_close_overlay)
+
+func _animate_overlay_in() -> void:
+	if overlay_panel == null or not overlay.visible:
+		return
+	if overlay_transition != null and overlay_transition.is_valid():
+		overlay_transition.kill()
+	overlay_panel.pivot_offset = overlay_panel.size * 0.5
+	if reduce_motion:
+		overlay_panel.modulate.a = 1.0
+		overlay_panel.scale = Vector2.ONE
+		return
+	overlay_panel.modulate.a = 0.0
+	overlay_panel.scale = Vector2(0.985, 0.985)
+	overlay_transition = create_tween().set_parallel(true)
+	overlay_transition.tween_property(overlay_panel, "modulate:a", 1.0, 0.18).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	overlay_transition.tween_property(overlay_panel, "scale", Vector2.ONE, 0.20).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	_play_ui_sound("open")
+
+func _finish_close_overlay() -> void:
 	overlay.hide()
+	overlay_panel.modulate.a = 1.0
+	overlay_panel.scale = Vector2.ONE
 	for control in background_focus_modes:
 		if is_instance_valid(control):
 			control.focus_mode = background_focus_modes[control]
