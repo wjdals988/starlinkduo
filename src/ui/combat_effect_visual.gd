@@ -66,6 +66,9 @@ func _draw_damage() -> void:
 	head.y -= sin(eased * PI) * 115.0
 	var direction := (finish - start).normalized()
 	var normal := Vector2(-direction.y, direction.x)
+	var charge := sin(minf(1.0, progress * 1.35) * PI)
+	for glow_index in 3:
+		draw_circle(head, 22.0 + glow_index * 13.0 + charge * 8.0, _profile_color(0.12 - glow_index * 0.025))
 	var trail_count := 8 if character_id == &"hacker" else 6
 	for trail_index in trail_count:
 		var distance := float(trail_index) * 22.0
@@ -98,11 +101,18 @@ func _draw_damage() -> void:
 		draw_arc(head, 23.0, 0.0, TAU, 28, _profile_color(), 4.0, true)
 	if progress > 0.72:
 		var burst := (progress - 0.72) / 0.28
-		for ray_index in 8:
-			var angle := TAU * float(ray_index) / 8.0
+		for ring_index in 3:
+			var ring_radius := 24.0 + burst * (42.0 + ring_index * 24.0)
+			draw_arc(finish, ring_radius, 0.0, TAU, 40, _profile_color((1.0 - burst) * (0.72 - ring_index * 0.16)), 6.0 - ring_index, true)
+		for ray_index in 12:
+			var angle := TAU * float(ray_index) / 12.0
 			var ray := Vector2(cos(angle), sin(angle))
 			var burst_alpha := 0.82 if static_mode else 1.0 - burst
-			draw_line(finish + ray * 18.0, finish + ray * (34.0 + 34.0 * burst), _profile_color(burst_alpha), 4.0, true)
+			draw_line(finish + ray * 18.0, finish + ray * (40.0 + 58.0 * burst), _profile_color(burst_alpha), 5.0, true)
+		for particle_index in 9:
+			var particle_angle := TAU * float(particle_index) / 9.0 + 0.24
+			var particle_direction := Vector2(cos(particle_angle), sin(particle_angle))
+			draw_circle(finish + particle_direction * (34.0 + burst * (58.0 + particle_index * 3.0)), maxf(2.0, 6.0 - burst * 3.0), Color(1.0, 0.94, 0.78, 1.0 - burst))
 
 func _draw_block() -> void:
 	var center := _player_center(source_slot) + Vector2(0, 16)
@@ -125,6 +135,8 @@ func _draw_block() -> void:
 	var outline := PackedVector2Array(points)
 	outline.append(points[0])
 	draw_polyline(outline, _profile_color(0.45 + pulse * 0.55), 6.0, true)
+	for ring_index in 2:
+		draw_arc(center, radius + 15.0 + ring_index * 13.0, -PI * 0.82, PI * 0.82, 28, _profile_color((0.52 - ring_index * 0.16) * pulse), 3.0, true)
 	draw_line(center + Vector2(-22, 0), center + Vector2(22, 0), Color("#dff4ff"), 5.0, true)
 	if character_id == &"engineer":
 		draw_line(center + Vector2(0, -22), center + Vector2(0, 22), Color("#fff4df"), 5.0, true)
@@ -141,6 +153,11 @@ func _draw_heal() -> void:
 		var radius := 40.0 + ring_progress * 150.0
 		draw_arc(center, radius, 0.0, TAU, 64, _profile_color(1.0 - ring_progress), 5.0, true)
 	var alpha := sin(progress * PI)
+	for spark_index in 10:
+		var spark_angle := TAU * float(spark_index) / 10.0 + progress * 1.8
+		var spark_radius := 34.0 + float(spark_index % 3) * 18.0 + progress * 35.0
+		var spark := center + Vector2(cos(spark_angle), sin(spark_angle)) * spark_radius
+		draw_circle(spark, 4.0 + float(spark_index % 2) * 2.0, Color(0.86, 1.0, 0.94, alpha * 0.85))
 	if character_id == &"engineer":
 		for index in 6:
 			var angle := TAU * float(index) / 6.0
@@ -174,8 +191,14 @@ func _draw_energy() -> void:
 			point.y += sin(ratio * TAU * 5.0 + progress * TAU) * 9.0
 		points.append(point)
 	if points.size() > 1:
+		draw_polyline(points, _profile_color(0.18), 16.0, true)
 		draw_polyline(points, _profile_color(), 6.0, true)
 		draw_polyline(points, Color("#fff8c2"), 2.0, true)
+	for pulse_index in 4:
+		var pulse_ratio := fposmod(progress * 1.8 - float(pulse_index) * 0.18, 1.0)
+		var pulse_point := start.lerp(end, pulse_ratio)
+		draw_circle(pulse_point, 7.0, Color("#fff8c2"))
+		draw_arc(pulse_point, 13.0, 0.0, TAU, 18, _profile_color(0.72), 3.0, true)
 	if character_id == &"engineer":
 		draw_arc(end, 18.0, progress * TAU, progress * TAU + PI * 1.5, 18, _profile_color(), 6.0, true)
 	elif character_id == &"assault":

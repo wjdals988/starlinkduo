@@ -214,15 +214,18 @@ func _reset_back_request_guard() -> void:
 func _process(_delta: float) -> void:
 	if accessibility_bridge != null:
 		accessibility_bridge.poll_action()
+	if not interaction_locked and game_mode != "duel" and state != null and state.phase == CombatState.Phase.WON and not overlay.visible:
+		if active_route_combat:
+			if cooperative_session == null or cooperative_session.role == CooperativeSession.Role.HOST:
+				_finish_route_combat()
+		elif state.combat_id == &"demo_combat":
+			_show_training_victory()
 	if bluetooth_transport == null:
 		return
 	if cooperative_session != null:
 		cooperative_session.poll()
 	else:
 		bluetooth_transport.poll()
-	if active_route_combat and not interaction_locked and state.phase == CombatState.Phase.WON:
-		if cooperative_session == null or cooperative_session.role == CooperativeSession.Role.HOST:
-			_finish_route_combat()
 	if connection_label != null:
 		var next_text := _connection_status_text()
 		if connection_label.text != next_text:
@@ -1265,6 +1268,9 @@ func _set_main_menu_visual(enabled: bool) -> void:
 		overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color("#0c1730fa"), 28, Color.TRANSPARENT, 0, 28, 22))
 
 func _close_overlay() -> void:
+	if overlay_title.text == "훈련 전투 완료":
+		_return_to_main_menu()
+		return
 	if not game_started:
 		if in_multiplayer_lobby and cooperative_session != null:
 			cooperative_session.close()
@@ -2252,12 +2258,46 @@ func _choose_event(choice_index: int) -> void:
 
 func _show_route_result(title: String, summary: String) -> void:
 	_clear_overlay()
-	_set_overlay_compact(true)
+	var combat_victory := "승리" in title or "격파" in title
+	if combat_victory:
+		_set_overlay_tall()
+	else:
+		_set_overlay_compact(true)
 	overlay_title.text = title
 	overlay_subtitle.text = summary
 	var outcome_text := "CHECKPOINT · 진행 저장 완료"
 	var outcome_description := "항로 결과가 저장되었습니다."
 	var outcome_color := COLOR_CYAN
+	if combat_victory:
+		var victory_hero := VBoxContainer.new()
+		victory_hero.add_theme_constant_override("separation", 2)
+		var victory_label := Label.new()
+		victory_label.text = "V I C T O R Y"
+		victory_label.accessibility_name = "전투 승리"
+		victory_label.accessibility_description = "%s. %s" % [title, summary]
+		victory_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		victory_label.add_theme_font_size_override("font_size", 46)
+		victory_label.add_theme_color_override("font_color", COLOR_CYAN)
+		victory_hero.add_child(victory_label)
+		var victory_rule := ProgressBar.new()
+		victory_rule.custom_minimum_size = Vector2(0, 5)
+		victory_rule.max_value = 100
+		victory_rule.value = 100
+		victory_rule.show_percentage = false
+		victory_rule.add_theme_stylebox_override("background", _panel_style(Color.TRANSPARENT, 3))
+		victory_rule.add_theme_stylebox_override("fill", _panel_style(Color("#55e8dcaa"), 3))
+		victory_hero.add_child(victory_rule)
+		var grade_label := Label.new()
+		var health_ratio := float(run_coordinator.run.team_health) / maxf(1.0, float(run_coordinator.run.team_max_health))
+		var grade := "S" if health_ratio >= 0.75 else ("A" if health_ratio >= 0.45 else "B")
+		grade_label.text = "COMBAT GRADE  %s   ·   TURN %02d   ·   TEAM SURVIVAL %d%%" % [grade, state.turn, roundi(health_ratio * 100.0)]
+		grade_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		grade_label.add_theme_font_size_override("font_size", 15)
+		grade_label.add_theme_color_override("font_color", COLOR_MUTED)
+		victory_hero.add_child(grade_label)
+		overlay_content.add_child(victory_hero)
+		outcome_text = "전투 기록 확정 · 다음 항로 개방"
+		outcome_description = "적을 격파하고 전투 보상을 저장했습니다."
 	if title == "이벤트 해결":
 		match String(run_coordinator.run.last_event_result.get("outcome", "")):
 			"success":
@@ -2322,6 +2362,60 @@ func _show_route_result(title: String, summary: String) -> void:
 	var route_button := _action_button("⌁  다음 항로 선택", _show_map, COLOR_CYAN, 64)
 	route_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	actions.add_child(route_button)
+	overlay_content.add_child(actions)
+
+func _show_training_victory() -> void:
+	_clear_overlay()
+	_set_overlay_tall()
+	overlay_title.text = "훈련 전투 완료"
+	overlay_subtitle.text = "두 대원의 연계로 훈련 드론을 격파했습니다."
+	var hero := VBoxContainer.new()
+	hero.add_theme_constant_override("separation", 3)
+	var victory := Label.new()
+	victory.text = "V I C T O R Y"
+	victory.accessibility_name = "전투 승리"
+	victory.accessibility_description = "훈련 드론 격파. 전투 결과 화면입니다."
+	victory.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	victory.add_theme_font_size_override("font_size", 48)
+	victory.add_theme_color_override("font_color", COLOR_CYAN)
+	hero.add_child(victory)
+	var health_ratio := float(state.team_health) / maxf(1.0, float(state.team_max_health))
+	var grade := "S" if health_ratio >= 0.75 else ("A" if health_ratio >= 0.45 else "B")
+	var record := Label.new()
+	record.text = "COMBAT GRADE  %s   ·   TURN %02d   ·   TEAM SURVIVAL %d%%" % [grade, state.turn, roundi(health_ratio * 100.0)]
+	record.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	record.add_theme_font_size_override("font_size", 16)
+	record.add_theme_color_override("font_color", COLOR_MUTED)
+	hero.add_child(record)
+	overlay_content.add_child(hero)
+	var crew := HBoxContainer.new()
+	crew.alignment = BoxContainer.ALIGNMENT_CENTER
+	crew.add_theme_constant_override("separation", 16)
+	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[0]), "P1 · %s" % _character_name(run_coordinator.run.characters[0]), "연계 전투 완료", COLOR_BLUE, Vector2(190, 132)))
+	var clear_mark := Label.new()
+	clear_mark.text = "✦\nCLEAR"
+	clear_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	clear_mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	clear_mark.custom_minimum_size = Vector2(180, 110)
+	clear_mark.add_theme_font_size_override("font_size", 25)
+	clear_mark.add_theme_color_override("font_color", COLOR_YELLOW)
+	crew.add_child(clear_mark)
+	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[1]), "P2 · %s" % _character_name(run_coordinator.run.characters[1]), "연계 전투 완료", COLOR_ORANGE, Vector2(190, 132)))
+	overlay_content.add_child(crew)
+	var metrics := HBoxContainer.new()
+	metrics.add_theme_constant_override("separation", 12)
+	metrics.add_child(_metric_card("전투 등급", grade, COLOR_YELLOW))
+	metrics.add_child(_metric_card("해결 턴", "%02d" % state.turn, COLOR_CYAN))
+	metrics.add_child(_metric_card("팀 생존", "%d / %d" % [state.team_health, state.team_max_health], COLOR_BLUE))
+	overlay_content.add_child(metrics)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var retry := _action_button("↻  다시 훈련", _activate_mode.bind("cooperative"), COLOR_BLUE, 64)
+	retry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(retry)
+	var main := _action_button("←  메인 화면으로", _return_to_main_menu, COLOR_CYAN, 64)
+	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(main)
 	overlay_content.add_child(actions)
 
 func _show_run_outcome(victory: bool) -> void:
@@ -2971,6 +3065,7 @@ func _on_ready_pressed() -> void:
 	var previous_turn := state.turn
 	var previous_enemy_health := state.enemies[0].health
 	var previous_team_health := state.team_health
+	var previous_event_count := state.event_log.size()
 	var local_result := cooperative_session.submit_plan(local_slot, selected_plays) if cooperative_session != null else engine.submit_plan(state, local_slot, selected_plays)
 	if not local_result.ok:
 		log_label.text = "행동을 확정할 수 없습니다: %s" % local_result.get("error", "unknown")
@@ -3003,6 +3098,7 @@ func _on_ready_pressed() -> void:
 	var result_label := "상대 준비 대기 중" if cooperative_session != null and state.turn == previous_turn else "턴 해결 완료"
 	log_label.text = "%s · 상태 해시 %s…" % [result_label, StateHasher.hash_snapshot(state.to_snapshot()).left(8)]
 	if resolved:
+		committed_actions = _actions_resolved_since(committed_actions, previous_event_count)
 		interaction_locked = true
 		await _play_resolution_feedback(committed_actions, previous_enemy_health, previous_team_health)
 		_refresh()
@@ -3053,6 +3149,24 @@ func _cards_for_plays(plays: Array[Dictionary]) -> Array[CardData]:
 		if catalog.has(play.card_id):
 			result.append(catalog[play.card_id])
 	return result
+
+func _actions_resolved_since(candidate_actions: Array[Dictionary], event_start: int) -> Array[Dictionary]:
+	var remaining: Array[Dictionary] = candidate_actions.duplicate()
+	var resolved_actions: Array[Dictionary] = []
+	for event_index in range(event_start, state.event_log.size()):
+		var event: Dictionary = state.event_log[event_index]
+		if String(event.get("type", "")) != "card_played":
+			continue
+		var event_slot := int(event.get("slot", -1))
+		var event_card_id := StringName(event.get("card_id", ""))
+		for candidate_index in remaining.size():
+			var candidate: Dictionary = remaining[candidate_index]
+			var candidate_card: CardData = candidate.card
+			if int(candidate.slot) == event_slot and candidate_card.id == event_card_id:
+				resolved_actions.append(candidate)
+				remaining.remove_at(candidate_index)
+				break
+	return resolved_actions
 
 func _play_resolution_feedback(actions: Array[Dictionary], previous_enemy_health: int, previous_team_health: int) -> void:
 	if actions.is_empty() or battle_fx_layer == null:
@@ -3135,6 +3249,7 @@ func _play_resolution_feedback(actions: Array[Dictionary], previous_enemy_health
 				visual_enemy_health -= applied_damage
 				await _animate_health_preview(enemy_health_bar, visual_enemy_health)
 				enemy_health_label.text = "%d / %d" % [visual_enemy_health, state.enemies[0].max_health]
+				await _play_card_impact_feedback(spatial_effect, applied_damage, source_character, visual_enemy_health == 0)
 			if card_heal > 0:
 				visual_team_health = mini(state.team_max_health, visual_team_health + card_heal)
 				await _animate_health_preview(team_health_bar, visual_team_health)
@@ -3150,7 +3265,82 @@ func _play_resolution_feedback(actions: Array[Dictionary], previous_enemy_health
 		await _animate_health_preview(team_health_bar, final_team_health)
 		team_health_label.text = "팀 내구도   %d / %d" % [final_team_health, state.team_max_health]
 		await get_tree().create_timer(0.20 if reduce_motion else 0.32).timeout
+	if incremental_health and final_enemy_health == 0:
+		await _play_enemy_defeat_feedback()
 	battle_fx_layer.visible = false
+
+func _play_card_impact_feedback(effect_visual: CombatEffectVisual, amount: int, source_character: StringName, lethal: bool) -> void:
+	if amount <= 0:
+		return
+	var impact := Label.new()
+	impact.text = "-%d" % amount
+	impact.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	impact.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	impact.position = Vector2(size.x * 0.5 - 70, size.y * 0.29)
+	impact.size = Vector2(140, 90)
+	impact.add_theme_font_size_override("font_size", 42 if lethal else 34)
+	impact.add_theme_color_override("font_color", Color.WHITE)
+	impact.add_theme_stylebox_override("normal", _panel_style(Color(_character_color(source_character), 0.32), 45, _character_color(source_character), 3, 12, 5))
+	impact.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	battle_fx_layer.add_child(impact)
+	if reduce_motion:
+		await get_tree().create_timer(0.20).timeout
+		return
+	impact.scale = Vector2(0.45, 0.45)
+	impact.pivot_offset = impact.size * 0.5
+	var hit := create_tween().set_parallel(true)
+	hit.tween_property(impact, "scale", Vector2(1.18, 1.18), 0.11).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	hit.tween_property(impact, "modulate", Color.WHITE, 0.08)
+	var original_enemy_position := enemy_art.position
+	var shake := create_tween()
+	shake.tween_property(enemy_art, "position", original_enemy_position + Vector2(-12, 3), 0.045)
+	shake.tween_property(enemy_art, "position", original_enemy_position + Vector2(10, -2), 0.045)
+	shake.tween_property(enemy_art, "position", original_enemy_position, 0.055)
+	await hit.finished
+	var fade := create_tween().set_parallel(true)
+	fade.tween_property(impact, "scale", Vector2(1.42, 1.42), 0.16)
+	fade.tween_property(impact, "modulate:a", 0.0, 0.16)
+	await fade.finished
+
+func _play_enemy_defeat_feedback() -> void:
+	for child in battle_fx_layer.get_children():
+		child.queue_free()
+	await get_tree().process_frame
+	var flash := ColorRect.new()
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.color = Color("#c9fff622")
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	battle_fx_layer.add_child(flash)
+	var finish_label := Label.new()
+	finish_label.text = "TARGET  DESTROYED\n전투 구역 확보"
+	finish_label.accessibility_name = "적 격파"
+	finish_label.accessibility_description = "마지막 카드 효과가 적용되어 전투에서 승리했습니다."
+	finish_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	finish_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	finish_label.set_anchors_preset(Control.PRESET_CENTER)
+	finish_label.offset_left = -280
+	finish_label.offset_right = 280
+	finish_label.offset_top = -82
+	finish_label.offset_bottom = 82
+	finish_label.add_theme_font_size_override("font_size", 30)
+	finish_label.add_theme_color_override("font_color", COLOR_CYAN)
+	finish_label.add_theme_stylebox_override("normal", _panel_style(Color("#07101fee"), 28, COLOR_CYAN, 3, 28, 18))
+	battle_fx_layer.add_child(finish_label)
+	battle_fx_layer.accessibility_description = "적 격파. 전투 구역 확보."
+	_play_ui_sound("confirm")
+	if reduce_motion:
+		await get_tree().create_timer(0.65).timeout
+		return
+	finish_label.scale = Vector2(0.72, 0.72)
+	finish_label.pivot_offset = Vector2(280, 82)
+	var original_modulate := enemy_art.modulate
+	var defeat := create_tween().set_parallel(true)
+	defeat.tween_property(flash, "color:a", 0.0, 0.52)
+	defeat.tween_property(finish_label, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	defeat.tween_property(enemy_art, "modulate", Color(1.7, 1.7, 1.7, 0.12), 0.48)
+	await defeat.finished
+	await get_tree().create_timer(0.38).timeout
+	enemy_art.modulate = original_modulate
 
 func _card_effect_amount(card: CardData, effect_type: String) -> int:
 	var total := 0
