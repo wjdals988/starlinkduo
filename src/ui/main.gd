@@ -462,10 +462,10 @@ func _start_singleplayer() -> void:
 
 func _show_hub() -> void:
 	_clear_overlay()
-	_set_overlay_balanced()
-	overlay_title.text = "함선 메뉴"
+	_set_overlay_tall()
+	overlay_title.text = "ORBITAL COMMAND"
 	var run := run_coordinator.run
-	overlay_subtitle.text = "STAGE %d · 구간 %d/8 · 전투 진행 상태는 유지됩니다." % [run.stage, mini(run.step + 1, 8)]
+	overlay_subtitle.text = "함선 아스트라이아 · STAGE %d 항해 중" % run.stage
 	var next_title := "다음 항로 선택"
 	var next_hint := "분기 위험과 보상 확인"
 	var next_action: Callable = _show_map
@@ -499,15 +499,28 @@ func _show_hub() -> void:
 		next_title = "선택 노드 진입"
 		next_hint = "P1/P2 항로 선택 완료"
 		next_action = _enter_selected_routes
+	var mission := VBoxContainer.new()
+	mission.add_theme_constant_override("separation", 6)
+	var mission_callout := Label.new()
+	mission_callout.text = "CURRENT OBJECTIVE  /  %s" % next_title.to_upper()
+	mission_callout.add_theme_font_size_override("font_size", 14)
+	mission_callout.add_theme_color_override("font_color", next_accent)
+	mission.add_child(mission_callout)
 	var summary := HBoxContainer.new()
-	summary.add_theme_constant_override("separation", 12)
-	summary.add_child(_metric_card("원정 진행", "%d-%02d" % [run.stage, mini(run.step + 1, 8)], COLOR_BLUE))
-	summary.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_CYAN))
-	summary.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
+	summary.add_theme_constant_override("separation", 18)
+	summary.add_child(_metric_card("SECTOR", "%d-%02d" % [run.stage, mini(run.step + 1, 8)], COLOR_BLUE))
+	summary.add_child(_metric_card("HULL", "%d / %d" % [run.team_health, run.team_max_health], COLOR_CYAN))
+	summary.add_child(_metric_card("STAR KEYS", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
 	var next_button := _action_button("▶  %s\n%s" % [next_title, next_hint], next_action, next_accent, 82)
 	next_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	summary.add_child(next_button)
-	overlay_content.add_child(summary)
+	mission.add_child(summary)
+	overlay_content.add_child(mission)
+	var station_label := Label.new()
+	station_label.text = "SHIP STATIONS"
+	station_label.add_theme_font_size_override("font_size", 14)
+	station_label.add_theme_color_override("font_color", COLOR_MUTED)
+	overlay_content.add_child(station_label)
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -516,12 +529,36 @@ func _show_hub() -> void:
 	overlay_content.add_child(grid)
 	for item in [["◈  플레이 모드", _show_mode, COLOR_CYAN], ["◆  대원 편성", _show_roster, COLOR_BLUE], ["⌁  항로 지도", _show_map, COLOR_CYAN], ["✦  전투 보상", _show_reward, COLOR_YELLOW], ["▣  궤도 상점", _show_shop, COLOR_ORANGE], ["＋  유물 · 소비품", _show_consumables, Color("#bc8cff")]]:
 		var button := _menu_link_button(item[0], item[1], item[2])
+		button.custom_minimum_size.y = 50
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
 	for item in [["⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED], ["←  메인 화면으로", _confirm_return_to_main, COLOR_RED]]:
 		var button := _menu_link_button(item[0], item[1], item[2])
+		button.custom_minimum_size.y = 50
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
+	var crew_strip := HBoxContainer.new()
+	crew_strip.alignment = BoxContainer.ALIGNMENT_CENTER
+	crew_strip.add_theme_constant_override("separation", 28)
+	crew_strip.add_child(_briefing_actor(_character_portrait(run.characters[0]), "P1 · %s" % _character_name(run.characters[0]), _character_role(run.characters[0]), COLOR_BLUE, Vector2(180, 94)))
+	var link_status := VBoxContainer.new()
+	link_status.custom_minimum_size = Vector2(220, 90)
+	link_status.alignment = BoxContainer.ALIGNMENT_CENTER
+	var link_icon := Label.new()
+	link_icon.text = "⌁  CREW LINK  ⌁"
+	link_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	link_icon.add_theme_font_size_override("font_size", 18)
+	link_icon.add_theme_color_override("font_color", COLOR_CYAN)
+	link_status.add_child(link_icon)
+	var link_copy := Label.new()
+	link_copy.text = "두 대원 전술 동기화"
+	link_copy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	link_copy.add_theme_font_size_override("font_size", 13)
+	link_copy.add_theme_color_override("font_color", COLOR_MUTED)
+	link_status.add_child(link_copy)
+	crew_strip.add_child(link_status)
+	crew_strip.add_child(_briefing_actor(_character_portrait(run.characters[1]), "P2 · %s" % _character_name(run.characters[1]), _character_role(run.characters[1]), COLOR_ORANGE, Vector2(180, 94)))
+	overlay_content.add_child(crew_strip)
 
 func _confirm_return_to_main() -> void:
 	_clear_overlay()
@@ -552,7 +589,7 @@ func _return_to_main_menu() -> void:
 
 func _show_current_deck() -> void:
 	_clear_overlay()
-	overlay_title.text = "현재 덱"
+	overlay_title.text = "TACTICAL DECK · 현재 덱"
 	var deck: Array = []
 	var hand_count := 0
 	var draw_count := 0
@@ -687,7 +724,7 @@ func _macro_chat_text(macro_id: String) -> String:
 
 func _show_settings() -> void:
 	_clear_overlay()
-	overlay_title.text = "화면 · 조작 설정"
+	overlay_title.text = "SHIP SYSTEMS · 설정"
 	overlay_subtitle.text = "연출 강도와 소리·진동을 기기별로 조절합니다. 변경 사항은 이 기기에 자동 저장됩니다."
 	_add_setting_toggle("큰 글씨", "앱 기본 확대 115%를 사용합니다. 시스템 글자 크기가 더 크면 안전 레이아웃이 우선합니다.", large_text_enabled, _set_large_text)
 	_add_setting_toggle("모션 줄이기", "카드 선택 전환을 즉시 표시해 화면 움직임을 줄입니다.", reduce_motion, _set_reduce_motion)
@@ -1668,13 +1705,14 @@ func _action_button(text: String, callback: Callable, accent: Color, height: int
 	var button := Button.new()
 	button.custom_minimum_size.y = height
 	button.text = text
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_set_button_accessibility(button, _first_text_line(text), _remaining_text_lines(text))
 	button.add_theme_font_size_override("font_size", 18)
-	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 16, accent, 2))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 16, accent, 3))
-	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.28), 16, Color.WHITE, 3))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color("#111827"), 16, Color("#526077"), 1))
-	button.add_theme_stylebox_override("focus", _focus_style(accent, 16))
+	button.add_theme_stylebox_override("normal", _panel_style(Color(accent, 0.13), 24, Color.TRANSPARENT, 0, 24, 12))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.25), 24, Color.TRANSPARENT, 0, 28, 12))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.38), 24, Color.TRANSPARENT, 0, 30, 12))
+	button.add_theme_stylebox_override("disabled", _panel_style(Color("#11182788"), 24, Color.TRANSPARENT, 0, 24, 12))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 24))
 	button.add_theme_color_override("font_disabled_color", Color("#718099"))
 	button.pressed.connect(callback)
 	return button
@@ -1715,7 +1753,7 @@ func _status_chip(text: String, accent: Color) -> PanelContainer:
 	var chip := PanelContainer.new()
 	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chip.custom_minimum_size.y = 48
-	chip.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.10), 24, Color(accent, 0.65), 1, 12, 6))
+	chip.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.12), 24, Color.TRANSPARENT, 0, 12, 6))
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1727,15 +1765,34 @@ func _status_chip(text: String, accent: Color) -> PanelContainer:
 
 func _info_panel(title: String, body: String, accent: Color) -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.08), 16, Color(accent, 0.55), 1, 18, 14))
-	var label := Label.new()
-	label.text = "%s\n%s" % [title, body]
-	label.accessibility_name = title
-	label.accessibility_description = body
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", 15)
-	label.add_theme_color_override("font_color", COLOR_TEXT)
-	panel.add_child(label)
+	panel.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 6, 8))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	panel.add_child(row)
+	var marker := Label.new()
+	marker.text = "✦"
+	marker.custom_minimum_size.x = 28
+	marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	marker.add_theme_font_size_override("font_size", 20)
+	marker.add_theme_color_override("font_color", accent)
+	row.add_child(marker)
+	var copy := VBoxContainer.new()
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.add_theme_constant_override("separation", 2)
+	row.add_child(copy)
+	var title_label := Label.new()
+	title_label.text = title.to_upper()
+	title_label.accessibility_name = title
+	title_label.accessibility_description = body
+	title_label.add_theme_font_size_override("font_size", 14)
+	title_label.add_theme_color_override("font_color", accent)
+	copy.add_child(title_label)
+	var body_label := Label.new()
+	body_label.text = body
+	body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body_label.add_theme_font_size_override("font_size", 15)
+	body_label.add_theme_color_override("font_color", COLOR_TEXT)
+	copy.add_child(body_label)
 	overlay_content.add_child(panel)
 	return panel
 
@@ -1955,7 +2012,7 @@ func _show_map() -> void:
 		return
 	_clear_overlay()
 	var run := run_coordinator.run
-	overlay_title.text = "항로 선택 · STAGE %d" % run.stage
+	overlay_title.text = "STAR CHART · STAGE %d" % run.stage
 	overlay_subtitle.text = "진행 %d / 8   ·   열쇠 %d / 3   ·   런 %s" % [run.step, run.keys.count(true), run.run_id]
 	if run.phase == "stage_boss":
 		_set_overlay_compact(true)
@@ -2464,17 +2521,33 @@ func _show_run_outcome(victory: bool) -> void:
 func _metric_card(title: String, value: String, accent: Color) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size.y = 82
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(accent, 0.09), 16, Color(accent, 0.60), 1, 12, 10))
-	var label := Label.new()
-	label.text = "%s\n%s" % [title, value]
-	label.accessibility_name = title
-	label.accessibility_description = value
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 16)
-	label.add_theme_color_override("font_color", COLOR_TEXT)
-	panel.add_child(label)
+	panel.custom_minimum_size.y = 74
+	panel.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 10, 6))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	panel.add_child(row)
+	var accent_bar := ColorRect.new()
+	accent_bar.color = accent
+	accent_bar.custom_minimum_size = Vector2(4, 46)
+	accent_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(accent_bar)
+	var copy := VBoxContainer.new()
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.alignment = BoxContainer.ALIGNMENT_CENTER
+	copy.add_theme_constant_override("separation", 0)
+	row.add_child(copy)
+	var title_label := Label.new()
+	title_label.text = title.to_upper()
+	title_label.accessibility_name = title
+	title_label.accessibility_description = value
+	title_label.add_theme_font_size_override("font_size", 12)
+	title_label.add_theme_color_override("font_color", COLOR_MUTED)
+	copy.add_child(title_label)
+	var value_label := Label.new()
+	value_label.text = value
+	value_label.add_theme_font_size_override("font_size", 21)
+	value_label.add_theme_color_override("font_color", accent)
+	copy.add_child(value_label)
 	return panel
 
 func _show_reward() -> void:
@@ -2482,7 +2555,7 @@ func _show_reward() -> void:
 		_show_mode_locked_notice("전투 보상", "결투는 공정한 시작 덱을 사용하며 원정 보상을 소비하지 않습니다.")
 		return
 	_clear_overlay()
-	overlay_title.text = "전투 보상"
+	overlay_title.text = "SALVAGE DRAFT · 전투 보상"
 	overlay_subtitle.text = "전용 카드 2장 + 공용 카드 1장 · 선택 즉시 덱과 체크포인트에 반영"
 	var rewards := run_coordinator.current_card_reward(local_slot)
 	if rewards.is_empty():
@@ -2550,7 +2623,7 @@ func _show_shop() -> void:
 		_show_mode_locked_notice("상점", "상점과 크레딧은 협동 원정 전용입니다.")
 		return
 	_clear_overlay()
-	overlay_title.text = "궤도 정거장 상점"
+	overlay_title.text = "ORBITAL BAZAAR · 궤도 상점"
 	if not run_coordinator.run.shop_open[local_slot]:
 		_set_overlay_compact(true, true)
 		overlay_subtitle.text = "현재 항로에서는 상점을 이용할 수 없습니다."
