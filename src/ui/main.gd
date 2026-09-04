@@ -102,6 +102,7 @@ func _ready() -> void:
 	catalog = FullCardCatalog.build()
 	run_coordinator = RunCoordinator.new(catalog)
 	run_coordinator.resume_or_start(20260902)
+	run_coordinator.run_changed.connect(_on_run_changed)
 	bluetooth_transport = AndroidBluetoothTransport.new()
 	accessibility_bridge = AndroidAccessibilityBridge.new()
 	print("STARLINK_BT singleton=%s available=%s state=%s" % [
@@ -1939,10 +1940,13 @@ func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
 	var was_event_pending := not run_coordinator.run.pending_event.is_empty()
 	run_coordinator.run = RunState.from_snapshot(snapshot)
 	_refresh_character_identity()
+	if overlay.visible and overlay_title.text == "카드 획득 완료" and not run_coordinator.run.pending_card_rewards.any(func(pending: bool) -> bool: return pending):
+		_show_post_reward_destination()
+		return
 	if overlay.visible and overlay_title.text == "승무원 편성":
 		_show_roster()
 		return
-	if not run_coordinator.run.pending_event.is_empty():
+	if not run_coordinator.run.pending_event.is_empty() and not run_coordinator.run.pending_card_rewards.any(func(pending: bool) -> bool: return pending):
 		_show_event()
 		return
 	if was_event_pending and not run_coordinator.run.last_event_result.is_empty():
@@ -1952,6 +1956,16 @@ func _on_remote_run_snapshot(snapshot: Dictionary) -> void:
 		_show_consumables()
 		return
 	if overlay.visible and overlay_title.text.begins_with("항로 선택"):
+		_show_map()
+
+func _on_run_changed(_snapshot: Dictionary) -> void:
+	if overlay != null and overlay.visible and overlay_title.text == "카드 획득 완료" and not run_coordinator.run.pending_card_rewards.any(func(pending: bool) -> bool: return pending):
+		_show_post_reward_destination.call_deferred()
+
+func _show_post_reward_destination() -> void:
+	if not run_coordinator.run.pending_event.is_empty():
+		_show_event()
+	else:
 		_show_map()
 
 func _on_session_error(code: String, detail: String) -> void:
@@ -2326,11 +2340,11 @@ func _finish_route_combat() -> void:
 	if cooperative_session != null:
 		cooperative_session.publish_run_state("combat_reward")
 	if result.get("event_pending", false):
-		_show_event()
+		_show_route_result("항로 전투 승리", "각 플레이어 +%d C · 보상 획득 후 이벤트를 해결합니다." % result.gold)
 	elif result.get("run_completed", false):
-		_show_run_outcome(true)
+		_show_route_result("최종 보스 격파", "각 플레이어 +%d C · 마지막 보상 획득 후 원정 결과를 확인합니다." % result.gold)
 	elif result.get("run_failed", false):
-		_show_run_outcome(false)
+		_show_route_result("보스 격파 · 원정 종료", "각 플레이어 +%d C · 마지막 보상 획득 후 원정 기록을 확인합니다." % result.gold)
 	elif result.get("true_boss_unlocked", false):
 		_show_route_result("세 번째 보스 격파", "열쇠 3개 확인 · 진 최종 보스가 해금됐습니다.")
 	elif result.get("stage_advanced", false):
@@ -2522,9 +2536,10 @@ func _show_route_result(title: String, summary: String) -> void:
 		var reward_button := _action_button("✦  카드 보상 확인", _show_reward, COLOR_YELLOW, 64)
 		reward_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		actions.add_child(reward_button)
-	var route_button := _action_button("⌁  다음 항로 선택", _show_map, COLOR_CYAN, 64)
-	route_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	actions.add_child(route_button)
+	else:
+		var route_button := _action_button("⌁  다음 항로 선택", _show_map, COLOR_CYAN, 64)
+		route_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(route_button)
 	overlay_content.add_child(actions)
 
 func _show_training_victory() -> void:
@@ -2705,8 +2720,14 @@ func _show_reward() -> void:
 	_info_panel("선택 가이드", "전용 카드는 현재 직업의 조합을 강화하고, 공용 카드는 두 직업의 약점을 보완합니다. 한 장을 선택하면 나머지 카드는 사라집니다.", COLOR_MUTED)
 
 func _claim_reward(card_id: StringName) -> void:
-	if run_coordinator.claim_card(local_slot, card_id):
+	var claim_result := cooperative_session.claim_card_reward(local_slot, card_id) if cooperative_session != null else {"ok": run_coordinator.claim_card(local_slot, card_id)}
+	if claim_result.ok:
 		var card: CardData = catalog[card_id]
+		if cooperative_session == null and local_slot == 0 and run_coordinator.run.pending_card_rewards[1]:
+			local_slot = 1
+			_show_reward()
+			overlay_subtitle.text = "P1 보상 획득 완료 · 이어서 P2 보상 카드를 선택하세요."
+			return
 		_clear_overlay()
 		_set_overlay_compact(true)
 		overlay_title.text = "카드 획득 완료"
@@ -2722,7 +2743,13 @@ func _claim_reward(card_id: StringName) -> void:
 		acquired.add_theme_stylebox_override("disabled", _panel_style(Color(accent, 0.12), 18, accent, 3, 14, 10))
 		row.add_child(acquired)
 		_info_panel("현재 덱 · %d장" % run_coordinator.run.decks[local_slot].size(), "보상 선택은 자동 저장됐으며 다음 전투부터 드로우될 수 있습니다.", COLOR_CYAN)
-		_add_connection_action("⌁  다음 항로 선택", _show_map, COLOR_CYAN)
+		if cooperative_session == null:
+			local_slot = 0
+			_add_connection_action("⌁  맵에서 다음 노드 선택", _show_post_reward_destination, COLOR_CYAN)
+		elif run_coordinator.run.pending_card_rewards.any(func(pending: bool) -> bool: return pending):
+			_info_panel("대원 보상 대기", "상대 대원이 보상을 선택하면 다음 노드 선택이 열립니다.", COLOR_YELLOW)
+		else:
+			_add_connection_action("⌁  맵에서 다음 노드 선택", _show_post_reward_destination, COLOR_CYAN)
 
 func _show_shop() -> void:
 	if game_mode == "duel":

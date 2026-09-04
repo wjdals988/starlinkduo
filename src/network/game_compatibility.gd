@@ -1,7 +1,7 @@
 class_name GameCompatibility
 extends RefCounted
 
-const RULESET_VERSION := 4
+const RULESET_VERSION := 5
 
 static var _cached_fingerprint := ""
 

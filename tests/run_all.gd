@@ -364,6 +364,12 @@ func _test_host_authoritative_route_session() -> void:
 	guest.poll()
 	_expect(run.characters[1] == &"hacker" and run.decks[1].has("hacker_card_01"), "host validates guest character and rebuilds its starter deck")
 	_expect(not received_runs.is_empty() and received_runs[-1].characters[1] == "hacker", "guest receives authoritative character selection snapshot")
+	run.pending_card_rewards[1] = true
+	var guest_reward := coordinator.current_card_reward(1)[0]
+	_expect(guest.claim_card_reward(1, guest_reward).ok, "guest sends its card reward choice to the host")
+	host.poll()
+	guest.poll()
+	_expect(not run.pending_card_rewards[1] and run.decks[1].has(String(guest_reward)), "host validates and checkpoints the guest reward before opening the route")
 	var guest_node := String(run.map.stages[0].steps[0].lanes[1].options[0].id)
 	_expect(guest.select_route(1, guest_node).ok, "guest sends route intent without mutating run")
 	host.poll()
@@ -581,6 +587,7 @@ func _test_run_combat_completion_gate() -> void:
 	_expect(run.keys[0] and run.gold[0] == before_gold + 45 and run.step == 1, "victory updates key gold and route exactly once")
 	_expect(run.team_health == 62 and completion.summary == ["팀 내구도 +12"], "mixed rest benefit resolves after combat victory")
 	_expect(run.pending_card_rewards == [true, true] and not run.shop_open[0] and not run.shop_open[1], "combat unlocks one reward per player without opening shop")
+	_expect(coordinator.choose_route(0, "blocked-until-reward").error == "rewards_pending", "next route remains locked until both combat rewards are claimed")
 	store.clear()
 
 func _test_boss_and_run_completion_flow() -> void:
@@ -689,6 +696,7 @@ func _test_character_selection_and_scope() -> void:
 	run.pending_card_rewards[1] = true
 	var rewards := coordinator.current_card_reward(1)
 	_expect(rewards.size() == 3 and catalog[rewards[0]].owner_scope == CardData.Scope.NAVIGATOR and catalog[rewards[1]].owner_scope == CardData.Scope.NAVIGATOR and catalog[rewards[2]].owner_scope == CardData.Scope.NEUTRAL, "character reward contains two class cards and one neutral card")
+	_expect(coordinator.claim_card(1, rewards[0]), "character reward must be claimed before route selection")
 	var route_id := String(run.map.stages[0].steps[0].lanes[0].options[0].id)
 	_expect(coordinator.choose_route(0, route_id).ok and not coordinator.select_character(0, &"assault").ok, "character selection closes after route commitment")
 	store.clear()

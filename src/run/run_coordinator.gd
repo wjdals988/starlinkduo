@@ -124,6 +124,8 @@ func use_consumable(combat: CombatState, player_slot: int, item_index: int, engi
 func choose_route(player_slot: int, node_id: String) -> Dictionary:
 	if not _valid_slot(player_slot):
 		return {"ok": false, "error": "invalid_slot"}
+	if run.pending_card_rewards.any(func(pending: bool) -> bool: return pending):
+		return {"ok": false, "error": "rewards_pending"}
 	if run.phase != "traversal" or not run.pending_event.is_empty() or run.step < 0 or run.step >= MapGenerator.TRAVERSAL_STEPS:
 		return {"ok": false, "error": "route_unavailable"}
 	var step_data: Dictionary = run.map.stages[run.stage - 1].steps[run.step]

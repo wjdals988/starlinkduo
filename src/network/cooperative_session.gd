@@ -234,6 +234,22 @@ func select_character(slot: int, character_id: StringName) -> Dictionary:
 		return _error("guest_slot_forbidden")
 	return {"ok": _send("character_select", {"slot": slot, "character_id": String(character_id)})}
 
+func claim_card_reward(slot: int, card_id: StringName) -> Dictionary:
+	if game_mode != "cooperative":
+		return _error("cooperative_mode_inactive")
+	if role == Role.HOST:
+		if run_coordinator == null or slot != 0:
+			return _error("host_reward_forbidden")
+		if not run_coordinator.claim_card(slot, card_id):
+			return _error("invalid_card_reward")
+		_publish_run_snapshot("card_reward_claimed")
+		return {"ok": true}
+	if not handshake_complete:
+		return _error("handshake_required")
+	if slot != 1:
+		return _error("guest_slot_forbidden")
+	return {"ok": _send("card_reward_claim", {"slot": slot, "card_id": String(card_id)})}
+
 func submit_event_choice(slot: int, choice_index: int) -> Dictionary:
 	if game_mode != "cooperative":
 		return _error("cooperative_mode_inactive")
@@ -434,6 +450,14 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 				_send_rejection(character_result.error)
 				return
 			_publish_run_snapshot("character_selected")
+		"card_reward_claim":
+			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
+				_send_rejection("guest_reward_forbidden")
+				return
+			if not run_coordinator.claim_card(1, StringName(payload.get("card_id", ""))):
+				_send_rejection("invalid_card_reward")
+				return
+			_publish_run_snapshot("card_reward_claimed")
 		"use_consumable":
 			if run_coordinator == null or int(payload.get("slot", -1)) != 1:
 				_send_rejection("guest_consumable_forbidden")
