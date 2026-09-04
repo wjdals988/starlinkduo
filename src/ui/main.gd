@@ -29,6 +29,7 @@ var roster_edit_slot := 0
 var selected_plays: Array[Dictionary] = []
 var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
+var singleplayer_pending_cards: Array[CardData] = []
 var active_route_types: Array[String] = []
 var active_route_combat := false
 var reduce_motion := false
@@ -54,6 +55,8 @@ var player_panels: Array[PanelContainer] = []
 var player_status_visuals: Array[PlayerStatusVisual] = []
 var player_status_badges: Array[Label] = []
 var hand_container: HBoxContainer
+var draw_pile_badge: PanelContainer
+var draw_pile_label: Label
 var status_label: Label
 var ready_button: Button
 var turn_label: Label
@@ -348,6 +351,7 @@ func _build_top_bar() -> Control:
 	return panel
 
 func _show_main_menu() -> void:
+	_reset_pending_single_plan()
 	game_started = false
 	_clear_overlay()
 	_set_overlay_compact(duel_state == null)
@@ -405,6 +409,18 @@ func _show_main_menu() -> void:
 	settings.pressed.connect(_show_settings)
 	actions.add_child(settings)
 	hero.add_child(_build_main_menu_art())
+
+func _reset_pending_single_plan() -> void:
+	if cooperative_session != null or state == null or state.phase != CombatState.Phase.PLANNING:
+		return
+	state.plans.clear()
+	for player in state.players:
+		player.ready = false
+	singleplayer_pending_cards.clear()
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	selected_energy = 0
+	local_slot = 0
 
 func _resume_saved_duel() -> void:
 	if duel_state == null:
@@ -1028,10 +1044,26 @@ func _build_hand_section() -> Control:
 	status_row.add_child(ready_button)
 	section.add_child(status_panel)
 
+	var hand_row := HBoxContainer.new()
+	hand_row.add_theme_constant_override("separation", 10)
+	section.add_child(hand_row)
+	draw_pile_badge = PanelContainer.new()
+	draw_pile_badge.custom_minimum_size = Vector2(92, 132)
+	draw_pile_badge.add_theme_stylebox_override("panel", _panel_style(Color("#0c1930e8"), 14, COLOR_CYAN, 2, 10, 8))
+	draw_pile_label = Label.new()
+	draw_pile_label.text = "▤  덱\n0장"
+	draw_pile_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	draw_pile_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	draw_pile_label.add_theme_font_size_override("font_size", 15)
+	draw_pile_label.add_theme_color_override("font_color", COLOR_CYAN)
+	draw_pile_label.accessibility_name = "드로우 덱"
+	draw_pile_badge.add_child(draw_pile_label)
+	hand_row.add_child(draw_pile_badge)
 	hand_container = HBoxContainer.new()
+	hand_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hand_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	hand_container.add_theme_constant_override("separation", -5)
-	section.add_child(hand_container)
+	hand_row.add_child(hand_container)
 
 	log_label = Label.new()
 	log_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2852,6 +2884,9 @@ func _rebuild_hand() -> void:
 	for child in hand_container.get_children():
 		child.queue_free()
 	var active_player: CombatantState = duel_state.players[local_slot] if game_mode == "duel" and duel_state != null else state.players[local_slot]
+	if draw_pile_label != null:
+		draw_pile_label.text = "▤  P%d 덱\n%d장" % [local_slot + 1, active_player.draw_pile.size()]
+		draw_pile_label.accessibility_description = "P%d의 남은 드로우 카드 %d장" % [local_slot + 1, active_player.draw_pile.size()]
 	for hand_index in active_player.hand.size():
 		var card_id: StringName = active_player.hand[hand_index]
 		var card: CardData = catalog[card_id]
@@ -2882,6 +2917,10 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 		log_label.text = "%s 선택 취소 · %s" % [card.display_name, "행동 큐가 비었습니다." if selected_plays.is_empty() else "%d장 남음" % selected_plays.size()]
 		_refresh()
 		return
+	if selected_plays.size() >= 3:
+		log_label.text = "한 대원은 한 턴에 최대 3장까지 선택할 수 있습니다."
+		_play_ui_sound("cancel")
+		return
 	var available_energy := duel_state.players[local_slot].energy if game_mode == "duel" and duel_state != null else state.players[local_slot].energy
 	if selected_energy + card.energy_cost > available_energy:
 		log_label.text = "에너지가 부족합니다."
@@ -2900,7 +2939,7 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 
 func _plan_summary(duel: bool) -> String:
 	if selected_plays.is_empty():
-		return "P%d 비공개 행동을 선택하세요 · 상대 계획은 확정 전 공개되지 않음" % (local_slot + 1) if duel else "카드를 선택해 행동 큐를 만드세요 · 지원 카드 최대 1장"
+		return "P%d 비공개 행동을 선택하세요 · 상대 계획은 확정 전 공개되지 않음" % (local_slot + 1) if duel else "P%d 카드를 최대 3장 선택하세요 · 지원 카드 최대 1장" % (local_slot + 1)
 	var entries: Array[String] = []
 	var support_count := 0
 	for index in selected_plays.size():
@@ -2930,14 +2969,27 @@ func _on_ready_pressed() -> void:
 	if not local_result.ok:
 		log_label.text = "행동을 확정할 수 없습니다: %s" % local_result.get("error", "unknown")
 		return
+	var committed_actions: Array[Dictionary] = []
+	if cooperative_session == null and local_slot == 0:
+		singleplayer_pending_cards.assign(committed_cards)
+		selected_hand_indices.clear()
+		selected_plays.clear()
+		selected_energy = 0
+		local_slot = 1
+		log_label.text = "P1 왼쪽 대원 확정 · P2 오른쪽 대원의 카드를 선택하세요."
+		_refresh()
+		return
 	if cooperative_session == null:
-		var teammate_slot := 1 - local_slot
-		var teammate_card: StringName = &"engineer_bolt" if state.players[teammate_slot].hand.has(&"engineer_bolt") else state.players[teammate_slot].hand[0]
-		var teammate_result := engine.submit_plan(state, teammate_slot, [{"card_id": teammate_card, "target": 0}])
-		if not teammate_result.ok:
-			log_label.text = "동료 행동 오류: %s" % teammate_result.error
-			return
+		for pending_card in singleplayer_pending_cards:
+			committed_actions.append({"card": pending_card, "slot": 0})
+		for current_card in committed_cards:
+			committed_actions.append({"card": current_card, "slot": 1})
+		singleplayer_pending_cards.clear()
 		engine.resolve_if_ready(state)
+		local_slot = 0
+	else:
+		for current_card in committed_cards:
+			committed_actions.append({"card": current_card, "slot": local_slot})
 	var resolved := state.turn != previous_turn
 	selected_hand_indices.clear()
 	selected_plays.clear()
@@ -2946,7 +2998,9 @@ func _on_ready_pressed() -> void:
 	log_label.text = "%s · 상태 해시 %s…" % [result_label, StateHasher.hash_snapshot(state.to_snapshot()).left(8)]
 	if resolved:
 		interaction_locked = true
-		await _play_resolution_feedback(committed_cards, previous_enemy_health - state.enemies[0].health, state.team_health - previous_team_health, local_slot)
+		await _play_resolution_feedback(committed_actions, previous_enemy_health - state.enemies[0].health, state.team_health - previous_team_health)
+		_refresh()
+		await _play_draw_animation()
 		interaction_locked = false
 	_refresh()
 
@@ -2976,7 +3030,12 @@ func _on_duel_ready_pressed() -> void:
 			log_label.text = "동시 행동 해결 완료 · 상태 해시 %s…" % StateHasher.hash_snapshot(duel_state.to_snapshot()).left(8)
 			interaction_locked = true
 			var target_slot := 1 - acting_slot
-			await _play_resolution_feedback(committed_cards, int(previous_health[target_slot]) - int(duel_state.health[target_slot]), int(duel_state.health[acting_slot]) - int(previous_health[acting_slot]), acting_slot)
+			var committed_actions: Array[Dictionary] = []
+			for card in committed_cards:
+				committed_actions.append({"card": card, "slot": acting_slot})
+			await _play_resolution_feedback(committed_actions, int(previous_health[target_slot]) - int(duel_state.health[target_slot]), int(duel_state.health[acting_slot]) - int(previous_health[acting_slot]))
+			_refresh()
+			await _play_draw_animation()
 			interaction_locked = false
 	else:
 		log_label.text = "상대 행동 확정을 기다리는 중입니다."
@@ -2989,71 +3048,114 @@ func _cards_for_plays(plays: Array[Dictionary]) -> Array[CardData]:
 			result.append(catalog[play.card_id])
 	return result
 
-func _play_resolution_feedback(cards: Array[CardData], enemy_damage: int, team_delta: int, source_slot: int) -> void:
-	if cards.is_empty() or battle_fx_layer == null:
+func _play_resolution_feedback(actions: Array[Dictionary], enemy_damage: int, team_delta: int) -> void:
+	if actions.is_empty() or battle_fx_layer == null:
 		return
-	for child in battle_fx_layer.get_children():
-		child.queue_free()
+	actions.sort_custom(_sort_action_animation)
+	var all_cards: Array[CardData] = []
+	for action in actions:
+		all_cards.append(action.card)
 	battle_fx_layer.visible = true
-	var spatial_effect: CombatEffectVisual = preload("res://src/ui/combat_effect_visual.gd").new()
-	spatial_effect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var source_character: StringName = duel_state.players[source_slot].character_id if game_mode == "duel" and duel_state != null else run_coordinator.run.characters[source_slot]
-	spatial_effect.configure(_primary_effect_type(cards), source_slot, reduce_motion, source_character)
-	battle_fx_layer.add_child(spatial_effect)
-	var stack := VBoxContainer.new()
-	stack.set_anchors_preset(Control.PRESET_CENTER)
-	stack.offset_left = -250
-	stack.offset_right = 250
-	stack.offset_top = -150
-	stack.offset_bottom = 10
-	stack.alignment = BoxContainer.ALIGNMENT_CENTER
-	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	battle_fx_layer.add_child(stack)
-	var cue := Label.new()
-	cue.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cue.add_theme_font_size_override("font_size", 16)
-	cue.add_theme_color_override("font_color", COLOR_CYAN)
-	cue.text = "ACTION  ·  %d장 연속 실행" % cards.size()
-	stack.add_child(cue)
-	var action := Label.new()
-	action.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	action.add_theme_font_size_override("font_size", 31)
-	action.add_theme_color_override("font_color", _resolution_color(cards))
-	action.add_theme_stylebox_override("normal", _panel_style(Color("#07101ff2"), 22, _resolution_color(cards), 3, 30, 15))
-	action.text = "  %s  " % "  →  ".join(cards.map(func(card: CardData) -> String: return card.display_name))
-	stack.add_child(action)
-	var result := Label.new()
-	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	result.add_theme_font_size_override("font_size", 20)
-	result.add_theme_color_override("font_color", COLOR_TEXT)
-	result.text = _resolution_result_text(cards, enemy_damage, team_delta)
-	stack.add_child(result)
-	battle_fx_layer.accessibility_description = "%s. %s. %s" % [action.text.strip_edges(), spatial_effect.effect_description(), result.text]
-	if reduce_motion:
-		await get_tree().create_timer(0.55).timeout
-	else:
-		stack.modulate = Color(1, 1, 1, 0)
-		stack.scale = Vector2(0.82, 0.82)
-		stack.pivot_offset = Vector2(250, 80)
-		var reveal := create_tween().set_parallel(true)
-		reveal.tween_property(stack, "modulate", Color.WHITE, 0.18)
-		reveal.tween_property(stack, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		create_tween().tween_property(spatial_effect, "progress", 1.0, 0.58).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-		if enemy_damage > 0 and enemy_art != null:
-			var origin := enemy_art.position
-			var hit := create_tween()
-			hit.tween_interval(0.12)
-			hit.tween_property(enemy_art, "position", origin + Vector2(12, 0), 0.05)
-			hit.tween_property(enemy_art, "position", origin - Vector2(9, 0), 0.05)
-			hit.tween_property(enemy_art, "position", origin, 0.07)
-			hit.parallel().tween_property(enemy_art, "modulate", Color("#ff667d"), 0.05)
-			hit.tween_property(enemy_art, "modulate", Color.WHITE, 0.12)
-		await reveal.finished
-		await get_tree().create_timer(0.62).timeout
-		var dismiss := create_tween()
-		dismiss.tween_property(stack, "modulate", Color(1, 1, 1, 0), 0.18)
-		await dismiss.finished
+	for action_index in actions.size():
+		for child in battle_fx_layer.get_children():
+			child.queue_free()
+		await get_tree().process_frame
+		var card: CardData = actions[action_index].card
+		var source_slot := int(actions[action_index].slot)
+		var spatial_effect: CombatEffectVisual = preload("res://src/ui/combat_effect_visual.gd").new()
+		spatial_effect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var source_character: StringName = duel_state.players[source_slot].character_id if game_mode == "duel" and duel_state != null else run_coordinator.run.characters[source_slot]
+		var single_card: Array[CardData] = [card]
+		spatial_effect.configure(_primary_effect_type(single_card), source_slot, reduce_motion, source_character)
+		battle_fx_layer.add_child(spatial_effect)
+		var stack := VBoxContainer.new()
+		stack.set_anchors_preset(Control.PRESET_CENTER)
+		stack.offset_left = -220
+		stack.offset_right = 220
+		stack.offset_top = -140
+		stack.offset_bottom = 20
+		stack.alignment = BoxContainer.ALIGNMENT_CENTER
+		stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		battle_fx_layer.add_child(stack)
+		var cue := Label.new()
+		cue.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cue.add_theme_font_size_override("font_size", 16)
+		cue.add_theme_color_override("font_color", _character_color(source_character))
+		cue.text = "P%d  ·  ACTION %d / %d" % [source_slot + 1, action_index + 1, actions.size()]
+		stack.add_child(cue)
+		var card_label := Label.new()
+		card_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		card_label.add_theme_font_size_override("font_size", 31)
+		card_label.add_theme_color_override("font_color", _resolution_color(single_card))
+		card_label.add_theme_stylebox_override("normal", _panel_style(Color("#07101ff2"), 22, _resolution_color(single_card), 3, 30, 15))
+		card_label.text = "  %s  " % card.display_name
+		stack.add_child(card_label)
+		var result := Label.new()
+		result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		result.add_theme_font_size_override("font_size", 20)
+		result.add_theme_color_override("font_color", COLOR_TEXT)
+		result.text = _card_resolution_text(card)
+		if action_index == actions.size() - 1:
+			result.text += "  ·  " + _resolution_result_text(all_cards, enemy_damage, team_delta)
+		stack.add_child(result)
+		battle_fx_layer.accessibility_description = "%s. %s. %s" % [card.display_name, spatial_effect.effect_description(), result.text]
+		_play_ui_sound("confirm")
+		if reduce_motion:
+			await get_tree().create_timer(0.42).timeout
+		else:
+			stack.modulate = Color(1, 1, 1, 0)
+			stack.scale = Vector2(0.80, 0.80)
+			stack.pivot_offset = Vector2(220, 80)
+			var reveal := create_tween().set_parallel(true)
+			reveal.tween_property(stack, "modulate", Color.WHITE, 0.14)
+			reveal.tween_property(stack, "scale", Vector2.ONE, 0.20).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			create_tween().tween_property(spatial_effect, "progress", 1.0, 0.46).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+			await reveal.finished
+			await get_tree().create_timer(0.32).timeout
+			var dismiss := create_tween()
+			dismiss.tween_property(stack, "modulate", Color(1, 1, 1, 0), 0.12)
+			await dismiss.finished
 	battle_fx_layer.visible = false
+
+func _sort_action_animation(a: Dictionary, b: Dictionary) -> bool:
+	var card_a: CardData = a.card
+	var card_b: CardData = b.card
+	if card_a.speed != card_b.speed:
+		return card_a.speed < card_b.speed
+	return int(a.slot) < int(b.slot)
+
+func _card_resolution_text(card: CardData) -> String:
+	var parts: Array[String] = []
+	for effect in card.effects:
+		match String(effect.get("type", "")):
+			"damage": parts.append("피해 %d" % int(effect.amount))
+			"block": parts.append("방어 %d" % int(effect.amount))
+			"heal": parts.append("회복 %d" % int(effect.amount))
+			"energy": parts.append("에너지 +%d" % int(effect.amount))
+	return " · ".join(parts)
+
+func _play_draw_animation() -> void:
+	if reduce_motion or hand_container == null or hand_container.get_child_count() == 0:
+		return
+	await get_tree().process_frame
+	var longest: Tween
+	for card_index in hand_container.get_child_count():
+		var card := hand_container.get_child(card_index) as Control
+		var target_position := card.position
+		var deck_origin := Vector2(-170 - card_index * 18, target_position.y)
+		if draw_pile_badge != null:
+			deck_origin = hand_container.to_local(draw_pile_badge.global_position + draw_pile_badge.size * 0.5) - card.size * 0.5
+		card.position = deck_origin
+		card.modulate = Color(1, 1, 1, 0)
+		var draw := create_tween()
+		draw.tween_interval(card_index * 0.055)
+		draw.set_parallel(true)
+		draw.tween_property(card, "position", target_position, 0.24).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		draw.tween_property(card, "modulate", Color.WHITE, 0.18)
+		longest = draw
+	if longest != null:
+		_play_ui_sound("open")
+		await longest.finished
 
 func _primary_effect_type(cards: Array[CardData]) -> String:
 	for priority in ["damage", "block", "heal", "energy"]:

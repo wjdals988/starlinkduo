@@ -61,6 +61,8 @@ func resolve_if_ready(state: DuelState) -> Dictionary:
 	return {"ok": true, "state_hash": StateHasher.hash_snapshot(state.to_snapshot())}
 
 func _validate_plays(state: DuelState, slot: int, plays: Array[Dictionary]) -> Dictionary:
+	if plays.size() > 3:
+		return _error("card_limit")
 	var player := state.players[slot]
 	var available := player.hand.duplicate()
 	var remaining_energy := player.energy

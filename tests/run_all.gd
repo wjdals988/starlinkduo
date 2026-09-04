@@ -120,6 +120,12 @@ func _test_support_limit() -> void:
 		{"card_id": &"guardian_cover"},
 	])
 	_expect(not result.ok and result.error == "support_limit", "only one support card is allowed per turn")
+	state.players[0].hand.assign([&"guardian_strike", &"guardian_strike", &"neutral_pulse", &"neutral_barrier"])
+	var too_many := engine.submit_plan(state, 0, [
+		{"card_id": &"guardian_strike", "target": 0}, {"card_id": &"guardian_strike", "target": 0},
+		{"card_id": &"neutral_pulse", "target": 0}, {"card_id": &"neutral_barrier", "target": 0},
+	])
+	_expect(not too_many.ok and too_many.error == "card_limit", "a player can commit at most three cards per turn")
 
 func _test_deterministic_hash() -> void:
 	var engine := CombatEngine.new(DemoCardCatalog.build())
