@@ -2,7 +2,7 @@ class_name MapGenerator
 extends RefCounted
 
 const TRAVERSAL_STEPS := 8
-const COMMON_STEPS := [2, 5]
+const COMMON_STEPS := [0, 2, 5]
 const PERSONAL_TYPES := ["combat", "combat", "event", "shop", "rest", "elite"]
 
 func generate_run(seed: int) -> Dictionary:
@@ -59,4 +59,3 @@ func _apply_guarantees(steps: Array[Dictionary], guarantees: Dictionary, rng: Se
 
 func _node_id(stage_number: int, step_index: int, slot: int, option_index: int) -> String:
 	return "s%d-r%d-p%d-o%d" % [stage_number, step_index, slot, option_index]
-

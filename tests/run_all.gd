@@ -159,6 +159,8 @@ func _test_run_map_generation() -> void:
 	for stage in first.stages:
 		_expect(stage.steps.size() == MapGenerator.TRAVERSAL_STEPS, "stage contains eight traversal steps")
 		_expect(stage.boss.type == "boss", "stage ends with a boss")
+		_expect(stage.steps[0].kind == "common" and stage.steps[0].options[0].type == "combat", "each stage opens with one shared combat before four-way routes")
+		_expect(stage.steps[1].kind == "parallel" and stage.steps[1].lanes[0].options.size() == 2 and stage.steps[1].lanes[1].options.size() == 2, "the first combat branches into four personal destinations")
 		for slot in 2:
 			var found: Dictionary = {"shop": false, "rest": false, "elite": false, "key_challenge": false}
 			for step in stage.steps:
@@ -370,7 +372,8 @@ func _test_host_authoritative_route_session() -> void:
 	host.poll()
 	guest.poll()
 	_expect(not run.pending_card_rewards[1] and run.decks[1].has(String(guest_reward)), "host validates and checkpoints the guest reward before opening the route")
-	var guest_node := String(run.map.stages[0].steps[0].lanes[1].options[0].id)
+	run.step = 1
+	var guest_node := String(run.map.stages[0].steps[1].lanes[1].options[0].id)
 	_expect(guest.select_route(1, guest_node).ok, "guest sends route intent without mutating run")
 	host.poll()
 	guest.poll()
@@ -550,12 +553,15 @@ func _test_route_selection_and_key_gate() -> void:
 	var coordinator := RunCoordinator.new(FullCardCatalog.build(), store)
 	var run := coordinator.start_new(99)
 	var step: Dictionary = run.map.stages[0].steps[0]
+	var opening := coordinator.choose_route(0, step.options[0].id)
+	_expect(opening.ok and opening.ready and run.pending_routes.size() == 2, "shared opening combat selects one node for both players")
+	_expect(coordinator.complete_routes([opening.node_type, opening.node_type]).ok and run.step == 1, "completed opening combat advances to the first four-way branch")
+	step = run.map.stages[0].steps[1]
 	var first := coordinator.choose_route(0, step.lanes[0].options[0].id)
 	_expect(first.ok and not first.ready, "first personal route waits for teammate")
 	_expect(not coordinator.complete_routes(["combat"]).ok, "routes cannot complete before both choices")
 	var second := coordinator.choose_route(1, step.lanes[1].options[0].id)
 	_expect(second.ok and second.ready, "second personal route makes the pair ready")
-	_expect(coordinator.complete_routes([first.node_type, second.node_type]).ok and run.step == 1, "completed pair advances exactly one step")
 	run.step = MapGenerator.TRAVERSAL_STEPS - 1
 	run.pending_routes = {0: "a", 1: "b"}
 	coordinator.complete_routes(["combat", "combat"])
@@ -699,7 +705,7 @@ func _test_character_selection_and_scope() -> void:
 	var rewards := coordinator.current_card_reward(1)
 	_expect(rewards.size() == 3 and catalog[rewards[0]].owner_scope == CardData.Scope.NAVIGATOR and catalog[rewards[1]].owner_scope == CardData.Scope.NAVIGATOR and catalog[rewards[2]].owner_scope == CardData.Scope.NEUTRAL, "character reward contains two class cards and one neutral card")
 	_expect(coordinator.claim_card(1, rewards[0]), "character reward must be claimed before route selection")
-	var route_id := String(run.map.stages[0].steps[0].lanes[0].options[0].id)
+	var route_id := String(run.map.stages[0].steps[0].options[0].id)
 	_expect(coordinator.choose_route(0, route_id).ok and not coordinator.select_character(0, &"assault").ok, "character selection closes after route commitment")
 	store.clear()
 

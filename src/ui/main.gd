@@ -698,7 +698,7 @@ func _show_current_deck() -> void:
 	var counts := {}
 	for card_id in deck:
 		counts[StringName(card_id)] = int(counts.get(StringName(card_id), 0)) + 1
-	overlay_subtitle.text = "P%d  ·  %d장 / %d종  ·  카드를 옆으로 넘겨 전체 구성을 확인하세요" % [local_slot + 1, deck.size(), counts.size()]
+	overlay_subtitle.text = "P%d  ·  %d장 / %d종  ·  카드 전체 구성을 한눈에 확인하세요" % [local_slot + 1, deck.size(), counts.size()]
 	var total_cost := 0
 	var attack_count := 0
 	var defense_count := 0
@@ -719,25 +719,23 @@ func _show_current_deck() -> void:
 	overlay_content.add_child(deck_status)
 	var ids := counts.keys()
 	ids.sort_custom(func(a: Variant, b: Variant) -> bool: return String(a) < String(b))
-	var shelf := ScrollContainer.new()
-	shelf.custom_minimum_size.y = 330
-	shelf.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	shelf.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var card_row := HBoxContainer.new()
-	card_row.add_theme_constant_override("separation", -18)
-	shelf.add_child(card_row)
-	overlay_content.add_child(shelf)
+	var grid := GridContainer.new()
+	grid.columns = 6
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 12)
+	overlay_content.add_child(grid)
 	for card_id in ids:
 		if not catalog.has(card_id):
 			continue
 		var card: CardData = catalog[card_id]
 		var preview := preload("res://src/ui/card_button.gd").new()
-		preview.custom_minimum_size = Vector2(255, 300)
+		preview.custom_minimum_size = Vector2(172, 230)
 		var accent := _scope_color(card.owner_scope)
 		preview.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "보유 %d장" % int(counts[card_id]))
 		preview.disabled = true
 		preview.add_theme_stylebox_override("disabled", _panel_style(Color(accent, 0.14), 22, Color(accent, 0.42), 1, 16, 12))
-		card_row.add_child(preview)
+		grid.add_child(preview)
 
 func _show_quick_chat() -> void:
 	_clear_overlay()
