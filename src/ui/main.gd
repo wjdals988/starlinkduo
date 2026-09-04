@@ -834,7 +834,7 @@ func _show_current_deck() -> void:
 			continue
 		var card: CardData = catalog[card_id]
 		var preview := preload("res://src/ui/card_button.gd").new()
-		preview.custom_minimum_size = Vector2(172, 230)
+		preview.custom_minimum_size = Vector2(172, 252)
 		var accent := _scope_color(card.owner_scope)
 		preview.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "보유 %d장" % int(counts[card_id]))
 		preview.disabled = true
@@ -2857,7 +2857,7 @@ func _show_reward() -> void:
 	for card_id in rewards:
 		var card: CardData = catalog[card_id]
 		var button := preload("res://src/ui/card_button.gd").new()
-		button.custom_minimum_size = Vector2(250, 190)
+		button.custom_minimum_size = Vector2(250, 248)
 		var accent := _scope_color(card.owner_scope)
 		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "＋ 이 카드 획득")
 		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 18, accent, 3, 14, 10))
@@ -2883,7 +2883,7 @@ func _claim_reward(card_id: StringName) -> void:
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		overlay_content.add_child(row)
 		var acquired := preload("res://src/ui/card_button.gd").new()
-		acquired.custom_minimum_size = Vector2(280, 230)
+		acquired.custom_minimum_size = Vector2(280, 260)
 		var accent := _scope_color(card.owner_scope)
 		acquired.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, true, "✓ 덱에 추가됨")
 		acquired.disabled = true
@@ -2931,7 +2931,7 @@ func _show_shop() -> void:
 		var card: CardData = catalog[StringName(entry.card_id)]
 		var sold := run_coordinator.run.shop_purchases[local_slot].has("card:%s" % String(entry.card_id))
 		var button := preload("res://src/ui/card_button.gd").new()
-		button.custom_minimum_size = Vector2(200, 190)
+		button.custom_minimum_size = Vector2(200, 236)
 		var accent := _scope_color(card.owner_scope)
 		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "✓ 판매 완료" if sold else "%d C  ·  구매" % entry.price)
 		button.disabled = sold or run_coordinator.run.gold[local_slot] < int(entry.price)
@@ -2980,7 +2980,7 @@ func _show_remove_card_picker(cost: int) -> void:
 			continue
 		var card: CardData = catalog[card_id]
 		var button := preload("res://src/ui/card_button.gd").new()
-		button.custom_minimum_size = Vector2(245, 190)
+		button.custom_minimum_size = Vector2(245, 242)
 		var accent := _scope_color(card.owner_scope)
 		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "제거 후보로 선택")
 		button.pressed.connect(_show_remove_card_confirmation.bind(index, cost))
@@ -3001,7 +3001,7 @@ func _show_remove_card_confirmation(deck_index: int, cost: int) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	overlay_content.add_child(row)
 	var preview := preload("res://src/ui/card_button.gd").new()
-	preview.custom_minimum_size = Vector2(280, 220)
+	preview.custom_minimum_size = Vector2(280, 252)
 	var accent := _scope_color(card.owner_scope)
 	preview.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, true, "제거 예정")
 	preview.disabled = true
@@ -3315,11 +3315,11 @@ func _rebuild_hand() -> void:
 		var card_button := preload("res://src/ui/card_button.gd").new()
 		var selected := selected_hand_indices.has(hand_index)
 		var card_slot := Control.new()
-		card_slot.custom_minimum_size = Vector2(166, 144)
+		card_slot.custom_minimum_size = Vector2(174, 182)
 		card_slot.mouse_filter = Control.MOUSE_FILTER_PASS
 		card_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		card_button.position = Vector2(0, 0 if selected else 12)
-		card_button.size = Vector2(166, 132)
+		card_button.size = Vector2(174, 168)
 		var accent := _scope_color(card.owner_scope)
 		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected)
 		var base_color := Color(accent, 0.22) if selected else COLOR_PANEL
@@ -3780,7 +3780,7 @@ func _rarity_label(rarity: CardData.Rarity) -> String:
 	return ["● 일반", "◆ 매직", "⬢ 레어", "★ 전설"][rarity]
 
 func _scope_label(scope: CardData.Scope) -> String:
-	return ["수호자", "기술자", "해커", "강습병", "공용"][scope]
+	return ["수호자", "기술자", "해커", "강습병", "공용", "의무관", "항법사"][scope]
 
 func _scope_color(scope: CardData.Scope) -> Color:
 	match scope:

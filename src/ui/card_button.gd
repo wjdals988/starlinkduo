@@ -39,27 +39,35 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	var inset := MarginContainer.new()
 	inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inset.add_theme_constant_override("margin_left", 11)
-	inset.add_theme_constant_override("margin_right", 11)
-	inset.add_theme_constant_override("margin_top", 5)
-	inset.add_theme_constant_override("margin_bottom", 3)
+	inset.add_theme_constant_override("margin_left", 10)
+	inset.add_theme_constant_override("margin_right", 10)
+	inset.add_theme_constant_override("margin_top", 7)
+	inset.add_theme_constant_override("margin_bottom", 6)
 	add_child(inset)
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_theme_constant_override("separation", 1)
+	column.add_theme_constant_override("separation", 3)
 	inset.add_child(column)
 	var meta := HBoxContainer.new()
 	meta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(meta)
-	meta.add_child(_label("⚡ %d" % card.energy_cost, 18, Color("#ffffff")))
-	var rarity := _label(rarity_text, 11, Color("#d6deef"))
+	var cost_badge := PanelContainer.new()
+	cost_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_badge.add_theme_stylebox_override("panel", _badge_style(effect_accent, 9))
+	var cost := _label("⚡ %d" % card.energy_cost, 17, Color.WHITE)
+	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cost.custom_minimum_size.x = 48
+	cost_badge.add_child(cost)
+	meta.add_child(cost_badge)
+	var rarity := _label(rarity_text, 10, Color("#e6ecfa"))
 	rarity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rarity.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	rarity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	meta.add_child(rarity)
 	var art := TextureRect.new()
-	art.custom_minimum_size.y = 28
+	art.custom_minimum_size.y = 38
 	art.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	art.size_flags_stretch_ratio = 1.0
+	art.size_flags_stretch_ratio = 1.35
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.texture = CardArt.texture_for(card.owner_scope, effect_kind)
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -70,19 +78,25 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	identity.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	identity.configure(card.id, accent)
 	art.add_child(identity)
-	var name_label := _label(String(card.display_name), 14, Color.WHITE)
+	var name_band := PanelContainer.new()
+	name_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_band.add_theme_stylebox_override("panel", _name_style(accent))
+	var name_label := _label(String(card.display_name), 15, Color.WHITE)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	column.add_child(name_label)
-	var divider := HSeparator.new()
-	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	divider.add_theme_constant_override("separation", 2)
-	column.add_child(divider)
-	var effect := _label("%s · %s" % [primary_tag, effect_text], 11, Color("#dce6f7"))
+	name_band.add_child(name_label)
+	column.add_child(name_band)
+	var effect := _label(effect_text, 13, Color.WHITE)
 	effect.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	effect.add_theme_color_override("font_shadow_color", Color("#000000b8"))
+	effect.add_theme_constant_override("shadow_offset_x", 1)
+	effect.add_theme_constant_override("shadow_offset_y", 1)
 	column.add_child(effect)
+	var target := _label("%s  ·  대상 %s" % [primary_tag, _target_name(card.target)], 10, Color("#aebbd2"))
+	target.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(target)
 	var resolved_footer := footer_text if not footer_text.is_empty() else ("◆ 선택됨" if is_selected else "탭하여 선택")
-	var state_label := _label(resolved_footer, 10, accent if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
+	var state_label := _label(resolved_footer, 10, accent.lightened(0.18) if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	state_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	column.add_child(state_label)
@@ -95,6 +109,29 @@ func _label(value: String, font_size: int, color: Color) -> Label:
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
 	return label
+
+func _badge_style(color: Color, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(color, 0.88)
+	style.set_corner_radius_all(radius)
+	style.content_margin_left = 4
+	style.content_margin_right = 4
+	style.content_margin_top = 2
+	style.content_margin_bottom = 2
+	return style
+
+func _name_style(color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(color.darkened(0.55), 0.96)
+	style.corner_radius_top_left = 5
+	style.corner_radius_top_right = 5
+	style.corner_radius_bottom_left = 9
+	style.corner_radius_bottom_right = 9
+	style.content_margin_left = 5
+	style.content_margin_right = 5
+	style.content_margin_top = 2
+	style.content_margin_bottom = 3
+	return style
 
 func _draw() -> void:
 	var width := size.x
