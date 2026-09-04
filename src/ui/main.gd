@@ -1305,6 +1305,8 @@ func _clear_overlay() -> void:
 	_set_main_menu_visual(false)
 	if overlay_close_button != null:
 		overlay_close_button.show()
+		overlay_close_button.add_theme_stylebox_override("normal", _panel_style(Color("#192541"), 24, Color.TRANSPARENT, 0, 16, 8))
+		overlay_close_button.add_theme_stylebox_override("hover", _panel_style(Color("#24365a"), 24, Color.TRANSPARENT, 0, 16, 8))
 	if not overlay.visible:
 		previous_focus_owner = get_viewport().gui_get_focus_owner()
 		background_focus_modes.clear()
@@ -1353,6 +1355,21 @@ func _set_overlay_tall() -> void:
 	overlay_panel.offset_right = -150
 	overlay_panel.offset_top = 54
 	overlay_panel.offset_bottom = -66
+
+func _set_overlay_immersive() -> void:
+	if overlay_panel == null:
+		return
+	main_menu_backdrop.visible = true
+	main_menu_shade.visible = true
+	main_menu_shade.color = Color("#020a18c9")
+	overlay_panel.offset_left = 96
+	overlay_panel.offset_right = -96
+	overlay_panel.offset_top = 26
+	overlay_panel.offset_bottom = -34
+	overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 24, 18))
+	overlay_scrim.color = Color.TRANSPARENT
+	overlay_close_button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 12, 6))
+	overlay_close_button.add_theme_stylebox_override("hover", _panel_style(Color("#ffffff12"), 14, Color.TRANSPARENT, 0, 12, 6))
 
 func _set_main_menu_visual(enabled: bool) -> void:
 	if overlay_panel == null or overlay_scrim == null or main_menu_backdrop == null or main_menu_shade == null:
@@ -2008,7 +2025,7 @@ func _show_roster() -> void:
 		return
 	_clear_overlay()
 	var selection_open := run_coordinator.can_select_characters()
-	_set_overlay_tall()
+	_set_overlay_immersive()
 	overlay_title.text = "승무원 편성"
 	if cooperative_session != null:
 		roster_edit_slot = local_slot
@@ -2023,8 +2040,9 @@ func _show_roster() -> void:
 		identity.text = "P%d  %s   ·   %s" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), _character_role(run_coordinator.run.characters[slot])]
 		identity.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		identity.disabled = cooperative_session != null or roster_edit_slot == slot or not selection_open
-		identity.add_theme_stylebox_override("normal", _panel_style(Color(slot_accent, 0.10), 16, Color.TRANSPARENT, 0, 10, 7))
-		identity.add_theme_stylebox_override("disabled", _panel_style(Color(slot_accent, 0.22) if roster_edit_slot == slot else Color(slot_accent, 0.08), 16, Color.TRANSPARENT, 0, 10, 7))
+		identity.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 10, 7))
+		identity.add_theme_stylebox_override("hover", _panel_style(Color(slot_accent, 0.10), 12, Color.TRANSPARENT, 0, 10, 7))
+		identity.add_theme_stylebox_override("disabled", _panel_style(Color(slot_accent, 0.10) if roster_edit_slot == slot else Color.TRANSPARENT, 12, Color.TRANSPARENT, 0, 10, 7))
 		identity.add_theme_color_override("font_disabled_color", Color.WHITE)
 		_set_button_accessibility(identity, "P%d 편집" % (slot + 1), "%s. %s" % [_character_name(run_coordinator.run.characters[slot]), "현재 선택 중" if roster_edit_slot == slot else "탭하여 이 슬롯 편집"])
 		identity.pressed.connect(_set_roster_edit_slot.bind(slot))
@@ -2042,7 +2060,7 @@ func _show_roster() -> void:
 		var is_teammate: bool = run_coordinator.run.characters[1 - roster_edit_slot] == character_id
 		var art_frame := PanelContainer.new()
 		art_frame.custom_minimum_size.y = 190
-		art_frame.add_theme_stylebox_override("panel", _panel_style(Color(_character_color(character_id), 0.20 if is_current else 0.04), 22, _character_color(character_id) if is_current else Color.TRANSPARENT, 3 if is_current else 0, 2, 2))
+		art_frame.add_theme_stylebox_override("panel", _panel_style(Color(_character_color(character_id), 0.16) if is_current else Color.TRANSPARENT, 22, Color.TRANSPARENT, 0, 2, 2))
 		var art := TextureRect.new()
 		art.texture = load(_character_portrait(character_id))
 		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -2078,9 +2096,9 @@ func _show_roster() -> void:
 		button.disabled = not selection_open or not can_edit or is_current or is_teammate
 		_set_button_accessibility(button, "P%d %s 선택" % [roster_edit_slot + 1, _character_name(character_id)], "%s. %s. %s" % [_character_role(character_id), _starter_deck_profile(character_id), _disabled_character_reason(roster_edit_slot, character_id, selection_open, can_edit)])
 		button.add_theme_font_size_override("font_size", 13)
-		button.add_theme_stylebox_override("normal", _panel_style(Color("#101725e8"), 10, Color.TRANSPARENT, 0, 6, 5))
-		button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.24), 10, _character_color(character_id), 2, 6, 5))
-		button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.24) if is_current else Color("#101725"), 10, Color.TRANSPARENT, 0, 6, 5))
+		button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 6, 5))
+		button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(character_id), 0.16), 10, Color.TRANSPARENT, 0, 6, 5))
+		button.add_theme_stylebox_override("disabled", _panel_style(Color(_character_color(character_id), 0.16) if is_current else Color.TRANSPARENT, 10, Color.TRANSPARENT, 0, 6, 5))
 		button.add_theme_color_override("font_disabled_color", Color.WHITE if is_current else Color("#76839a"))
 		button.pressed.connect(_select_character.bind(roster_edit_slot, character_id))
 		candidate.add_child(button)
@@ -2183,6 +2201,7 @@ func _show_map() -> void:
 		_show_mode_locked_notice("항로", "항로 진행은 협동 원정 전용입니다.")
 		return
 	_clear_overlay()
+	_set_overlay_immersive()
 	var run := run_coordinator.run
 	overlay_title.text = "STAR CHART · STAGE %d" % run.stage
 	overlay_subtitle.text = "진행 %d / 8   ·   열쇠 %d / 3   ·   런 %s" % [run.step, run.keys.count(true), run.run_id]
@@ -2206,7 +2225,7 @@ func _show_map() -> void:
 	var stage: Dictionary = run.map.stages[run.stage - 1]
 	var chart := PanelContainer.new()
 	chart.custom_minimum_size.y = 220
-	chart.add_theme_stylebox_override("panel", _panel_style(Color("#050d1dcc"), 28, Color.TRANSPARENT, 0, 20, 14))
+	chart.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 20, 14))
 	var chart_column := VBoxContainer.new()
 	chart_column.add_theme_constant_override("separation", 10)
 	chart.add_child(chart_column)
@@ -2501,7 +2520,7 @@ func _show_route_result(title: String, summary: String) -> void:
 	_clear_overlay()
 	var combat_victory := "승리" in title or "격파" in title
 	if combat_victory:
-		_set_overlay_tall()
+		_set_overlay_immersive()
 	else:
 		_set_overlay_compact(true)
 	overlay_title.text = title
