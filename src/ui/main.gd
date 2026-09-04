@@ -2892,7 +2892,12 @@ func _rebuild_hand() -> void:
 		var card: CardData = catalog[card_id]
 		var card_button := preload("res://src/ui/card_button.gd").new()
 		var selected := selected_hand_indices.has(hand_index)
-		card_button.custom_minimum_size = Vector2(166, 132)
+		var card_slot := Control.new()
+		card_slot.custom_minimum_size = Vector2(166, 144)
+		card_slot.mouse_filter = Control.MOUSE_FILTER_PASS
+		card_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		card_button.position = Vector2(0, 0 if selected else 12)
+		card_button.size = Vector2(166, 132)
 		var accent := _scope_color(card.owner_scope)
 		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected)
 		var base_color := Color(accent, 0.22) if selected else COLOR_PANEL
@@ -2901,7 +2906,8 @@ func _rebuild_hand() -> void:
 		card_button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.30), 16, Color.TRANSPARENT, 0, 12, 8))
 		card_button.add_theme_color_override("font_color", COLOR_TEXT)
 		card_button.pressed.connect(_on_card_pressed.bind(hand_index, card))
-		hand_container.add_child(card_button)
+		card_slot.add_child(card_button)
+		hand_container.add_child(card_slot)
 	_apply_text_scale_tree.call_deferred(hand_container)
 
 func _on_card_pressed(hand_index: int, card: CardData) -> void:
@@ -2998,7 +3004,7 @@ func _on_ready_pressed() -> void:
 	log_label.text = "%s · 상태 해시 %s…" % [result_label, StateHasher.hash_snapshot(state.to_snapshot()).left(8)]
 	if resolved:
 		interaction_locked = true
-		await _play_resolution_feedback(committed_actions, previous_enemy_health - state.enemies[0].health, state.team_health - previous_team_health)
+		await _play_resolution_feedback(committed_actions, previous_enemy_health, previous_team_health)
 		_refresh()
 		await _play_draw_animation()
 		interaction_locked = false
@@ -3033,7 +3039,7 @@ func _on_duel_ready_pressed() -> void:
 			var committed_actions: Array[Dictionary] = []
 			for card in committed_cards:
 				committed_actions.append({"card": card, "slot": acting_slot})
-			await _play_resolution_feedback(committed_actions, int(previous_health[target_slot]) - int(duel_state.health[target_slot]), int(duel_state.health[acting_slot]) - int(previous_health[acting_slot]))
+			await _play_resolution_feedback(committed_actions, int(previous_health[target_slot]), int(previous_health[acting_slot]))
 			_refresh()
 			await _play_draw_animation()
 			interaction_locked = false
@@ -3048,13 +3054,22 @@ func _cards_for_plays(plays: Array[Dictionary]) -> Array[CardData]:
 			result.append(catalog[play.card_id])
 	return result
 
-func _play_resolution_feedback(actions: Array[Dictionary], enemy_damage: int, team_delta: int) -> void:
+func _play_resolution_feedback(actions: Array[Dictionary], previous_enemy_health: int, previous_team_health: int) -> void:
 	if actions.is_empty() or battle_fx_layer == null:
 		return
 	actions.sort_custom(_sort_action_animation)
-	var all_cards: Array[CardData] = []
+	var incremental_health := game_mode != "duel"
+	var visual_enemy_health := previous_enemy_health
+	var visual_team_health := previous_team_health
+	var final_enemy_health := state.enemies[0].health if incremental_health else previous_enemy_health
+	var final_team_health := state.team_health if incremental_health else previous_team_health
+	var remaining_enemy_damage := maxi(0, previous_enemy_health - final_enemy_health)
+	var remaining_damage_cards := 0
 	for action in actions:
-		all_cards.append(action.card)
+		if _card_effect_amount(action.card, "damage") > 0:
+			remaining_damage_cards += 1
+	if incremental_health:
+		_set_cooperative_health_preview(visual_enemy_health, visual_team_health)
 	battle_fx_layer.visible = true
 	for action_index in actions.size():
 		for child in battle_fx_layer.get_children():
@@ -3095,8 +3110,6 @@ func _play_resolution_feedback(actions: Array[Dictionary], enemy_damage: int, te
 		result.add_theme_font_size_override("font_size", 20)
 		result.add_theme_color_override("font_color", COLOR_TEXT)
 		result.text = _card_resolution_text(card)
-		if action_index == actions.size() - 1:
-			result.text += "  ·  " + _resolution_result_text(all_cards, enemy_damage, team_delta)
 		stack.add_child(result)
 		battle_fx_layer.accessibility_description = "%s. %s. %s" % [card.display_name, spatial_effect.effect_description(), result.text]
 		_play_ui_sound("confirm")
@@ -3111,11 +3124,54 @@ func _play_resolution_feedback(actions: Array[Dictionary], enemy_damage: int, te
 			reveal.tween_property(stack, "scale", Vector2.ONE, 0.20).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			create_tween().tween_property(spatial_effect, "progress", 1.0, 0.46).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 			await reveal.finished
-			await get_tree().create_timer(0.32).timeout
+			await get_tree().create_timer(0.18).timeout
+		if incremental_health:
+			var card_damage := _card_effect_amount(card, "damage")
+			var card_heal := _card_effect_amount(card, "heal")
+			if card_damage > 0:
+				remaining_damage_cards -= 1
+				var applied_damage := remaining_enemy_damage if remaining_damage_cards == 0 else mini(card_damage, remaining_enemy_damage)
+				remaining_enemy_damage -= applied_damage
+				visual_enemy_health -= applied_damage
+				await _animate_health_preview(enemy_health_bar, visual_enemy_health)
+				enemy_health_label.text = "%d / %d" % [visual_enemy_health, state.enemies[0].max_health]
+			if card_heal > 0:
+				visual_team_health = mini(state.team_max_health, visual_team_health + card_heal)
+				await _animate_health_preview(team_health_bar, visual_team_health)
+				team_health_label.text = "팀 내구도   %d / %d" % [visual_team_health, state.team_max_health]
+		if reduce_motion:
+			await get_tree().create_timer(0.18).timeout
+		else:
+			await get_tree().create_timer(0.14).timeout
 			var dismiss := create_tween()
 			dismiss.tween_property(stack, "modulate", Color(1, 1, 1, 0), 0.12)
 			await dismiss.finished
+	if incremental_health and visual_team_health != final_team_health:
+		await _animate_health_preview(team_health_bar, final_team_health)
+		team_health_label.text = "팀 내구도   %d / %d" % [final_team_health, state.team_max_health]
+		await get_tree().create_timer(0.20 if reduce_motion else 0.32).timeout
 	battle_fx_layer.visible = false
+
+func _card_effect_amount(card: CardData, effect_type: String) -> int:
+	var total := 0
+	for effect in card.effects:
+		if String(effect.get("type", "")) == effect_type:
+			total += int(effect.get("amount", 0))
+	return total
+
+func _set_cooperative_health_preview(enemy_health: int, team_health: int) -> void:
+	enemy_health_label.text = "%d / %d" % [enemy_health, state.enemies[0].max_health]
+	enemy_health_bar.value = enemy_health
+	team_health_label.text = "팀 내구도   %d / %d" % [team_health, state.team_max_health]
+	team_health_bar.value = team_health
+
+func _animate_health_preview(bar: ProgressBar, target_value: int) -> void:
+	if reduce_motion:
+		bar.value = target_value
+		return
+	var health_tween := create_tween()
+	health_tween.tween_property(bar, "value", target_value, 0.18).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	await health_tween.finished
 
 func _sort_action_animation(a: Dictionary, b: Dictionary) -> bool:
 	var card_a: CardData = a.card
