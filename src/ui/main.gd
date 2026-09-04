@@ -12,6 +12,7 @@ const COLOR_RED := Color("#ff667d")
 const COLOR_YELLOW := Color("#ffd45f")
 const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
 const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
+const StarRouteMapView := preload("res://src/ui/star_route_map.gd")
 
 var engine: CombatEngine
 var state: CombatState
@@ -2203,8 +2204,8 @@ func _show_map() -> void:
 	_clear_overlay()
 	_set_overlay_immersive()
 	var run := run_coordinator.run
-	overlay_title.text = "STAR CHART · STAGE %d" % run.stage
-	overlay_subtitle.text = "진행 %d / 8   ·   열쇠 %d / 3   ·   런 %s" % [run.step, run.keys.count(true), run.run_id]
+	overlay_title.text = "성계 항로 · STAGE %d" % run.stage
+	overlay_subtitle.text = "빛나는 노드를 선택해 다음 목적지를 정하세요   ·   열쇠 %d / 3" % run.keys.count(true)
 	if run.phase == "stage_boss":
 		_set_overlay_compact(true)
 		overlay_title.text = "스테이지 보스 · STAGE %d" % run.stage
@@ -2223,82 +2224,31 @@ func _show_map() -> void:
 		_show_run_outcome(run.phase == "completed")
 		return
 	var stage: Dictionary = run.map.stages[run.stage - 1]
-	var chart := PanelContainer.new()
-	chart.custom_minimum_size.y = 220
-	chart.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 20, 14))
-	var chart_column := VBoxContainer.new()
-	chart_column.add_theme_constant_override("separation", 10)
-	chart.add_child(chart_column)
+	var map_header := HBoxContainer.new()
+	map_header.alignment = BoxContainer.ALIGNMENT_CENTER
+	map_header.add_theme_constant_override("separation", 36)
 	var sector_status := Label.new()
-	sector_status.text = "SECTOR %d   ·   HULL %d/%d   ·   STAR KEYS %d/3" % [run.stage, run.team_health, run.team_max_health, run.keys.count(true)]
+	sector_status.text = "SECTOR %d   ◈   HULL %d/%d" % [run.stage, run.team_health, run.team_max_health]
 	sector_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sector_status.add_theme_font_size_override("font_size", 14)
 	sector_status.add_theme_color_override("font_color", COLOR_CYAN)
-	chart_column.add_child(sector_status)
-	var constellation := HBoxContainer.new()
-	constellation.alignment = BoxContainer.ALIGNMENT_CENTER
-	constellation.add_theme_constant_override("separation", 2)
-	chart_column.add_child(constellation)
-	for step_data in stage.steps:
-		var step_index := int(step_data.index)
-		var node_column := VBoxContainer.new()
-		node_column.custom_minimum_size.x = 82
-		node_column.alignment = BoxContainer.ALIGNMENT_CENTER
-		var node_state := "CLEARED" if step_index < run.step else ("YOU ARE HERE" if step_index == run.step else "UNCHARTED")
-		var node_accent := COLOR_CYAN if step_index == run.step else (COLOR_BLUE if step_index < run.step else Color("#58647a"))
-		var node_icon := Label.new()
-		node_icon.text = "✦" if step_index == run.step else ("●" if step_index < run.step else "○")
-		node_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		node_icon.add_theme_font_size_override("font_size", 28 if step_index == run.step else 21)
-		node_icon.add_theme_color_override("font_color", node_accent)
-		node_column.add_child(node_icon)
-		var type_icons: Array[String] = []
-		if step_data.kind == "common":
-			type_icons.append(_node_icon(step_data.options[0].type))
-		else:
-			for lane in step_data.lanes:
-				for option in lane.options:
-					if not type_icons.has(_node_icon(option.type)):
-						type_icons.append(_node_icon(option.type))
-		var node_caption := Label.new()
-		node_caption.text = "%02d  %s\n%s" % [step_index + 1, " ".join(type_icons), node_state]
-		node_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		node_caption.add_theme_font_size_override("font_size", 11)
-		node_caption.add_theme_color_override("font_color", node_accent)
-		node_column.add_child(node_caption)
-		constellation.add_child(node_column)
-		if step_index < MapGenerator.TRAVERSAL_STEPS - 1:
-			var connector := Label.new()
-			connector.text = "━━" if step_index < run.step else "╌╌"
-			connector.add_theme_color_override("font_color", COLOR_BLUE if step_index < run.step else Color("#344057"))
-			constellation.add_child(connector)
-	chart_column.add_child(_status_chip("✦  현재 위치 · %02d번째 항로" % [run.step + 1], COLOR_CYAN))
-	overlay_content.add_child(chart)
-	var current_step: Dictionary = stage.steps[run.step]
-	var choice_title := Label.new()
-	choice_title.text = "CHOOSE DESTINATION  /  다음 목적지"
-	choice_title.add_theme_font_size_override("font_size", 16)
-	choice_title.add_theme_color_override("font_color", COLOR_YELLOW)
-	overlay_content.add_child(choice_title)
-	var choices_row := HBoxContainer.new()
-	choices_row.add_theme_constant_override("separation", 14)
-	overlay_content.add_child(choices_row)
-	if current_step.kind == "common":
-		var option: Dictionary = current_step.options[0]
-		choices_row.add_child(_star_node_button(option, -1, COLOR_CYAN, not run.pending_routes.is_empty()))
-	else:
-		for slot in 2:
-			var lane := VBoxContainer.new()
-			lane.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			lane.add_theme_constant_override("separation", 8)
-			var lane_label := Label.new()
-			lane_label.text = "P%d 항로" % [slot + 1]
-			lane_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			lane_label.add_theme_color_override("font_color", COLOR_BLUE if slot == 0 else COLOR_ORANGE)
-			lane.add_child(lane_label)
-			for option in current_step.lanes[slot].options:
-				lane.add_child(_star_node_button(option, slot, COLOR_BLUE if slot == 0 else COLOR_ORANGE, run.pending_routes.has(slot) or slot != local_slot))
-			choices_row.add_child(lane)
+	map_header.add_child(sector_status)
+	var location := Label.new()
+	location.text = "현재 좌표  %02d / %02d" % [run.step + 1, MapGenerator.TRAVERSAL_STEPS]
+	location.add_theme_font_size_override("font_size", 13)
+	location.add_theme_color_override("font_color", COLOR_MUTED)
+	map_header.add_child(location)
+	overlay_content.add_child(map_header)
+	var route_map := StarRouteMapView.new()
+	route_map.configure(stage, run.step, local_slot, run.pending_routes)
+	route_map.node_selected.connect(_choose_route)
+	overlay_content.add_child(route_map)
+	var route_guide := Label.new()
+	route_guide.text = "P1 상단 항로  ·  P2 하단 항로  ·  밝게 점등된 목적지를 직접 선택"
+	route_guide.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	route_guide.add_theme_font_size_override("font_size", 12)
+	route_guide.add_theme_color_override("font_color", COLOR_MUTED)
+	overlay_content.add_child(route_guide)
 	if run.pending_routes.size() == 2:
 		_add_connection_action("워프 좌표 확정 · 선택 노드 진입", _enter_selected_routes, COLOR_CYAN)
 
@@ -3075,56 +3025,12 @@ func _shop_item_button(text: String, accent: Color, disabled: bool) -> Button:
 	button.add_theme_stylebox_override("focus", _focus_style(accent, 12))
 	return button
 
-func _route_chip(text: String, accent: Color) -> PanelContainer:
-	var chip := PanelContainer.new()
-	chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	chip.custom_minimum_size.y = 46
-	chip.add_theme_stylebox_override("panel", _panel_style(Color("#101a31b8"), 23, Color(accent, 0.55), 1, 12, 6))
-	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 16)
-	chip.add_child(label)
-	return chip
-
 func _show_mode_locked_notice(title: String, message: String) -> void:
 	_clear_overlay()
 	_set_overlay_minimal()
 	overlay_title.text = title
 	overlay_subtitle.text = message
 	_add_connection_action("플레이 모드로 이동", _show_mode, COLOR_CYAN)
-
-func _route_button(text: String, accent: Color, callback: Callable) -> Button:
-	var button := Button.new()
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.custom_minimum_size.y = 58 if "\n" in text else 48
-	button.text = text
-	_set_button_accessibility(button, _first_text_line(text), "%s. 두 번 탭하여 이 항로를 선택합니다" % _remaining_text_lines(text))
-	button.add_theme_font_size_override("font_size", 16)
-	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 24, accent, 2, 12, 6))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.20), 24, accent, 3, 12, 6))
-	button.add_theme_stylebox_override("focus", _focus_style(accent, 24))
-	button.pressed.connect(callback)
-	return button
-
-func _star_node_button(option: Dictionary, slot: int, accent: Color, selected_or_locked: bool) -> Button:
-	var button := Button.new()
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.custom_minimum_size.y = 66
-	button.text = "%s   %s\n%s" % [_node_icon(String(option.type)), _node_label(String(option.type)), "✓ 좌표 선택됨" if selected_or_locked and run_coordinator.run.pending_routes.has(slot) else _node_preview(String(option.type))]
-	button.disabled = selected_or_locked
-	button.add_theme_font_size_override("font_size", 15)
-	button.add_theme_color_override("font_color", COLOR_TEXT)
-	button.add_theme_color_override("font_disabled_color", Color(accent, 0.72))
-	button.add_theme_stylebox_override("normal", _panel_style(Color(accent, 0.10), 30, Color.TRANSPARENT, 0, 16, 8))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.24), 30, accent, 2, 16, 8))
-	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.34), 30, accent, 3, 16, 8))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color(accent, 0.07), 30, Color.TRANSPARENT, 0, 16, 8))
-	button.add_theme_stylebox_override("focus", _focus_style(accent, 30))
-	_set_button_accessibility(button, "%s 노드" % _node_label(String(option.type)), "%s. 두 번 탭하여 목적지로 선택합니다" % _node_preview(String(option.type)))
-	if not selected_or_locked:
-		button.pressed.connect(_choose_route.bind(local_slot if slot < 0 else slot, String(option.id)))
-	return button
 
 func _node_label(type: String) -> String:
 	return {"combat": "전투", "event": "이벤트", "shop": "상점", "rest": "휴식", "elite": "엘리트", "key_challenge": "열쇠 도전"}.get(type, type)
