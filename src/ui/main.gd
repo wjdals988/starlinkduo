@@ -11,6 +11,9 @@ const COLOR_ORANGE := Color("#ffac5f")
 const COLOR_RED := Color("#ff667d")
 const COLOR_YELLOW := Color("#ffd45f")
 const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
+const CURRENT_VERSION := "0.1.2"
+const VERSION_FEED_URL := "https://coldbrewventi.vercel.app/starlink-duo/latest.json"
+const DOWNLOAD_PAGE_URL := "https://coldbrewventi.vercel.app/projects/starlink-duo"
 const EnemyVisuals := preload("res://src/ui/enemy_visual_catalog.gd")
 const StarRouteMapView := preload("res://src/ui/star_route_map.gd")
 
@@ -90,6 +93,9 @@ var chat_bubble_labels: Array[Label] = []
 var chat_bubble_tokens := [0, 0]
 var ui_audio_players: Dictionary = {}
 var overlay_transition: Tween
+var version_request: HTTPRequest
+var version_button: Button
+var latest_release: Dictionary = {}
 
 func _ready() -> void:
 	get_tree().set_auto_accept_quit(false)
@@ -119,6 +125,7 @@ func _ready() -> void:
 		duel_engine = DuelEngine.new(catalog)
 		game_mode = "duel"
 	_build_interface()
+	_start_version_check()
 	_apply_text_scale_tree(self)
 	_refresh()
 	_sync_android_accessibility.call_deferred()
@@ -413,7 +420,104 @@ func _show_main_menu() -> void:
 	_set_button_accessibility(settings, "설정", "화면과 조작 설정을 엽니다")
 	settings.pressed.connect(_show_settings)
 	actions.add_child(settings)
+	version_button = Button.new()
+	_refresh_version_button()
+	version_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	version_button.custom_minimum_size.y = 38
+	version_button.add_theme_font_size_override("font_size", 13)
+	version_button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 10, Color.TRANSPARENT, 0, 14, 4))
+	version_button.add_theme_stylebox_override("hover", _panel_style(Color("#ffffff12"), 10, Color.TRANSPARENT, 0, 14, 4))
+	version_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 10))
+	version_button.pressed.connect(_show_version_info)
+	actions.add_child(version_button)
 	hero.add_child(_build_main_menu_art())
+
+func _start_version_check() -> void:
+	version_request = HTTPRequest.new()
+	version_request.timeout = 8.0
+	version_request.request_completed.connect(_on_version_check_completed)
+	add_child(version_request)
+	var request_error := version_request.request(VERSION_FEED_URL)
+	if request_error != OK:
+		push_warning("Version check could not start: %s" % error_string(request_error))
+
+func _on_version_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not parsed is Dictionary:
+		return
+	var release := parsed as Dictionary
+	if not release.has("version") or not release.has("downloadPageUrl"):
+		return
+	latest_release = release
+	_refresh_version_button()
+	if not _is_update_available():
+		return
+	var config := ConfigFile.new()
+	config.load("user://accessibility.cfg")
+	var notified_version := str(config.get_value("updates", "notified_version", ""))
+	if notified_version == str(latest_release.version):
+		return
+	if not game_started and overlay.visible and overlay_title.text == "STARLINK DUO":
+		_mark_update_notified()
+		_show_version_info()
+
+func _refresh_version_button() -> void:
+	if version_button == null or not is_instance_valid(version_button):
+		return
+	if _is_update_available():
+		version_button.text = "●  업데이트 v%s  ·  현재 v%s" % [latest_release.version, CURRENT_VERSION]
+		version_button.add_theme_color_override("font_color", COLOR_RED)
+		_set_button_accessibility(version_button, "새 버전 있음", "버전 %s 업데이트 안내와 다운로드 페이지를 엽니다" % latest_release.version)
+	else:
+		version_button.text = "ⓘ  VERSION %s" % CURRENT_VERSION
+		version_button.add_theme_color_override("font_color", COLOR_MUTED)
+		_set_button_accessibility(version_button, "버전 정보", "현재 설치 버전은 %s입니다" % CURRENT_VERSION)
+
+func _is_update_available() -> bool:
+	return not latest_release.is_empty() and _compare_versions(str(latest_release.get("version", CURRENT_VERSION)), CURRENT_VERSION) > 0
+
+func _compare_versions(left: String, right: String) -> int:
+	var left_parts := left.trim_prefix("v").split(".")
+	var right_parts := right.trim_prefix("v").split(".")
+	for index in maxi(left_parts.size(), right_parts.size()):
+		var left_value := int(left_parts[index]) if index < left_parts.size() else 0
+		var right_value := int(right_parts[index]) if index < right_parts.size() else 0
+		if left_value != right_value:
+			return 1 if left_value > right_value else -1
+	return 0
+
+func _show_version_info() -> void:
+	_clear_overlay()
+	_set_overlay_compact(true)
+	var update_available := _is_update_available()
+	var remote_version := str(latest_release.get("version", CURRENT_VERSION))
+	var newest_version := remote_version if update_available else CURRENT_VERSION
+	overlay_title.text = "새 업데이트 v%s" % newest_version if update_available else "VERSION %s" % CURRENT_VERSION
+	overlay_subtitle.text = "현재 v%s · 최신 v%s" % [CURRENT_VERSION, newest_version]
+	var notes: Array = latest_release.get("notes", []) if remote_version == CURRENT_VERSION or update_available else []
+	if notes.is_empty():
+		notes = ["현재 설치된 버전이 최신 버전입니다."]
+	_add_settings_note("업데이트 노트", "\n".join(notes), COLOR_RED if update_available else COLOR_CYAN)
+	if update_available:
+		var download := _action_button("대시보드에서 APK 받기  ↗", _open_download_page, COLOR_RED, 58)
+		overlay_content.add_child(download)
+	else:
+		_add_settings_note("업데이트 상태", "현재 최신 버전을 사용하고 있습니다.", COLOR_CYAN)
+	var history := _action_button("전체 버전 업데이트 기록 보기  ↗", _open_download_page, COLOR_BLUE, 52)
+	overlay_content.add_child(history)
+	var back := _action_button("←  메인 화면으로", _show_main_menu, COLOR_MUTED, 48)
+	overlay_content.add_child(back)
+
+func _open_download_page() -> void:
+	OS.shell_open(str(latest_release.get("downloadPageUrl", DOWNLOAD_PAGE_URL)))
+
+func _mark_update_notified() -> void:
+	var config := ConfigFile.new()
+	config.load("user://accessibility.cfg")
+	config.set_value("updates", "notified_version", str(latest_release.get("version", "")))
+	config.save("user://accessibility.cfg")
 
 func _reset_pending_single_plan() -> void:
 	if cooperative_session != null or state == null or state.phase != CombatState.Phase.PLANNING:
@@ -908,6 +1012,7 @@ func _read_system_font_scale() -> void:
 
 func _save_accessibility_settings() -> void:
 	var config := ConfigFile.new()
+	config.load("user://accessibility.cfg")
 	config.set_value("presentation", "reduce_motion", reduce_motion)
 	config.set_value("presentation", "haptics", haptics_enabled)
 	config.set_value("presentation", "ui_sound", ui_sound_enabled)
