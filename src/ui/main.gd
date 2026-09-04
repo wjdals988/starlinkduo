@@ -398,6 +398,8 @@ func _show_main_menu() -> void:
 		single_title = "▶  원정 결과 보기" if run_coordinator.run.phase in ["completed", "failed"] else "▶  싱글플레이 계속"
 		single_hint = "STAGE %d · 구간 %d/8 · 덱 %d+%d장" % [run_coordinator.run.stage, mini(run_coordinator.run.step + 1, 8), run_coordinator.run.decks[0].size(), run_coordinator.run.decks[1].size()]
 	actions.add_child(_main_action_button(single_title, single_hint, _start_singleplayer, COLOR_CYAN, true))
+	if not fresh_run:
+		actions.add_child(_main_action_button("↻  새 원정 시작", "현재 싱글 진행을 지우고 처음부터", _show_single_reset_confirmation, COLOR_RED, false))
 	actions.add_child(_main_action_button("◇  Bluetooth 멀티플레이", "방 만들기 · 참가하기 · 대기실", _show_connection, COLOR_BLUE, false))
 	var settings := Button.new()
 	settings.text = "⚙  화면 · 조작 설정"
@@ -532,7 +534,7 @@ func _show_hub() -> void:
 		button.custom_minimum_size.y = 50
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(button)
-	for item in [["⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED], ["←  메인 화면으로", _confirm_return_to_main, COLOR_RED]]:
+	for item in [["⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED], ["↻  새 원정 시작", _show_single_reset_confirmation, COLOR_RED], ["←  메인 화면으로", _confirm_return_to_main, COLOR_RED]]:
 		var button := _menu_link_button(item[0], item[1], item[2])
 		button.custom_minimum_size.y = 50
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -559,6 +561,43 @@ func _show_hub() -> void:
 	crew_strip.add_child(link_status)
 	crew_strip.add_child(_briefing_actor(_character_portrait(run.characters[1]), "P2 · %s" % _character_name(run.characters[1]), _character_role(run.characters[1]), COLOR_ORANGE, Vector2(180, 94)))
 	overlay_content.add_child(crew_strip)
+
+func _show_single_reset_confirmation() -> void:
+	_clear_overlay()
+	_set_overlay_minimal()
+	overlay_title.text = "새 원정을 시작할까요?"
+	overlay_subtitle.text = "싱글플레이 진행만 초기화합니다. 설정과 최근 2인 결투 기록은 유지됩니다."
+	var run := run_coordinator.run
+	_info_panel("사라지는 진행", "STAGE %d · 구간 %d/8\n획득 카드 %d장 · 재화 %d C · 스타 키 %d개" % [run.stage, mini(run.step + 1, 8), run.decks[0].size() + run.decks[1].size(), run.gold[0] + run.gold[1], run.keys.count(true)], COLOR_RED)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var cancel_callback := _show_hub if game_started else _show_main_menu
+	var cancel := _action_button("기존 원정 유지", cancel_callback, COLOR_CYAN, 64)
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(cancel)
+	var reset := _action_button("처음부터 시작", _confirm_single_reset, COLOR_RED, 64)
+	reset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(reset)
+	overlay_content.add_child(actions)
+
+func _confirm_single_reset() -> void:
+	_start_fresh_run()
+	game_started = true
+	game_mode = "cooperative"
+	local_slot = 0
+	log_label.text = "새 싱글 원정을 시작했습니다. 두 대원을 편성하세요."
+	_show_roster()
+
+func _start_fresh_run() -> void:
+	run_coordinator.start_new(int(Time.get_unix_time_from_system()))
+	state = engine.create_demo_combat()
+	active_route_combat = false
+	active_route_types.clear()
+	selected_hand_indices.clear()
+	selected_plays.clear()
+	singleplayer_pending_cards.clear()
+	selected_energy = 0
+	_refresh_character_identity()
 
 func _confirm_return_to_main() -> void:
 	_clear_overlay()
@@ -1499,6 +1538,12 @@ func _bind_session_ui_signals() -> void:
 		cooperative_session.game_started.connect(_on_multiplayer_game_started)
 	if not cooperative_session.macro_chat_received.is_connected(_on_macro_chat_received):
 		cooperative_session.macro_chat_received.connect(_on_macro_chat_received)
+	if not cooperative_session.run_reset_requested.is_connected(_on_multiplayer_reset_requested):
+		cooperative_session.run_reset_requested.connect(_on_multiplayer_reset_requested)
+	if not cooperative_session.run_reset_response_received.is_connected(_on_multiplayer_reset_response):
+		cooperative_session.run_reset_response_received.connect(_on_multiplayer_reset_response)
+	if not cooperative_session.run_reset_approved.is_connected(_on_multiplayer_reset_approved):
+		cooperative_session.run_reset_approved.connect(_on_multiplayer_reset_approved)
 
 func _show_multiplayer_lobby(preview: Dictionary = {}) -> void:
 	_clear_overlay()
@@ -1550,6 +1595,63 @@ func _show_multiplayer_lobby(preview: Dictionary = {}) -> void:
 		modes.add_child(duel)
 	else:
 		_info_panel("방장 선택 대기", "방장이 협동 원정 또는 2인 결투를 선택하면 두 기기가 함께 게임으로 이동합니다.", COLOR_ORANGE)
+	_add_connection_action("↻  원정 초기화 요청", _request_multiplayer_reset, COLOR_RED)
+
+func _request_multiplayer_reset() -> void:
+	if cooperative_session == null:
+		return
+	var result := cooperative_session.request_run_reset()
+	if not result.ok:
+		overlay_subtitle.text = "초기화를 요청하지 못했습니다: %s" % result.error
+		return
+	_clear_overlay()
+	_set_overlay_minimal()
+	overlay_title.text = "상대 동의 대기 중"
+	overlay_subtitle.text = "상대가 승인하기 전에는 어떤 진행 데이터도 삭제되지 않습니다."
+	_info_panel("초기화 요청 전송됨", "상대 기기에서 승인 또는 거절을 선택해야 합니다. 연결이 끊기면 기존 원정이 유지됩니다.", COLOR_YELLOW)
+
+func _on_multiplayer_reset_requested(requester_slot: int) -> void:
+	_clear_overlay()
+	_set_overlay_minimal()
+	overlay_close_button.hide()
+	overlay_title.text = "P%d가 초기화를 요청했습니다" % [requester_slot + 1]
+	overlay_subtitle.text = "승인하면 양쪽의 현재 협동 원정이 새 원정으로 교체됩니다."
+	_info_panel("공동 동의 필요", "거절하면 현재 체크포인트와 덱, 보상, 재화가 모두 그대로 유지됩니다.", COLOR_RED)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 12)
+	var decline := _action_button("거절 · 진행 유지", _respond_multiplayer_reset.bind(false), COLOR_CYAN, 64)
+	decline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(decline)
+	var accept := _action_button("동의 · 처음부터", _respond_multiplayer_reset.bind(true), COLOR_RED, 64)
+	accept.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_child(accept)
+	overlay_content.add_child(actions)
+
+func _respond_multiplayer_reset(accepted: bool) -> void:
+	if cooperative_session == null:
+		_show_connection()
+		return
+	var result := cooperative_session.respond_run_reset(accepted)
+	if not result.ok:
+		overlay_subtitle.text = "응답을 보내지 못했습니다: %s" % result.error
+		return
+	_show_multiplayer_lobby()
+	overlay_subtitle.text = "초기화에 동의했습니다. 새 원정을 동기화하는 중입니다." if accepted else "초기화를 거절했습니다. 기존 원정을 유지합니다."
+
+func _on_multiplayer_reset_response(accepted: bool, _responder_slot: int) -> void:
+	_show_multiplayer_lobby()
+	overlay_subtitle.text = "상대가 동의했습니다. 새 원정을 동기화합니다." if accepted else "상대가 초기화를 거절했습니다. 기존 원정을 유지합니다."
+
+func _on_multiplayer_reset_approved() -> void:
+	if cooperative_session == null or cooperative_session.role != CooperativeSession.Role.HOST:
+		return
+	game_mode = "cooperative"
+	_start_fresh_run()
+	cooperative_session.set_game_mode("cooperative")
+	cooperative_session.replace_combat_state(state)
+	cooperative_session.publish_run_state("consensual_reset")
+	_show_multiplayer_lobby()
+	overlay_subtitle.text = "양쪽 동의 완료 · 새 원정이 생성되었습니다. 대원을 다시 편성하세요."
 
 func _debug_lobby_preview() -> Dictionary:
 	if not OS.is_debug_build():
@@ -1858,6 +1960,10 @@ func _on_session_error(code: String, detail: String) -> void:
 		return
 	if code == "role_mismatch":
 		log_label.text = "연결 차단 · 두 기기 모두 같은 역할을 선택했습니다. 한 명은 방 만들기, 다른 한 명은 참가를 선택하세요."
+		return
+	if code == "peer_disconnected" and overlay.visible and overlay_title.text in ["상대 동의 대기 중", "P1가 초기화를 요청했습니다", "P2가 초기화를 요청했습니다"]:
+		_show_connection()
+		overlay_subtitle.text = "연결이 끊겨 초기화가 취소되었습니다. 기존 원정은 그대로 유지됩니다."
 		return
 	log_label.text = "연결 오류 · %s (%s)" % [code, detail]
 

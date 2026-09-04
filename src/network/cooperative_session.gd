@@ -9,6 +9,9 @@ signal duel_snapshot_received(snapshot: Dictionary, state_hash: String)
 signal game_mode_changed(mode: String)
 signal game_started(mode: String)
 signal macro_chat_received(from_slot: int, macro_id: String)
+signal run_reset_requested(requester_slot: int)
+signal run_reset_response_received(accepted: bool, responder_slot: int)
+signal run_reset_approved()
 signal session_error(code: String, detail: String)
 signal peer_ready(slot: int, ready: bool)
 
@@ -31,6 +34,7 @@ var incoming_sequence := 0
 var compatibility_fingerprint: String
 var handshake_complete := false
 var handshake_failed := false
+var pending_run_reset_requester := -1
 
 const MACRO_CHAT_IDS := ["ready", "wait", "attack", "defend", "nice", "sorry"]
 
@@ -131,6 +135,32 @@ func send_macro_chat(macro_id: String) -> Dictionary:
 			macro_chat_received.emit(from_slot, macro_id)
 		return {"ok": sent}
 	return {"ok": _send("macro_chat", {"id": macro_id})}
+
+func request_run_reset() -> Dictionary:
+	if not handshake_complete:
+		return _error("handshake_required")
+	if pending_run_reset_requester >= 0:
+		return _error("reset_request_pending")
+	var requester_slot := 0 if role == Role.HOST else 1
+	pending_run_reset_requester = requester_slot
+	if not _send("run_reset_request", {"requester_slot": requester_slot}):
+		pending_run_reset_requester = -1
+		return _error("send_failed")
+	return {"ok": true}
+
+func respond_run_reset(accepted: bool) -> Dictionary:
+	var remote_slot := 1 if role == Role.HOST else 0
+	if not handshake_complete:
+		return _error("handshake_required")
+	if pending_run_reset_requester != remote_slot:
+		return _error("no_reset_request")
+	var responder_slot := 0 if role == Role.HOST else 1
+	if not _send("run_reset_response", {"requester_slot": pending_run_reset_requester, "responder_slot": responder_slot, "accepted": accepted}):
+		return _error("send_failed")
+	pending_run_reset_requester = -1
+	if accepted and role == Role.HOST:
+		run_reset_approved.emit()
+	return {"ok": true, "accepted": accepted}
 
 func submit_duel_plan(slot: int, plays: Array[Dictionary]) -> Dictionary:
 	if game_mode != "duel":
@@ -286,6 +316,7 @@ func _on_message(raw: String) -> void:
 func _on_transport_state_changed(next_state: String) -> void:
 	if next_state in ["disconnected", "closed", "error"]:
 		handshake_complete = false
+		pending_run_reset_requester = -1
 		session_error.emit("peer_disconnected", next_state)
 		return
 	if next_state == "connected":
@@ -324,10 +355,25 @@ func _handle_hello(payload: Dictionary) -> void:
 		_publish_run_snapshot("session_started")
 
 func _handle_host_message(message_type: String, payload: Dictionary) -> void:
-	if game_mode == "duel" and message_type not in ["duel_commit", "duel_reveal", "resync_request", "macro_chat"]:
+	if game_mode == "duel" and message_type not in ["duel_commit", "duel_reveal", "resync_request", "macro_chat", "run_reset_request", "run_reset_response"]:
 		_send_rejection("cooperative_mode_inactive")
 		return
 	match message_type:
+		"run_reset_request":
+			if pending_run_reset_requester >= 0 or int(payload.get("requester_slot", -1)) != 1:
+				_send_rejection("invalid_reset_request")
+				return
+			pending_run_reset_requester = 1
+			run_reset_requested.emit(1)
+		"run_reset_response":
+			if pending_run_reset_requester != 0 or int(payload.get("requester_slot", -1)) != 0 or int(payload.get("responder_slot", -1)) != 1:
+				_send_rejection("invalid_reset_response")
+				return
+			var accepted := bool(payload.get("accepted", false))
+			pending_run_reset_requester = -1
+			run_reset_response_received.emit(accepted, 1)
+			if accepted:
+				run_reset_approved.emit()
 		"macro_chat":
 			var macro_id := String(payload.get("id", ""))
 			if not macro_id in MACRO_CHAT_IDS:
@@ -446,6 +492,19 @@ func _handle_host_message(message_type: String, payload: Dictionary) -> void:
 
 func _handle_guest_message(message_type: String, payload: Dictionary) -> void:
 	match message_type:
+		"run_reset_request":
+			if pending_run_reset_requester >= 0 or int(payload.get("requester_slot", -1)) != 0:
+				session_error.emit("invalid_reset_request", "host reset request rejected")
+				return
+			pending_run_reset_requester = 0
+			run_reset_requested.emit(0)
+		"run_reset_response":
+			if pending_run_reset_requester != 1 or int(payload.get("requester_slot", -1)) != 1 or int(payload.get("responder_slot", -1)) != 0:
+				session_error.emit("invalid_reset_response", "host reset response rejected")
+				return
+			var accepted := bool(payload.get("accepted", false))
+			pending_run_reset_requester = -1
+			run_reset_response_received.emit(accepted, 0)
 		"macro_chat":
 			var macro_id := String(payload.get("id", ""))
 			var from_slot := int(payload.get("from_slot", -1))

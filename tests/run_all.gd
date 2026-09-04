@@ -20,6 +20,7 @@ func _init() -> void:
 	_test_run_coordinator_economy()
 	_test_host_authoritative_session()
 	_test_host_authoritative_route_session()
+	_test_multiplayer_reset_consent()
 	_test_session_rejects_stale_sequence()
 	_test_session_rejects_incompatible_content()
 	_test_combat_snapshot_round_trip()
@@ -386,6 +387,46 @@ func _test_host_authoritative_route_session() -> void:
 	guest.close()
 	transports[0].dispose()
 	host_store.clear()
+
+func _test_multiplayer_reset_consent() -> void:
+	var transports := LoopbackTransport.pair()
+	transports[0].start_host("reset-consent")
+	transports[1].connect_to("loopback", "reset-consent")
+	var engine := CombatEngine.new(DemoCardCatalog.build())
+	var host := CooperativeSession.new(CooperativeSession.Role.HOST, transports[0], engine, engine.create_demo_combat())
+	var guest := CooperativeSession.new(CooperativeSession.Role.GUEST, transports[1])
+	host.poll()
+	guest.poll()
+	var guest_requests: Array[int] = []
+	var host_requests: Array[int] = []
+	var host_responses: Array[bool] = []
+	var guest_responses: Array[bool] = []
+	var approvals: Array[bool] = []
+	guest.run_reset_requested.connect(func(slot: int) -> void: guest_requests.append(slot))
+	host.run_reset_requested.connect(func(slot: int) -> void: host_requests.append(slot))
+	host.run_reset_response_received.connect(func(accepted: bool, _slot: int) -> void: host_responses.append(accepted))
+	guest.run_reset_response_received.connect(func(accepted: bool, _slot: int) -> void: guest_responses.append(accepted))
+	host.run_reset_approved.connect(func() -> void: approvals.append(true))
+	_expect(host.request_run_reset().ok, "host can request a consensual run reset")
+	guest.poll()
+	_expect(guest_requests == [0] and approvals.is_empty(), "request alone never resets multiplayer progress")
+	_expect(guest.respond_run_reset(false).ok, "guest can reject a multiplayer reset")
+	host.poll()
+	_expect(host_responses == [false] and approvals.is_empty(), "rejected reset preserves the current run")
+	_expect(host.request_run_reset().ok, "host can send a later reset request")
+	guest.poll()
+	_expect(guest.respond_run_reset(true).ok, "guest can approve a multiplayer reset")
+	host.poll()
+	_expect(host_responses == [false, true] and approvals.size() == 1, "only mutual consent grants one authoritative reset")
+	_expect(guest.request_run_reset().ok, "guest can request a consensual run reset")
+	host.poll()
+	_expect(host_requests == [1], "host receives the guest reset request without changing progress")
+	_expect(host.respond_run_reset(true).ok, "host can approve the guest reset request")
+	guest.poll()
+	_expect(guest_responses == [true] and approvals.size() == 2, "guest approval path still grants reset only on the host")
+	host.close()
+	guest.close()
+	transports[0].dispose()
 
 func _test_session_rejects_stale_sequence() -> void:
 	var transports := LoopbackTransport.pair()
