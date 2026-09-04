@@ -6,6 +6,8 @@ var seed_value := 0
 var effect_kind := "utility"
 var effect_accent := Color("#8fa0bc")
 var primary_tag := "전술"
+var card_role := "tactic"
+var role_accent := Color("#bc8cff")
 
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
 const CardIdentity := preload("res://src/ui/card_identity_visual.gd")
@@ -17,15 +19,17 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	primary_tag = String(card.tags[0]) if not card.tags.is_empty() else "전술"
 	effect_kind = _primary_effect_kind(card)
 	effect_accent = _effect_color(effect_kind)
+	card_role = _card_role(card)
+	role_accent = _role_color(card_role)
 	# Visual copy uses child labels. Android exposes the canvas as one SurfaceView,
 	# so a hidden native button caption would not improve TalkBack and can cause duplicate rendering.
 	text = ""
-	tooltip_text = "%s · %s · %s · 에너지 %d" % [card.display_name, primary_tag, effect_text, card.energy_cost]
+	tooltip_text = "%s · %s · %s · 에너지 %d" % [card.display_name, _role_name(card_role), effect_text, card.energy_cost]
 	accessibility_name = "%s 카드%s" % [card.display_name, ", 선택됨" if is_selected else ""]
 	var action_hint := footer_text if not footer_text.is_empty() else ("누르면 선택을 취소합니다" if is_selected else "누르면 행동 큐에 추가합니다")
 	accessibility_description = "%s, %s, 에너지 %d, %s, 대상 %s. %s" % [
 		rarity_text.lstrip("●◆✦ "),
-		primary_tag,
+		_role_name(card_role),
 		card.energy_cost,
 		effect_text,
 		_target_name(card.target),
@@ -59,11 +63,16 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	cost.custom_minimum_size.x = 48
 	cost_badge.add_child(cost)
 	meta.add_child(cost_badge)
-	var rarity := _label(rarity_text, 10, Color("#e6ecfa"))
-	rarity.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	rarity.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	rarity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	meta.add_child(rarity)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	meta.add_child(spacer)
+	var role_badge := PanelContainer.new()
+	role_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	role_badge.add_theme_stylebox_override("panel", _badge_style(role_accent, 9))
+	var role := _label(_role_badge_text(card_role), 11, Color.WHITE)
+	role.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	role_badge.add_child(role)
+	meta.add_child(role_badge)
 	var art := TextureRect.new()
 	art.custom_minimum_size.y = 38
 	art.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -92,7 +101,10 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	effect.add_theme_constant_override("shadow_offset_x", 1)
 	effect.add_theme_constant_override("shadow_offset_y", 1)
 	column.add_child(effect)
-	var target := _label("%s  ·  대상 %s" % [primary_tag, _target_name(card.target)], 10, Color("#aebbd2"))
+	var detail := "%s  ·  대상 %s" % [rarity_text, _target_name(card.target)]
+	if card_role == "support":
+		detail = "＋ 지원 카드  ·  턴당 1장"
+	var target := _label(detail, 10, role_accent.lightened(0.22) if card_role == "support" else Color("#aebbd2"))
 	target.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(target)
 	var resolved_footer := footer_text if not footer_text.is_empty() else ("◆ 선택됨" if is_selected else "탭하여 선택")
@@ -152,6 +164,24 @@ func _effect_color(kind: String) -> Color:
 		"heal": Color("#55e5ad"),
 		"energy": Color("#ffd166"),
 	}.get(kind, Color("#bc8cff"))
+
+func _card_role(card: CardData) -> String:
+	if card.is_support():
+		return "support"
+	if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == "damage"):
+		return "attack"
+	if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == "block"):
+		return "defense"
+	return "tactic"
+
+func _role_name(role: String) -> String:
+	return {"attack": "공격 카드", "defense": "방어 카드", "support": "지원 카드", "tactic": "전술 카드"}.get(role, "전술 카드")
+
+func _role_badge_text(role: String) -> String:
+	return {"attack": "⚔ 공격", "defense": "⬡ 방어", "support": "＋ 지원 1/턴", "tactic": "✦ 전술"}.get(role, "✦ 전술")
+
+func _role_color(role: String) -> Color:
+	return {"attack": Color("#ef536c"), "defense": Color("#4d91ec"), "support": Color("#24b987"), "tactic": Color("#9a70df")}.get(role, Color("#9a70df"))
 
 func _target_name(target: CardData.Target) -> String:
 	return ["자신", "동료", "적", "팀 전체"][target]

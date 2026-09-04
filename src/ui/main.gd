@@ -11,10 +11,11 @@ const COLOR_ORANGE := Color("#ffac5f")
 const COLOR_RED := Color("#ff667d")
 const COLOR_YELLOW := Color("#ffd45f")
 const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
-const CURRENT_VERSION := "0.1.3"
+const CURRENT_VERSION := "0.1.4"
 const VERSION_FEED_URL := "https://coldbrewventi.vercel.app/starlink-duo/latest.json"
 const DOWNLOAD_PAGE_URL := "https://coldbrewventi.vercel.app/projects/starlink-duo"
 const RELEASE_HISTORY := [
+	{"version": "0.1.4", "date": "2026.09.05", "notes": ["공격·방어·지원·전술 역할 배지", "지원 카드 녹색 표시와 턴당 1장 안내", "중복 지원 선택 제한 사유 표시"]},
 	{"version": "0.1.3", "date": "2026.09.05", "notes": ["카드 비용·이름·효과 정보 위계 개선", "통신 휠 형태의 빠른 메시지", "카드 더미 형태의 남은 덱 표시", "버전별 게임 내 업데이트 기록"]},
 	{"version": "0.1.2", "date": "2026.09.05", "notes": ["현재 버전 표시와 신규 업데이트 감지", "업데이트 레드닷·최초 1회 안내", "대시보드 다운로드와 변경 기록 연결"]},
 	{"version": "0.1.1", "date": "2026.09.05", "notes": ["공통 첫 전투 뒤 4갈래 항로 선택", "덱 카드 최대 6열·세로 스크롤", "Android 맵·덱 화면 검증"]},
@@ -3419,7 +3420,8 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 		for play in selected_plays:
 			var selected_card: CardData = catalog[play.card_id]
 			if selected_card.is_support():
-				log_label.text = "지원 카드는 한 턴에 1장만 사용할 수 있습니다."
+				log_label.text = "＋ 지원 카드 제한 · 이미 %s을 선택했습니다. 턴당 1장만 사용할 수 있습니다." % selected_card.display_name
+				_play_ui_sound("cancel")
 				return
 	selected_hand_indices.append(hand_index)
 	selected_plays.append({"card_id": card.id, "target": 0})
@@ -3429,7 +3431,7 @@ func _on_card_pressed(hand_index: int, card: CardData) -> void:
 
 func _plan_summary(duel: bool) -> String:
 	if selected_plays.is_empty():
-		return "P%d 비공개 행동을 선택하세요 · 상대 계획은 확정 전 공개되지 않음" % (local_slot + 1) if duel else "P%d 카드를 최대 3장 선택하세요 · 지원 카드 최대 1장" % (local_slot + 1)
+		return "P%d 비공개 행동을 선택하세요 · 상대 계획은 확정 전 공개되지 않음" % (local_slot + 1) if duel else "P%d 카드를 최대 3장 선택하세요 · ＋ 지원 0/1 (녹색 배지)" % (local_slot + 1)
 	var entries: Array[String] = []
 	var support_count := 0
 	for index in selected_plays.size():
