@@ -506,20 +506,26 @@ func _show_version_info() -> void:
 	var newest_version := remote_version if update_available else CURRENT_VERSION
 	overlay_title.text = "함선 업데이트 기록"
 	overlay_subtitle.text = "CURRENT  v%s    ·    LATEST  v%s" % [CURRENT_VERSION, newest_version]
+	var status_row := HBoxContainer.new()
+	status_row.add_theme_constant_override("separation", 18)
+	overlay_content.add_child(status_row)
 	var status := Label.new()
 	status.text = "●  새 항해 데이터가 도착했습니다" if update_available else "◆  모든 항해 데이터가 최신입니다"
+	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status.add_theme_font_size_override("font_size", 17)
 	status.add_theme_color_override("font_color", COLOR_RED if update_available else COLOR_CYAN)
-	overlay_content.add_child(status)
+	status_row.add_child(status)
+	if update_available:
+		var download := _action_button("⇩  최신 버전 받기", _open_download_page, COLOR_RED, 52)
+		download.custom_minimum_size.x = 250
+		status_row.add_child(download)
 	var divider := HSeparator.new()
 	divider.modulate = Color(COLOR_CYAN, 0.32)
 	overlay_content.add_child(divider)
 	var history: Array = latest_release.get("releases", RELEASE_HISTORY)
 	for release in history:
 		_add_release_log(release, str(release.get("version", "")) == newest_version)
-	if update_available:
-		var download := _action_button("⇩  최신 항해 데이터 받기", _open_download_page, COLOR_RED, 58)
-		overlay_content.add_child(download)
 	var navigation := HBoxContainer.new()
 	navigation.alignment = BoxContainer.ALIGNMENT_END
 	navigation.add_theme_constant_override("separation", 16)
@@ -1956,7 +1962,7 @@ func _debug_ui_preview_name() -> String:
 
 func _show_debug_ui_preview(preview_name: String) -> void:
 	if preview_name == "gallery":
-		for gallery_screen in ["settings", "roster", "map", "deck", "hub", "quick_chat", "reward", "shop", "remove_card_picker", "remove_card_confirm", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
+		for gallery_screen in ["settings", "version_update", "roster", "map", "deck", "hub", "quick_chat", "reward", "shop", "remove_card_picker", "remove_card_confirm", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
 			_show_debug_ui_preview(gallery_screen)
 			print("STARLINK_UI_PREVIEW %s" % gallery_screen)
 			await get_tree().create_timer(2.0).timeout
@@ -1969,6 +1975,12 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 		"settings":
 			game_started = false
 			_show_settings()
+		"version_update":
+			game_started = false
+			var preview_releases: Array = [{"version": "0.1.5", "date": "2026.09.06", "notes": ["큰 글씨 확인창 개선", "메뉴 포커스 순서 개선", "빠른 메시지 레이아웃 검증"]}]
+			preview_releases.append_array(RELEASE_HISTORY)
+			latest_release = {"version": "0.1.5", "downloadPageUrl": DOWNLOAD_PAGE_URL, "releases": preview_releases}
+			_show_version_info()
 		"quick_chat":
 			game_started = true
 			game_mode = "cooperative"
