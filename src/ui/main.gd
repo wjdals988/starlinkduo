@@ -938,7 +938,7 @@ func _show_current_deck(requested_slot: int = -1) -> void:
 	ids.sort_custom(func(a: Variant, b: Variant) -> bool: return String(a) < String(b))
 	var grid := GridContainer.new()
 	grid.columns = 6
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 12)
 	overlay_content.add_child(grid)
