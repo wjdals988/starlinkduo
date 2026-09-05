@@ -1923,8 +1923,16 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 	var run := run_coordinator.run
 	match preview_name:
 		"roster":
+			run.phase = "traversal"
+			run.stage = 1
+			run.step = 0
+			run.pending_routes.clear()
 			_show_roster()
 		"map":
+			run.phase = "traversal"
+			run.stage = 1
+			run.step = 0
+			run.pending_routes.clear()
 			_show_map()
 		"deck":
 			_show_current_deck()
@@ -2303,6 +2311,8 @@ func _show_roster() -> void:
 		roster_edit_slot = local_slot
 	overlay_subtitle.text = "P%d 캐릭터 선택 · 서로 다른 직업 2개를 편성하세요." % (roster_edit_slot + 1) if selection_open else "현재 원정의 편성이 확정되었습니다 · 새 원정에서 다시 선택할 수 있습니다."
 	var crew_row := HBoxContainer.new()
+	crew_row.custom_minimum_size.x = 900
+	crew_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	crew_row.add_theme_constant_override("separation", 10)
 	for slot in 2:
 		var identity := Button.new()
@@ -2377,7 +2387,9 @@ func _show_roster() -> void:
 		lineup.add_child(candidate)
 	overlay_content.add_child(lineup)
 	if selection_open and cooperative_session == null:
-		_add_connection_action("편성 확정 · 첫 항로 보기", _show_map, COLOR_CYAN)
+		var confirm_roster := _add_connection_action("편성 확정 · 첫 항로 보기", _show_map, COLOR_CYAN)
+		confirm_roster.custom_minimum_size.x = 620
+		confirm_roster.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 func _set_roster_edit_slot(slot: int) -> void:
 	roster_edit_slot = slot

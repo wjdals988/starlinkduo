@@ -4,7 +4,7 @@ extends Control
 signal node_selected(slot: int, node_id: String)
 
 const MAP_SIZE := Vector2(1080, 326)
-const NODE_SIZE := Vector2(92, 46)
+const NODE_SIZE := Vector2(84, 54)
 const CYAN := Color("#43dfd0")
 const BLUE := Color("#62a8ff")
 const ORANGE := Color("#ffac5f")
@@ -59,13 +59,13 @@ func _add_node_button(option: Dictionary, slot: int, step_index: int, center: Ve
 	var selected_node_id := String(pending_routes.get(local_slot, "")) if slot < 0 else String(pending_routes.get(slot, ""))
 	var is_selected := is_current and selected_node_id == String(option.id)
 	button.disabled = not is_reachable
-	button.modulate = Color.WHITE if is_current else (Color(0.65, 0.72, 0.84, 0.72) if step_index > current_step else Color(0.48, 0.66, 0.76, 0.55))
+	button.modulate = Color.WHITE if is_current else (Color(0.72, 0.80, 0.92, 0.84) if step_index > current_step else Color(0.52, 0.70, 0.82, 0.62))
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.add_theme_color_override("font_disabled_color", accent if is_selected else Color("#a7b2c7"))
 	button.add_theme_stylebox_override("normal", _diamond_style(Color(accent, 0.34), accent, 2))
 	button.add_theme_stylebox_override("hover", _diamond_style(Color(accent, 0.58), Color.WHITE, 3))
 	button.add_theme_stylebox_override("pressed", _diamond_style(Color(accent, 0.76), Color.WHITE, 3))
-	button.add_theme_stylebox_override("disabled", _diamond_style(Color(accent, 0.28 if is_selected else 0.10), accent if is_selected else MUTED, 2 if is_selected else 1))
+	button.add_theme_stylebox_override("disabled", _diamond_style(Color(accent, 0.28 if is_selected else 0.16), accent if is_selected else Color("#71819b"), 2 if is_selected else 1))
 	button.tooltip_text = "%s · %s" % [_label(node_type), _preview(node_type)]
 	button.accessibility_name = "%s 노드" % _label(node_type)
 	button.accessibility_description = _preview(node_type)
@@ -98,10 +98,10 @@ func _nearest_positions(origin: Vector2, candidates: Array, limit: int) -> Array
 func _diamond_style(fill: Color, outline: Color, width: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 22
-	style.corner_radius_bottom_left = 22
-	style.corner_radius_bottom_right = 6
+	style.corner_radius_top_left = 0
+	style.corner_radius_top_right = 27
+	style.corner_radius_bottom_left = 27
+	style.corner_radius_bottom_right = 0
 	style.set_border_width_all(width)
 	style.border_color = outline
 	style.set_content_margin_all(4)
