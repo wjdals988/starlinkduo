@@ -2401,13 +2401,12 @@ func _info_panel(title: String, body: String, accent: Color) -> PanelContainer:
 	row.add_child(copy)
 	var title_label := Label.new()
 	title_label.text = title.to_upper()
-	title_label.accessibility_name = title
-	title_label.accessibility_description = body
 	title_label.add_theme_font_size_override("font_size", 14)
 	title_label.add_theme_color_override("font_color", accent)
 	copy.add_child(title_label)
 	var body_label := Label.new()
 	body_label.text = body
+	body_label.accessibility_name = title
 	body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body_label.add_theme_font_size_override("font_size", 15)
 	body_label.add_theme_color_override("font_color", COLOR_TEXT)
