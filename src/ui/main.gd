@@ -1118,9 +1118,11 @@ func _apply_text_scale_tree(node: Node) -> void:
 func _effective_text_scale() -> float:
 	var app_scale := 1.15 if large_text_enabled else 1.0
 	var system_safe_scale := 1.0
-	if system_font_scale >= 1.75:
+	# Android may report configured values such as 1.30 as 1.29999995.
+	# Keep thresholds tolerant so the matching accessibility tier is not skipped.
+	if system_font_scale >= 1.74:
 		system_safe_scale = 1.30
-	elif system_font_scale >= 1.30:
+	elif system_font_scale >= 1.29:
 		system_safe_scale = 1.20
 	elif system_font_scale > 1.0:
 		system_safe_scale = 1.10
