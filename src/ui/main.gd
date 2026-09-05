@@ -1677,12 +1677,17 @@ func _set_background_focus_enabled(node: Node, enabled: bool) -> void:
 func _focus_first_overlay_control() -> void:
 	if not overlay.visible:
 		return
-	var controls := overlay.find_children("*", "Button", true, false)
+	# Start inside the screen content so opening a menu emphasizes its first
+	# meaningful choice instead of making the persistent close affordance look
+	# like the primary action. The close button remains the keyboard fallback.
+	var controls := overlay_content.find_children("*", "Button", true, false)
 	for candidate in controls:
 		var button := candidate as Button
 		if button != null and button.visible and not button.disabled:
 			button.grab_focus()
 			return
+	if overlay_close_button.visible and not overlay_close_button.disabled:
+		overlay_close_button.grab_focus()
 
 func _show_connection() -> void:
 	_clear_overlay()
@@ -1948,7 +1953,7 @@ func _debug_ui_preview_name() -> String:
 
 func _show_debug_ui_preview(preview_name: String) -> void:
 	if preview_name == "gallery":
-		for gallery_screen in ["roster", "map", "deck", "hub", "reward", "shop", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
+		for gallery_screen in ["settings", "roster", "map", "deck", "hub", "reward", "shop", "remove_card_picker", "remove_card_confirm", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
 			_show_debug_ui_preview(gallery_screen)
 			print("STARLINK_UI_PREVIEW %s" % gallery_screen)
 			await get_tree().create_timer(2.0).timeout
@@ -1958,6 +1963,21 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 	local_slot = 0
 	var run := run_coordinator.run
 	match preview_name:
+		"settings":
+			game_started = false
+			_show_settings()
+		"remove_card_picker":
+			game_started = true
+			game_mode = "cooperative"
+			local_slot = 0
+			run.gold[local_slot] = 100
+			_show_remove_card_picker(35)
+		"remove_card_confirm":
+			game_started = true
+			game_mode = "cooperative"
+			local_slot = 0
+			run.gold[local_slot] = 100
+			_show_remove_card_confirmation(0, 35)
 		"connection":
 			game_started = false
 			_show_connection()
