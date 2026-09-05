@@ -830,9 +830,11 @@ func _show_single_reset_confirmation() -> void:
 	var cancel_callback := _show_hub if game_started else _show_main_menu
 	var cancel := _action_button("기존 원정 유지", cancel_callback, COLOR_CYAN, 64)
 	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_set_button_accessibility(cancel, "기존 원정 유지", "초기화를 취소하고 현재 싱글 원정의 진행과 덱을 그대로 유지합니다")
 	actions.add_child(cancel)
 	var reset := _action_button("처음부터 시작", _confirm_single_reset, COLOR_RED, 64)
 	reset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_set_button_accessibility(reset, "처음부터 시작", "현재 싱글 원정의 진행, 카드, 재화, 스타 키를 삭제하고 캐릭터 선택부터 다시 시작합니다")
 	actions.add_child(reset)
 	overlay_content.add_child(actions)
 
