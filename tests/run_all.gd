@@ -103,6 +103,10 @@ func _test_initial_state() -> void:
 	_expect(is_equal_approx(main_script._effective_text_scale(), 1.15), "app large text uses one hundred fifteen percent scale")
 	main_script.system_font_scale = 2.0
 	_expect(is_equal_approx(main_script._effective_text_scale(), 1.30), "two hundred percent Android text preference activates the safe one hundred thirty percent HUD")
+	_expect(main_script._destructive_confirm_needs_tall_layout(), "enlarged Android text keeps destructive confirmation choices above the fold")
+	main_script.system_font_scale = 1.0
+	main_script.large_text_enabled = false
+	_expect(not main_script._destructive_confirm_needs_tall_layout(), "default text keeps destructive confirmations compact")
 	var tap_tone: AudioStreamWAV = main_script._synth_ui_tone([520.0], 0.055)
 	var confirm_tone: AudioStreamWAV = main_script._synth_ui_tone([440.0, 660.0, 880.0], 0.16)
 	_expect(tap_tone.data.size() > 2000 and confirm_tone.data.size() > tap_tone.data.size(), "procedural tap and confirmation effects contain distinct PCM envelopes")

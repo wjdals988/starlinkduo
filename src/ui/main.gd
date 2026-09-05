@@ -1573,6 +1573,9 @@ func _set_overlay_tall() -> void:
 	overlay_panel.offset_top = 54
 	overlay_panel.offset_bottom = -66
 
+func _destructive_confirm_needs_tall_layout() -> bool:
+	return _effective_text_scale() >= 1.20
+
 func _set_overlay_immersive() -> void:
 	if overlay_panel == null:
 		return
@@ -3249,7 +3252,13 @@ func _show_remove_card_confirmation(deck_index: int, cost: int) -> void:
 	var card_id := StringName(run_coordinator.run.decks[local_slot][deck_index])
 	var card: CardData = catalog[card_id]
 	_clear_overlay()
-	_set_overlay_compact(true)
+	# A destructive confirmation must keep both the safe exit and the final
+	# action visible together. Enlarged Android text needs the taller frame so
+	# the warning does not push those choices below the fold.
+	if _destructive_confirm_needs_tall_layout():
+		_set_overlay_tall()
+	else:
+		_set_overlay_compact(true)
 	overlay_title.text = "카드 제거 확인"
 	overlay_subtitle.text = "%s을(를) 덱에서 영구 제거하고 %d C를 사용합니다." % [card.display_name, cost]
 	var row := HBoxContainer.new()
