@@ -423,7 +423,7 @@ func _show_main_menu() -> void:
 	var settings := Button.new()
 	settings.text = "⚙  화면 · 조작 설정"
 	settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	settings.custom_minimum_size.y = 42
+	settings.custom_minimum_size.y = 48
 	settings.add_theme_font_size_override("font_size", 15)
 	settings.add_theme_color_override("font_color", COLOR_MUTED)
 	settings.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 12, Color.TRANSPARENT, 0, 14, 6))
@@ -435,7 +435,7 @@ func _show_main_menu() -> void:
 	version_button = Button.new()
 	_refresh_version_button()
 	version_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	version_button.custom_minimum_size.y = 38
+	version_button.custom_minimum_size.y = 48
 	version_button.add_theme_font_size_override("font_size", 13)
 	version_button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 10, Color.TRANSPARENT, 0, 14, 4))
 	version_button.add_theme_stylebox_override("hover", _panel_style(Color("#ffffff12"), 10, Color.TRANSPARENT, 0, 14, 4))
@@ -559,7 +559,7 @@ func _add_release_log(release: Dictionary, is_latest: bool) -> void:
 func _log_link_button(text_value: String, callback: Callable, accent: Color) -> Button:
 	var button := Button.new()
 	button.text = text_value
-	button.custom_minimum_size = Vector2(170, 44)
+	button.custom_minimum_size = Vector2(170, 48)
 	button.add_theme_font_size_override("font_size", 14)
 	button.add_theme_color_override("font_color", accent)
 	button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 18, Color.TRANSPARENT, 0, 10, 5))
@@ -728,7 +728,7 @@ func _show_hub() -> void:
 	utility_strip.add_theme_constant_override("separation", 30)
 	for item in [["⚙  화면 · 조작 설정", _show_settings, COLOR_MUTED], ["↻  새 원정 시작", _show_single_reset_confirmation, COLOR_RED], ["←  메인 화면으로", _confirm_return_to_main, COLOR_RED]]:
 		var button := _menu_link_button(item[0], item[1], item[2])
-		button.custom_minimum_size = Vector2(210, 40)
+		button.custom_minimum_size = Vector2(210, 48)
 		utility_strip.add_child(button)
 	overlay_content.add_child(utility_strip)
 	var crew_strip := HBoxContainer.new()
