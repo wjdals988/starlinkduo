@@ -2499,7 +2499,7 @@ func _show_roster() -> void:
 		portrait_button.add_theme_stylebox_override("pressed", _panel_style(Color(_character_color(character_id), 0.20), 22, _character_color(character_id), 3))
 		portrait_button.add_theme_stylebox_override("disabled", _panel_style(Color.TRANSPARENT, 22, Color.TRANSPARENT, 0))
 		portrait_button.add_theme_stylebox_override("focus", _focus_style(_character_color(character_id), 22))
-		_set_button_accessibility(portrait_button, "%s 초상화 선택" % _character_name(character_id), "%s. %s. 두 번 탭하여 P%d 캐릭터로 선택합니다" % [_character_role(character_id), _starter_deck_profile(character_id), roster_edit_slot + 1])
+		_set_button_accessibility(portrait_button, "P%d %s 초상화 선택" % [roster_edit_slot + 1, _character_name(character_id)], "%s. %s. %s" % [_character_role(character_id), _starter_deck_profile(character_id), _disabled_character_reason(roster_edit_slot, character_id, selection_open, can_edit)])
 		if not portrait_button.disabled:
 			portrait_button.pressed.connect(_select_character.bind(roster_edit_slot, character_id))
 		art_frame.add_child(portrait_button)
