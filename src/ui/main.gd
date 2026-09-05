@@ -688,15 +688,15 @@ func _show_hub() -> void:
 	mission_callout.add_theme_color_override("font_color", next_accent)
 	mission.add_child(mission_callout)
 	var objective := Button.new()
-	objective.text = "%s\n%s" % [next_title, next_hint]
-	objective.custom_minimum_size = Vector2(560, 88)
+	objective.text = "⌁  %s  ⌁\n%s" % [next_title, next_hint]
+	objective.custom_minimum_size = Vector2(560, 82)
 	objective.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	objective.add_theme_font_size_override("font_size", 22)
 	objective.add_theme_color_override("font_color", COLOR_TEXT)
-	objective.add_theme_stylebox_override("normal", _panel_style(Color(next_accent, 0.14), 44, Color(next_accent, 0.45), 1, 26, 12))
-	objective.add_theme_stylebox_override("hover", _panel_style(Color(next_accent, 0.28), 44, next_accent, 2, 26, 12))
-	objective.add_theme_stylebox_override("pressed", _panel_style(Color(next_accent, 0.38), 44, Color.WHITE, 2, 26, 12))
-	objective.add_theme_stylebox_override("focus", _focus_style(next_accent, 44))
+	objective.add_theme_stylebox_override("normal", _mission_objective_style(next_accent, 0.04, 2))
+	objective.add_theme_stylebox_override("hover", _mission_objective_style(next_accent, 0.14, 3))
+	objective.add_theme_stylebox_override("pressed", _mission_objective_style(next_accent, 0.24, 4))
+	objective.add_theme_stylebox_override("focus", _mission_objective_style(next_accent, 0.10, 4))
 	objective.pressed.connect(next_action)
 	mission.add_child(objective)
 	var voyage_status := Label.new()
@@ -756,6 +756,18 @@ func _pause_action_button(text: String, callback: Callable, accent: Color) -> Bu
 	button.add_theme_stylebox_override("focus", _focus_style(accent, 30))
 	button.pressed.connect(callback)
 	return button
+
+func _mission_objective_style(accent: Color, fill_alpha: float, signal_width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(accent, fill_alpha)
+	style.border_color = Color(accent, 0.9)
+	style.border_width_left = signal_width
+	style.border_width_right = signal_width
+	style.content_margin_left = 24
+	style.content_margin_right = 24
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	return style
 
 func _show_single_reset_confirmation() -> void:
 	_clear_overlay()
@@ -1575,6 +1587,7 @@ func _set_overlay_immersive() -> void:
 	overlay_scrim.color = Color.TRANSPARENT
 	overlay_close_button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 12, 6))
 	overlay_close_button.add_theme_stylebox_override("hover", _panel_style(Color("#ffffff12"), 14, Color.TRANSPARENT, 0, 12, 6))
+	overlay_close_button.add_theme_stylebox_override("focus", _main_menu_choice_style(COLOR_CYAN, 0.10, 3))
 
 func _set_main_menu_visual(enabled: bool) -> void:
 	if overlay_panel == null or overlay_scrim == null or main_menu_backdrop == null or main_menu_shade == null:
