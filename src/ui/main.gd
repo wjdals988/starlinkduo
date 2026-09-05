@@ -3717,36 +3717,43 @@ func _rebuild_hand() -> void:
 func _on_card_pressed(hand_index: int, card: CardData) -> void:
 	if interaction_locked:
 		return
-	if haptics_enabled:
-		Input.vibrate_handheld(28, 0.22)
 	if selected_hand_indices.has(hand_index):
 		var selected_position := selected_hand_indices.find(hand_index)
 		selected_hand_indices.remove_at(selected_position)
 		selected_plays.remove_at(selected_position)
 		selected_energy -= card.energy_cost
+		if haptics_enabled:
+			Input.vibrate_handheld(20, 0.18)
 		log_label.text = "%s 선택 취소 · %s" % [card.display_name, "행동 큐가 비었습니다." if selected_plays.is_empty() else "%d장 남음" % selected_plays.size()]
 		_refresh()
 		return
 	if selected_plays.size() >= 3:
-		log_label.text = "한 대원은 한 턴에 최대 3장까지 선택할 수 있습니다."
-		_play_ui_sound("cancel")
+		_reject_card_selection("%s 선택 불가 · 이미 3장을 골랐습니다. 먼저 한 장을 취소하세요." % card.display_name)
 		return
 	var available_energy := duel_state.players[local_slot].energy if game_mode == "duel" and duel_state != null else state.players[local_slot].energy
-	if selected_energy + card.energy_cost > available_energy:
-		log_label.text = "에너지가 부족합니다."
+	var remaining_energy := available_energy - selected_energy
+	if card.energy_cost > remaining_energy:
+		_reject_card_selection("%s 선택 불가 · 필요 에너지 %d / 남은 에너지 %d" % [card.display_name, card.energy_cost, maxi(0, remaining_energy)])
 		return
 	if card.is_support():
 		for play in selected_plays:
 			var selected_card: CardData = catalog[play.card_id]
 			if selected_card.is_support():
-				log_label.text = "＋ 지원 카드 제한 · 이미 %s을 선택했습니다. 턴당 1장만 사용할 수 있습니다." % selected_card.display_name
-				_play_ui_sound("cancel")
+				_reject_card_selection("%s 선택 불가 · 지원 카드는 턴당 1장입니다. 이미 %s 선택됨" % [card.display_name, selected_card.display_name])
 				return
 	selected_hand_indices.append(hand_index)
 	selected_plays.append({"card_id": card.id, "target": 0})
 	selected_energy += card.energy_cost
+	if haptics_enabled:
+		Input.vibrate_handheld(28, 0.22)
 	log_label.text = "%d번 · %s · %s · %s · 속도 %d" % [selected_plays.size(), card.display_name, _card_target_label(card, game_mode == "duel"), _effect_summary(card), card.speed]
 	_refresh()
+
+func _reject_card_selection(message: String) -> void:
+	log_label.text = "⚠  %s" % message
+	_play_ui_sound("cancel")
+	if haptics_enabled:
+		Input.vibrate_handheld(52, 0.38)
 
 func _plan_summary(duel: bool) -> String:
 	if selected_plays.is_empty():
