@@ -416,8 +416,12 @@ func _show_main_menu() -> void:
 	var single_title := "▶  싱글플레이 시작"
 	var single_hint := "혼자 두 대원을 지휘합니다"
 	if not fresh_run:
-		single_title = "▶  싱글플레이"
-		single_hint = "STAGE %d · 구간 %d/8 · 덱 %d+%d장" % [run_coordinator.run.stage, mini(run_coordinator.run.step + 1, 8), run_coordinator.run.decks[0].size(), run_coordinator.run.decks[1].size()]
+		if run_coordinator.run.phase in ["completed", "failed"]:
+			single_title = "▶  원정 기록"
+			single_hint = "%s · 최종 덱 %d+%d장" % ["완주 기록" if run_coordinator.run.phase == "completed" else "종료 기록", run_coordinator.run.decks[0].size(), run_coordinator.run.decks[1].size()]
+		else:
+			single_title = "▶  싱글플레이"
+			single_hint = "STAGE %d · 구간 %d/8 · 덱 %d+%d장" % [run_coordinator.run.stage, mini(run_coordinator.run.step + 1, 8), run_coordinator.run.decks[0].size(), run_coordinator.run.decks[1].size()]
 	actions.add_child(_main_action_button(single_title, single_hint, _start_singleplayer, COLOR_CYAN, true))
 	actions.add_child(_main_action_button("◇  Bluetooth 멀티플레이", "방 만들기 · 참가하기 · 대기실", _show_connection, COLOR_BLUE, false))
 	var settings := Button.new()
@@ -643,9 +647,10 @@ func _start_singleplayer() -> void:
 func _show_single_resume_confirmation() -> void:
 	_clear_overlay()
 	_set_overlay_minimal()
-	overlay_title.text = "진행 중인 게임이 있습니다"
-	overlay_subtitle.text = "기존 원정을 이어하시겠습니까?"
 	var run := run_coordinator.run
+	var ended := run.phase in ["completed", "failed"]
+	overlay_title.text = ("완료된" if run.phase == "completed" else "종료된") + " 원정 기록이 있습니다" if ended else "진행 중인 게임이 있습니다"
+	overlay_subtitle.text = "최종 결과를 확인하거나 새 원정을 시작하세요." if ended else "기존 원정을 이어하시겠습니까?"
 	_info_panel("저장된 원정", "STAGE %d · 구간 %d/8 · 팀 내구도 %d/%d\n덱 %d+%d장 · 스타 키 %d개" % [run.stage, mini(run.step + 1, 8), run.team_health, run.team_max_health, run.decks[0].size(), run.decks[1].size(), run.keys.count(true)], COLOR_CYAN)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
@@ -653,9 +658,9 @@ func _show_single_resume_confirmation() -> void:
 	restart.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_set_button_accessibility(restart, "새 원정 시작", "현재 저장된 STAGE %d 원정을 삭제하고 캐릭터 선택부터 다시 시작합니다" % run.stage)
 	actions.add_child(restart)
-	var resume := _action_button("▶  이어하기", _continue_singleplayer, COLOR_CYAN, 64)
+	var resume := _action_button("▶  결과 다시 보기" if ended else "▶  이어하기", _show_run_outcome.bind(run.phase == "completed") if ended else _continue_singleplayer, COLOR_CYAN, 64)
 	resume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_set_button_accessibility(resume, "원정 이어하기", "저장된 STAGE %d 구간 %d부터 계속합니다" % [run.stage, mini(run.step + 1, 8)])
+	_set_button_accessibility(resume, "원정 결과 다시 보기" if ended else "원정 이어하기", ("저장된 최종 결과와 덱 기록을 확인합니다" if ended else "저장된 STAGE %d 구간 %d부터 계속합니다" % [run.stage, mini(run.step + 1, 8)]))
 	actions.add_child(resume)
 	overlay_content.add_child(actions)
 
