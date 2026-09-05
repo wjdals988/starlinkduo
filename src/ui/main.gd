@@ -723,7 +723,7 @@ func _show_hub() -> void:
 	var crew_strip := HBoxContainer.new()
 	crew_strip.alignment = BoxContainer.ALIGNMENT_CENTER
 	crew_strip.add_theme_constant_override("separation", 44)
-	crew_strip.add_child(_briefing_actor(_character_portrait(run.characters[0]), "P1 · %s" % _character_name(run.characters[0]), _character_role(run.characters[0]), COLOR_BLUE, Vector2(150, 82)))
+	crew_strip.add_child(_briefing_actor(_character_portrait(run.characters[0]), "P1 · %s" % _character_name(run.characters[0]), _character_role(run.characters[0]), COLOR_BLUE, Vector2(180, 150)))
 	var link_status := VBoxContainer.new()
 	link_status.custom_minimum_size = Vector2(180, 76)
 	link_status.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -740,7 +740,7 @@ func _show_hub() -> void:
 	link_copy.add_theme_color_override("font_color", COLOR_MUTED)
 	link_status.add_child(link_copy)
 	crew_strip.add_child(link_status)
-	crew_strip.add_child(_briefing_actor(_character_portrait(run.characters[1]), "P2 · %s" % _character_name(run.characters[1]), _character_role(run.characters[1]), COLOR_ORANGE, Vector2(150, 82)))
+	crew_strip.add_child(_briefing_actor(_character_portrait(run.characters[1]), "P2 · %s" % _character_name(run.characters[1]), _character_role(run.characters[1]), COLOR_ORANGE, Vector2(180, 150)))
 	overlay_content.add_child(crew_strip)
 
 func _pause_action_button(text: String, callback: Callable, accent: Color) -> Button:
@@ -3185,12 +3185,14 @@ func _show_consumables() -> void:
 	var content := RunContentCatalog.build()
 	var can_use := active_route_combat and state.phase == CombatState.Phase.PLANNING
 	var loadout := HBoxContainer.new()
-	loadout.custom_minimum_size.y = 560
+	loadout.custom_minimum_size.y = 500
 	loadout.alignment = BoxContainer.ALIGNMENT_CENTER
 	loadout.add_theme_constant_override("separation", 56)
-	loadout.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[local_slot]), "P%d · %s" % [local_slot + 1, _character_name(run_coordinator.run.characters[local_slot])], "전술 장비 슬롯 3개", _character_color(run_coordinator.run.characters[local_slot]), Vector2(360, 470)))
+	var loadout_actor := _briefing_actor(_character_portrait(run_coordinator.run.characters[local_slot]), "P%d · %s" % [local_slot + 1, _character_name(run_coordinator.run.characters[local_slot])], "전술 장비 슬롯 3개", _character_color(run_coordinator.run.characters[local_slot]), Vector2(340, 420))
+	loadout_actor.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	loadout.add_child(loadout_actor)
 	var inventory_column := VBoxContainer.new()
-	inventory_column.custom_minimum_size = Vector2(900, 470)
+	inventory_column.custom_minimum_size = Vector2(0, 420)
 	inventory_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inventory_column.alignment = BoxContainer.ALIGNMENT_CENTER
 	inventory_column.add_theme_constant_override("separation", 18)
@@ -3211,7 +3213,7 @@ func _show_consumables() -> void:
 	overlay_content.add_child(loadout)
 	if not active_route_combat or state.phase != CombatState.Phase.PLANNING:
 		overlay_subtitle.text = "현재 장비 점검 중 · 소비 아이템은 항로 전투의 행동 선택 단계에서 활성화됩니다."
-		overlay_content.add_child(_game_status_line([["◆", "소지품 %d/3" % run_coordinator.run.consumables[local_slot].size(), Color("#bc8cff")], ["⌁", "다음 전투에서 사용 가능", COLOR_CYAN]]))
+		inventory_column.add_child(_game_status_line([["◆", "소지품 %d/3" % run_coordinator.run.consumables[local_slot].size(), Color("#bc8cff")], ["⌁", "다음 전투에서 사용 가능", COLOR_CYAN]]))
 		return
 	overlay_subtitle.text = "P%d 소지품 %d / 3 · 사용 즉시 소모되고 체크포인트에 저장됩니다." % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()]
 	if run_coordinator.run.consumables[local_slot].is_empty():
@@ -3236,7 +3238,7 @@ func _consumable_slot_row(content: Dictionary, can_use: bool) -> HBoxContainer:
 			row.add_child(action)
 			continue
 		var panel := PanelContainer.new()
-		panel.custom_minimum_size.y = 156
+		panel.custom_minimum_size.y = 136
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.add_theme_stylebox_override("panel", _panel_style(Color("#ffffff05") if item.is_empty() else Color("#bc8cff12"), 44, Color.TRANSPARENT, 0, 14, 8))
 		var label := Label.new()
