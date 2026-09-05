@@ -705,6 +705,7 @@ func _show_hub() -> void:
 	objective.add_theme_stylebox_override("hover", _mission_objective_style(next_accent, 0.14, 3))
 	objective.add_theme_stylebox_override("pressed", _mission_objective_style(next_accent, 0.24, 4))
 	objective.add_theme_stylebox_override("focus", _mission_objective_style(next_accent, 0.10, 4))
+	_set_button_accessibility(objective, "현재 목표 · %s" % next_title, "%s. 두 번 탭하여 계속 진행합니다" % next_hint)
 	objective.pressed.connect(next_action)
 	mission.add_child(objective)
 	var voyage_status := Label.new()
@@ -753,6 +754,7 @@ func _show_hub() -> void:
 
 func _pause_action_button(text: String, callback: Callable, accent: Color) -> Button:
 	var parts := text.split("  ", false, 1)
+	var action_name := String(parts[1] if parts.size() > 1 else parts[0]).strip_edges()
 	var button := Button.new()
 	button.text = "%s\n%s" % [parts[0], parts[1] if parts.size() > 1 else ""]
 	button.custom_minimum_size = Vector2(132, 72)
@@ -762,6 +764,7 @@ func _pause_action_button(text: String, callback: Callable, accent: Color) -> Bu
 	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.16), 30, Color.TRANSPARENT, 0, 8, 6))
 	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.28), 30, Color.TRANSPARENT, 0, 8, 6))
 	button.add_theme_stylebox_override("focus", _focus_style(accent, 30))
+	_set_button_accessibility(button, action_name, "%s 화면을 엽니다" % action_name)
 	button.pressed.connect(callback)
 	return button
 
