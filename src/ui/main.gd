@@ -14,6 +14,7 @@ const SERVICE_UUID := "61b27d6e-8139-4f95-9a34-904f2db81b23"
 const CURRENT_VERSION := "0.1.4"
 const VERSION_FEED_URL := "https://coldbrewventi.vercel.app/starlink-duo/latest.json"
 const DOWNLOAD_PAGE_URL := "https://coldbrewventi.vercel.app/projects/starlink-duo"
+enum OverlayBackRoute { DISMISS, QUIT_APP, MAIN_MENU, HUB, RETURN_TO_MAIN_MENU, RUN_OUTCOME }
 const RELEASE_HISTORY := [
 	{"version": "0.1.4", "date": "2026.09.05", "notes": ["공격·방어·지원·전술 역할 배지", "지원 카드 녹색 표시와 턴당 1장 안내", "중복 지원 선택 제한 사유 표시"]},
 	{"version": "0.1.3", "date": "2026.09.05", "notes": ["카드 비용·이름·효과 정보 위계 개선", "통신 휠 형태의 빠른 메시지", "카드 더미 형태의 남은 덱 표시", "버전별 게임 내 업데이트 기록"]},
@@ -101,6 +102,7 @@ var chat_bubble_labels: Array[Label] = []
 var chat_bubble_tokens := [0, 0]
 var ui_audio_players: Dictionary = {}
 var overlay_transition: Tween
+var overlay_back_route := OverlayBackRoute.DISMISS
 var version_request: HTTPRequest
 var version_button: Button
 var latest_release: Dictionary = {}
@@ -221,7 +223,7 @@ func _on_go_back_requested() -> void:
 	handling_back_request = true
 	_reset_back_request_guard.call_deferred()
 	if overlay != null and overlay.visible:
-		if overlay_title.text == "STARLINK DUO":
+		if overlay_back_route == OverlayBackRoute.QUIT_APP:
 			get_tree().quit()
 		else:
 			_play_ui_sound("cancel")
@@ -378,6 +380,7 @@ func _show_main_menu() -> void:
 	_reset_pending_single_plan()
 	game_started = false
 	_clear_overlay()
+	overlay_back_route = OverlayBackRoute.QUIT_APP
 	_set_overlay_compact(duel_state == null)
 	_set_main_menu_visual(true)
 	overlay_close_button.hide()
@@ -635,7 +638,7 @@ func _resume_saved_duel() -> void:
 	selected_plays.clear()
 	selected_energy = 0
 	log_label.text = "저장된 결투 결과를 불러왔습니다." if duel_state.phase == DuelState.Phase.FINISHED else "저장된 결투를 이어서 진행합니다."
-	_close_overlay()
+	_dismiss_overlay()
 	_refresh()
 
 func _start_singleplayer() -> void:
@@ -646,6 +649,7 @@ func _start_singleplayer() -> void:
 
 func _show_single_resume_confirmation() -> void:
 	_clear_overlay()
+	overlay_back_route = OverlayBackRoute.MAIN_MENU
 	_set_overlay_minimal()
 	var run := run_coordinator.run
 	var ended := run.phase in ["completed", "failed"]
@@ -676,7 +680,7 @@ func _continue_singleplayer() -> void:
 	selected_plays.clear()
 	selected_energy = 0
 	log_label.text = "싱글플레이 · 두 대원을 직접 지휘합니다."
-	_close_overlay()
+	_dismiss_overlay()
 	_refresh()
 	if not run_coordinator.run.pending_event.is_empty():
 		_show_event.call_deferred()
@@ -820,6 +824,7 @@ func _mission_objective_style(accent: Color, fill_alpha: float, signal_width: in
 
 func _show_single_reset_confirmation() -> void:
 	_clear_overlay()
+	overlay_back_route = OverlayBackRoute.HUB if game_started else OverlayBackRoute.MAIN_MENU
 	_set_overlay_minimal()
 	overlay_title.text = "새 원정을 시작할까요?"
 	overlay_subtitle.text = "싱글플레이 진행만 초기화합니다. 설정과 최근 2인 결투 기록은 유지됩니다."
@@ -896,6 +901,8 @@ func _show_current_deck(requested_slot: int = -1) -> void:
 	deck_view_slot = local_slot if requested_slot < 0 else clampi(requested_slot, 0, 1)
 	var inspected_slot := deck_view_slot
 	_clear_overlay()
+	if game_started and run_coordinator.run.phase in ["completed", "failed"]:
+		overlay_back_route = OverlayBackRoute.RUN_OUTCOME
 	_set_overlay_immersive()
 	overlay_title.text = "현재 덱"
 	if cooperative_session == null and game_mode != "duel":
@@ -1617,6 +1624,7 @@ func _activate_mode(mode: String) -> void:
 func _clear_overlay() -> void:
 	in_multiplayer_lobby = false
 	lobby_preview_active = false
+	overlay_back_route = OverlayBackRoute.DISMISS
 	_set_overlay_compact(false)
 	if overlay_scrim != null:
 		overlay_scrim.color = Color("#020713ff") if not game_started else Color("#020713c2")
@@ -1710,21 +1718,22 @@ func _set_main_menu_visual(enabled: bool) -> void:
 		overlay_panel.add_theme_stylebox_override("panel", _panel_style(Color("#0c1730fa"), 28, Color.TRANSPARENT, 0, 28, 22))
 
 func _close_overlay() -> void:
-	if overlay_title.text == "훈련 전투 완료":
-		_return_to_main_menu()
-		return
-	if overlay_title.text in ["진행 중인 게임이 있습니다", "완료된 원정 기록이 있습니다", "종료된 원정 기록이 있습니다"]:
-		_show_main_menu()
-		return
-	if overlay_title.text == "새 원정을 시작할까요?":
-		if game_started:
-			_show_hub()
-		else:
+	match overlay_back_route:
+		OverlayBackRoute.QUIT_APP:
+			get_tree().quit()
+			return
+		OverlayBackRoute.MAIN_MENU:
 			_show_main_menu()
-		return
-	if game_started and overlay_title.text == "현재 덱" and run_coordinator.run.phase in ["completed", "failed"]:
-		_show_run_outcome(run_coordinator.run.phase == "completed")
-		return
+			return
+		OverlayBackRoute.HUB:
+			_show_hub()
+			return
+		OverlayBackRoute.RETURN_TO_MAIN_MENU:
+			_return_to_main_menu()
+			return
+		OverlayBackRoute.RUN_OUTCOME:
+			_show_run_outcome(run_coordinator.run.phase == "completed")
+			return
 	if not game_started:
 		if in_multiplayer_lobby and cooperative_session != null:
 			cooperative_session.close()
@@ -1741,6 +1750,10 @@ func _close_overlay() -> void:
 	overlay_transition.tween_property(overlay_panel, "modulate:a", 0.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	overlay_transition.tween_property(overlay_panel, "scale", Vector2(0.985, 0.985), 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	overlay_transition.chain().tween_callback(_finish_close_overlay)
+
+func _dismiss_overlay() -> void:
+	overlay_back_route = OverlayBackRoute.DISMISS
+	_close_overlay()
 
 func _animate_overlay_in() -> void:
 	if overlay_panel == null or not overlay.visible:
@@ -3138,6 +3151,7 @@ func _show_route_result(title: String, summary: String) -> void:
 
 func _show_training_victory() -> void:
 	_clear_overlay()
+	overlay_back_route = OverlayBackRoute.RETURN_TO_MAIN_MENU
 	_set_overlay_immersive()
 	overlay_title.text = "훈련 전투 완료"
 	overlay_subtitle.text = "두 대원의 연계로 훈련 드론을 격파했습니다."
