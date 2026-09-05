@@ -70,6 +70,7 @@ var hand_container: HBoxContainer
 var draw_pile_badge: DrawPileVisual
 var status_label: Label
 var ready_button: Button
+var quick_chat_button: Button
 var turn_label: Label
 var log_label: Label
 var overlay: Control
@@ -1361,17 +1362,18 @@ func _build_hand_section() -> Control:
 	status_row.add_child(status_label)
 
 	ready_button = Button.new()
-	var chat_button := Button.new()
-	chat_button.text = "✉"
-	chat_button.tooltip_text = "빠른 메시지"
-	_set_button_accessibility(chat_button, "빠른 메시지", "미리 정한 짧은 메시지를 동료에게 보냅니다")
-	chat_button.custom_minimum_size = Vector2(48, 48)
-	chat_button.add_theme_font_size_override("font_size", 24)
-	chat_button.add_theme_stylebox_override("normal", _panel_style(Color("#17233de8"), 24, Color.TRANSPARENT, 0, 8, 6))
-	chat_button.add_theme_stylebox_override("hover", _panel_style(Color(COLOR_CYAN, 0.22), 24, Color.TRANSPARENT, 0, 8, 6))
-	chat_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 24))
-	chat_button.pressed.connect(_show_quick_chat)
-	status_row.add_child(chat_button)
+	quick_chat_button = Button.new()
+	quick_chat_button.text = "✉"
+	quick_chat_button.tooltip_text = "빠른 메시지"
+	_set_button_accessibility(quick_chat_button, "빠른 메시지", "연결된 동료에게 미리 정한 짧은 메시지를 보냅니다")
+	quick_chat_button.custom_minimum_size = Vector2(48, 48)
+	quick_chat_button.add_theme_font_size_override("font_size", 24)
+	quick_chat_button.add_theme_stylebox_override("normal", _panel_style(Color("#17233de8"), 24, Color.TRANSPARENT, 0, 8, 6))
+	quick_chat_button.add_theme_stylebox_override("hover", _panel_style(Color(COLOR_CYAN, 0.22), 24, Color.TRANSPARENT, 0, 8, 6))
+	quick_chat_button.add_theme_stylebox_override("focus", _focus_style(COLOR_CYAN, 24))
+	quick_chat_button.pressed.connect(_show_quick_chat)
+	quick_chat_button.visible = false
+	status_row.add_child(quick_chat_button)
 	energy_label = Label.new()
 	energy_label.accessibility_name = "남은 에너지"
 	energy_label.custom_minimum_size = Vector2(82, 48)
@@ -3548,6 +3550,7 @@ func _node_preview(type: String) -> String:
 
 func _refresh() -> void:
 	_refresh_character_identity()
+	_refresh_quick_chat_availability()
 	if game_mode == "duel" and duel_state != null:
 		_refresh_duel()
 		return
@@ -3600,6 +3603,7 @@ func _apply_enemy_visual(enemy: EnemyState) -> void:
 		enemy_aura.configure(profile)
 
 func _refresh_duel() -> void:
+	_refresh_quick_chat_availability()
 	turn_label.text = "DUEL %02d" % duel_state.turn
 	team_health_label.text = "내구도   P1 %d / %d   ·   P2 %d / %d" % [duel_state.health[0], duel_state.max_health[0], duel_state.health[1], duel_state.max_health[1]]
 	team_health_bar.max_value = duel_state.max_health[local_slot]
@@ -3630,6 +3634,10 @@ func _refresh_duel() -> void:
 	_rebuild_hand()
 	_sync_android_accessibility.call_deferred()
 	queue_redraw()
+
+func _refresh_quick_chat_availability() -> void:
+	if quick_chat_button != null:
+		quick_chat_button.visible = cooperative_session != null
 
 func _update_player_readiness(slot: int, is_ready: bool, is_local: bool, planned_cards: int) -> void:
 	if player_status_visuals.size() <= slot or player_status_badges.size() <= slot:
