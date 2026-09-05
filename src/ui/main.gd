@@ -124,7 +124,7 @@ func _ready() -> void:
 		bluetooth_transport.get_state(),
 	])
 	engine = CombatEngine.new(catalog)
-	state = engine.create_demo_combat()
+	state = _create_training_combat()
 	duel_save_store = DuelSaveStore.new()
 	duel_state = duel_save_store.load_active()
 	if duel_state != null:
@@ -785,7 +785,7 @@ func _confirm_single_reset() -> void:
 
 func _start_fresh_run() -> void:
 	run_coordinator.start_new(int(Time.get_unix_time_from_system()))
-	state = engine.create_demo_combat()
+	state = _create_training_combat()
 	active_route_combat = false
 	active_route_types.clear()
 	selected_hand_indices.clear()
@@ -793,6 +793,14 @@ func _start_fresh_run() -> void:
 	singleplayer_pending_cards.clear()
 	selected_energy = 0
 	_refresh_character_identity()
+
+func _create_training_combat() -> CombatState:
+	if run_coordinator == null or run_coordinator.run == null:
+		return engine.create_demo_combat()
+	return engine.create_demo_combat(run_coordinator.run.characters, [
+		run_coordinator.starter_deck_for(run_coordinator.run.characters[0]),
+		run_coordinator.starter_deck_for(run_coordinator.run.characters[1]),
+	])
 
 func _confirm_return_to_main() -> void:
 	_clear_overlay()
@@ -1484,7 +1492,7 @@ func _activate_mode(mode: String) -> void:
 		duel_save_store.clear()
 		duel_state = null
 		duel_engine = null
-		state = engine.create_demo_combat() if not active_route_combat else state
+		state = _create_training_combat() if not active_route_combat else state
 		log_label.text = "협동 원정 모드 · 공동 체력과 항로 진행을 공유합니다."
 	selected_hand_indices.clear()
 	selected_plays.clear()
@@ -1922,6 +1930,11 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 	local_slot = 0
 	var run := run_coordinator.run
 	match preview_name:
+		"combat":
+			active_route_combat = false
+			state = _create_training_combat()
+			_finish_close_overlay()
+			_refresh()
 		"roster":
 			run.phase = "traversal"
 			run.stage = 1
@@ -2220,6 +2233,8 @@ func _info_panel(title: String, body: String, accent: Color) -> PanelContainer:
 func _connection_status_text() -> String:
 	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
 		return "●  LOCAL DEMO"
+	if cooperative_session == null and game_started:
+		return "●  LOCAL DUEL" if game_mode == "duel" else "●  SOLO COMMAND"
 	if cooperative_session != null and cooperative_session.handshake_failed:
 		return "●  VERSION MISMATCH"
 	if bluetooth_transport.get_state() == "connected" and cooperative_session != null and not cooperative_session.handshake_complete:

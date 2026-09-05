@@ -87,6 +87,14 @@ func _test_initial_state() -> void:
 	_expect(state.players.size() == 2, "demo combat has two players")
 	_expect(state.players[0].hand.size() == 5, "guardian draws five cards")
 	_expect(state.team_health == 70, "team health starts full")
+	var full_catalog := FullCardCatalog.build()
+	var custom_training := CombatEngine.new(full_catalog).create_demo_combat([&"hacker", &"medic"], [
+		[&"hacker_card_01", &"hacker_card_02", &"hacker_card_03", &"hacker_card_04", &"neutral_pulse"],
+		[&"medic_card_04", &"medic_card_03", &"medic_card_02", &"medic_card_05", &"neutral_link"],
+	])
+	_expect(custom_training.players[0].character_id == &"hacker" and custom_training.players[1].character_id == &"medic", "training combat preserves selected character identities")
+	_expect(custom_training.players[0].hand.all(func(card_id: StringName) -> bool: return full_catalog[card_id].owner_scope in [CardData.Scope.HACKER, CardData.Scope.NEUTRAL]), "hacker training hand contains only hacker or neutral cards")
+	_expect(custom_training.players[1].hand.all(func(card_id: StringName) -> bool: return full_catalog[card_id].owner_scope in [CardData.Scope.MEDIC, CardData.Scope.NEUTRAL]), "medic training hand contains only medic or neutral cards")
 	var main_script: Variant = load("res://src/ui/main.gd").new()
 	main_script.system_font_scale = 1.0
 	main_script.large_text_enabled = false

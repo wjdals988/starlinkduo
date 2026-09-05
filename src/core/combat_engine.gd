@@ -8,19 +8,23 @@ var cards: Dictionary
 func _init(card_catalog: Dictionary) -> void:
 	cards = card_catalog
 
-func create_demo_combat() -> CombatState:
+func create_demo_combat(characters: Array = [], decks: Array = []) -> CombatState:
 	var state := CombatState.new()
-	var guardian := CombatantState.new(0, &"guardian")
-	guardian.draw_pile.assign([
+	var default_characters: Array = [&"guardian", &"engineer"]
+	var default_decks: Array = [[
 		&"guardian_strike", &"guardian_guard", &"guardian_cover",
 		&"neutral_pulse", &"neutral_barrier", &"guardian_strike",
-	])
-	var engineer := CombatantState.new(1, &"engineer")
-	engineer.draw_pile.assign([
+	], [
 		&"engineer_bolt", &"engineer_charge", &"engineer_patch",
 		&"neutral_link", &"neutral_pulse", &"engineer_bolt",
-	])
-	state.players.assign([guardian, engineer])
+	]]
+	for slot in 2:
+		var character_id := StringName(characters[slot]) if characters.size() > slot else StringName(default_characters[slot])
+		var training_deck: Array = decks[slot] if decks.size() > slot else default_decks[slot]
+		var player := CombatantState.new(slot, character_id)
+		for card_id in training_deck:
+			player.draw_pile.append(StringName(card_id))
+		state.players.append(player)
 	var drone := EnemyState.new(&"training_drone", "훈련 드론", 44)
 	drone.intent_damage = 9
 	state.enemies.append(drone)
