@@ -139,6 +139,10 @@ func _ready() -> void:
 	var lobby_preview := _debug_lobby_preview()
 	if not lobby_preview.is_empty():
 		_show_multiplayer_lobby.bind(lobby_preview).call_deferred()
+	else:
+		var ui_preview := _debug_ui_preview_name()
+		if not ui_preview.is_empty():
+			_show_debug_ui_preview.bind(ui_preview).call_deferred()
 
 func _exit_tree() -> void:
 	if cooperative_session != null:
@@ -1886,6 +1890,58 @@ func _debug_lobby_preview() -> Dictionary:
 			"transport_error": return {"is_host": false, "transport_state": "error", "verified": false, "handshake_failed": false}
 	return {}
 
+func _debug_ui_preview_name() -> String:
+	if not OS.is_debug_build():
+		return ""
+	for argument in OS.get_cmdline_args():
+		if argument.begins_with("--ui-preview="):
+			return argument.trim_prefix("--ui-preview=")
+	return ""
+
+func _show_debug_ui_preview(preview_name: String) -> void:
+	if preview_name == "gallery":
+		for gallery_screen in ["reward", "shop", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
+			_show_debug_ui_preview(gallery_screen)
+			print("STARLINK_UI_PREVIEW %s" % gallery_screen)
+			await get_tree().create_timer(2.0).timeout
+		return
+	game_started = true
+	game_mode = "cooperative"
+	local_slot = 0
+	var run := run_coordinator.run
+	match preview_name:
+		"reward":
+			run.pending_card_rewards[0] = true
+			_show_reward()
+		"shop":
+			run.gold[0] = maxi(run.gold[0], 200)
+			run.shop_open[0] = true
+			_show_shop()
+		"event":
+			var content := RunContentCatalog.build()
+			var event: Dictionary = content.events[0]
+			run.pending_event = {"id": event.id, "route_types": ["event", "rest"], "votes": {}}
+			_show_event()
+		"route_result":
+			_show_route_result("항로 전투 승리", "두 대원의 연계로 전투를 마쳤습니다. 각 플레이어 +35 C")
+		"training_victory":
+			state.phase = CombatState.Phase.WON
+			state.turn = 4
+			state.team_health = 56
+			_show_training_victory()
+		"run_victory":
+			run.phase = "completed"
+			run.keys = [true, true, true]
+			_show_run_outcome(true)
+		"run_failed":
+			run.phase = "failed"
+			run.keys = [true, false, false]
+			_show_run_outcome(false)
+		"consumables":
+			var content := RunContentCatalog.build()
+			run.consumables[0] = [content.consumables[0].id, content.consumables[1].id]
+			_show_consumables()
+
 func _reset_multiplayer_connection() -> void:
 	if cooperative_session != null:
 		cooperative_session.close()
@@ -3002,6 +3058,8 @@ func _show_shop() -> void:
 	var removal_text := "✓ 카드 정비 완료" if removal_sold else "✂  덱에서 카드 1장 제거 · %d C" % inventory.remove_card_cost
 	var removal_button := _action_button(removal_text, _show_remove_card_picker.bind(int(inventory.remove_card_cost)), Color("#bc8cff"), 58)
 	removal_button.disabled = removal_disabled
+	removal_button.custom_minimum_size.x = 620
+	removal_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	overlay_content.add_child(removal_button)
 	var service_hint := "방문당 1회 · 최소 덱 5장 · 소비 아이템 최대 3개"
 	if not removal_sold and run_coordinator.run.gold[local_slot] < int(inventory.remove_card_cost):
@@ -3077,22 +3135,43 @@ func _show_consumables() -> void:
 		return
 	_clear_overlay()
 	_set_overlay_immersive()
-	overlay_title.text = "소비 아이템"
+	overlay_title.text = "FIELD LOADOUT · 소지품"
 	var relic_names: Array[String] = []
 	for relic_id in run_coordinator.run.relics[local_slot]:
 		for relic in RunContentCatalog.build().relics:
 			if String(relic.id) == String(relic_id):
 				relic_names.append(String(relic.name))
 				break
-	_add_connection_notice("활성 유물 %d개%s" % [relic_names.size(), " · " + ", ".join(relic_names) if not relic_names.is_empty() else ""], COLOR_CYAN)
 	var content := RunContentCatalog.build()
 	var can_use := active_route_combat and state.phase == CombatState.Phase.PLANNING
-	overlay_content.add_child(_consumable_slot_row(content, can_use))
+	var loadout := HBoxContainer.new()
+	loadout.custom_minimum_size.y = 560
+	loadout.alignment = BoxContainer.ALIGNMENT_CENTER
+	loadout.add_theme_constant_override("separation", 56)
+	loadout.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[local_slot]), "P%d · %s" % [local_slot + 1, _character_name(run_coordinator.run.characters[local_slot])], "전술 장비 슬롯 3개", _character_color(run_coordinator.run.characters[local_slot]), Vector2(360, 470)))
+	var inventory_column := VBoxContainer.new()
+	inventory_column.custom_minimum_size = Vector2(900, 470)
+	inventory_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inventory_column.alignment = BoxContainer.ALIGNMENT_CENTER
+	inventory_column.add_theme_constant_override("separation", 18)
+	var relic_status := Label.new()
+	relic_status.text = "✦  활성 유물 %d개%s" % [relic_names.size(), "  ·  " + ", ".join(relic_names) if not relic_names.is_empty() else "  ·  아직 획득한 유물이 없습니다"]
+	relic_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	relic_status.add_theme_font_size_override("font_size", 15)
+	relic_status.add_theme_color_override("font_color", COLOR_CYAN)
+	inventory_column.add_child(relic_status)
+	inventory_column.add_child(_consumable_slot_row(content, can_use))
+	var inventory_hint := Label.new()
+	inventory_hint.text = "행동 선택 중 사용  ·  사용 즉시 소모  ·  유물은 조건 충족 시 자동 발동"
+	inventory_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	inventory_hint.add_theme_font_size_override("font_size", 13)
+	inventory_hint.add_theme_color_override("font_color", COLOR_MUTED)
+	inventory_column.add_child(inventory_hint)
+	loadout.add_child(inventory_column)
+	overlay_content.add_child(loadout)
 	if not active_route_combat or state.phase != CombatState.Phase.PLANNING:
-		_set_overlay_compact(true, true)
-		overlay_panel.offset_bottom = -260
-		overlay_subtitle.text = "소비 아이템은 항로 전투의 행동 선택 단계에서만 사용할 수 있습니다."
-		_info_panel("P%d 소지품 · %d / 3" % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()], "소비 아이템은 행동 선택 단계에서 사용하며 즉시 소모됩니다. 유물은 조건을 만족하면 자동으로 발동합니다.", Color("#bc8cff"))
+		overlay_subtitle.text = "현재 장비 점검 중 · 소비 아이템은 항로 전투의 행동 선택 단계에서 활성화됩니다."
+		overlay_content.add_child(_game_status_line([["◆", "소지품 %d/3" % run_coordinator.run.consumables[local_slot].size(), Color("#bc8cff")], ["⌁", "다음 전투에서 사용 가능", COLOR_CYAN]]))
 		return
 	overlay_subtitle.text = "P%d 소지품 %d / 3 · 사용 즉시 소모되고 체크포인트에 저장됩니다." % [local_slot + 1, run_coordinator.run.consumables[local_slot].size()]
 	if run_coordinator.run.consumables[local_slot].is_empty():
@@ -3117,11 +3196,11 @@ func _consumable_slot_row(content: Dictionary, can_use: bool) -> HBoxContainer:
 			row.add_child(action)
 			continue
 		var panel := PanelContainer.new()
-		panel.custom_minimum_size.y = 76
+		panel.custom_minimum_size.y = 156
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		panel.add_theme_stylebox_override("panel", _panel_style(Color("#ffffff08") if item.is_empty() else Color("#bc8cff14"), 16, Color.TRANSPARENT, 0, 14, 8))
+		panel.add_theme_stylebox_override("panel", _panel_style(Color("#ffffff05") if item.is_empty() else Color("#bc8cff12"), 44, Color.TRANSPARENT, 0, 14, 8))
 		var label := Label.new()
-		label.text = "○ SLOT %d\n비어 있음" % (slot + 1) if item.is_empty() else "◆ SLOT %d · %s\n%s" % [slot + 1, item.name, _consumable_effect_text(item)]
+		label.text = "○\nSLOT %d · 비어 있음" % (slot + 1) if item.is_empty() else "◆\nSLOT %d · %s\n%s" % [slot + 1, item.name, _consumable_effect_text(item)]
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.add_theme_font_size_override("font_size", 14)
@@ -3176,10 +3255,10 @@ func _shop_item_button(text: String, accent: Color, disabled: bool) -> Button:
 	button.disabled = disabled
 	_set_button_accessibility(button, _first_text_line(text), "%s. %s" % [_remaining_text_lines(text), "판매 완료 또는 구매 조건을 충족하지 못했습니다" if disabled else "두 번 탭하여 구매합니다"])
 	button.add_theme_font_size_override("font_size", 14)
-	button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 12, accent, 2))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 12, accent, 3))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color("#101725"), 12, Color("#4d5a71"), 1))
-	button.add_theme_stylebox_override("focus", _focus_style(accent, 12))
+	button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 30, Color.TRANSPARENT, 0, 12, 6))
+	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 30, Color.TRANSPARENT, 0, 12, 6))
+	button.add_theme_stylebox_override("disabled", _panel_style(Color.TRANSPARENT, 30, Color.TRANSPARENT, 0, 12, 6))
+	button.add_theme_stylebox_override("focus", _focus_style(accent, 30))
 	return button
 
 func _show_mode_locked_notice(title: String, message: String) -> void:
