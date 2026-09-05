@@ -968,6 +968,7 @@ func _macro_chat_text(macro_id: String) -> String:
 
 func _show_settings() -> void:
 	_clear_overlay()
+	_set_overlay_immersive()
 	overlay_title.text = "SHIP SYSTEMS · 설정"
 	overlay_subtitle.text = "연출 강도와 소리·진동을 기기별로 조절합니다. 변경 사항은 이 기기에 자동 저장됩니다."
 	_add_setting_toggle("큰 글씨", "앱 기본 확대 115%를 사용합니다. 시스템 글자 크기가 더 크면 안전 레이아웃이 우선합니다.", large_text_enabled, _set_large_text)
@@ -2882,23 +2883,37 @@ func _metric_card(title: String, value: String, accent: Color) -> PanelContainer
 	copy.add_child(value_label)
 	return panel
 
+func _game_status_line(items: Array) -> HBoxContainer:
+	var line := HBoxContainer.new()
+	line.alignment = BoxContainer.ALIGNMENT_CENTER
+	line.add_theme_constant_override("separation", 30)
+	line.custom_minimum_size.y = 38
+	for item in items:
+		var status := Label.new()
+		status.text = "%s  %s" % [item[0], item[1]]
+		status.add_theme_font_size_override("font_size", 15)
+		status.add_theme_color_override("font_color", item[2])
+		status.accessibility_name = String(item[1])
+		line.add_child(status)
+	return line
+
 func _show_reward() -> void:
 	if game_mode == "duel":
 		_show_mode_locked_notice("전투 보상", "결투는 공정한 시작 덱을 사용하며 원정 보상을 소비하지 않습니다.")
 		return
 	_clear_overlay()
+	_set_overlay_immersive()
 	overlay_title.text = "SALVAGE DRAFT · 전투 보상"
 	overlay_subtitle.text = "전용 카드 2장 + 공용 카드 1장 · 선택 즉시 덱과 체크포인트에 반영"
 	var rewards := run_coordinator.current_card_reward(local_slot)
 	if rewards.is_empty():
 		_set_overlay_compact(true, true)
 		overlay_subtitle.text = "받을 수 있는 카드 보상이 없습니다. 전투에서 승리하면 보상이 해금됩니다."
-		var reward_metrics := HBoxContainer.new()
-		reward_metrics.add_theme_constant_override("separation", 12)
-		reward_metrics.add_child(_metric_card("현재 덱", "%d장" % run_coordinator.run.decks[local_slot].size(), COLOR_BLUE))
-		reward_metrics.add_child(_metric_card("다음 보상", "전용 2 + 공용 1", COLOR_YELLOW))
-		reward_metrics.add_child(_metric_card("해금 조건", "전투 승리", COLOR_CYAN))
-		overlay_content.add_child(reward_metrics)
+		overlay_content.add_child(_game_status_line([
+			["▤", "현재 덱 %d장" % run_coordinator.run.decks[local_slot].size(), COLOR_BLUE],
+			["✦", "다음 보상 전용 2 + 공용 1", COLOR_YELLOW],
+			["⚔", "전투 승리 시 해금", COLOR_CYAN],
+		]))
 		_info_panel("다음 보상 흐름", "전투에서 승리한 뒤 3장 중 1장을 선택합니다. 선택 즉시 덱과 체크포인트에 반영되고 나머지 카드는 사라집니다.", COLOR_YELLOW)
 		return
 	_set_overlay_compact(true)
@@ -2907,13 +2922,12 @@ func _show_reward() -> void:
 	for card_id in deck:
 		if catalog.has(StringName(card_id)):
 			total_cost += (catalog[StringName(card_id)] as CardData).energy_cost
-	var reward_metrics := HBoxContainer.new()
-	reward_metrics.add_theme_constant_override("separation", 12)
-	reward_metrics.add_child(_metric_card("현재 덱", "%d장" % deck.size(), COLOR_BLUE))
-	reward_metrics.add_child(_metric_card("평균 비용", "%.1f" % (float(total_cost) / maxf(float(deck.size()), 1.0)), COLOR_CYAN))
-	reward_metrics.add_child(_metric_card("획득 가능", "3장 중 1장", COLOR_YELLOW))
-	reward_metrics.add_child(_metric_card("저장 시점", "선택 즉시", COLOR_ORANGE))
-	overlay_content.add_child(reward_metrics)
+	overlay_content.add_child(_game_status_line([
+		["▤", "덱 %d장" % deck.size(), COLOR_BLUE],
+		["⚡", "평균 비용 %.1f" % (float(total_cost) / maxf(float(deck.size()), 1.0)), COLOR_CYAN],
+		["✦", "3장 중 1장 획득", COLOR_YELLOW],
+		["✓", "선택 즉시 저장", COLOR_ORANGE],
+	]))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 18)
@@ -2967,26 +2981,25 @@ func _show_shop() -> void:
 		_show_mode_locked_notice("상점", "상점과 크레딧은 협동 원정 전용입니다.")
 		return
 	_clear_overlay()
+	_set_overlay_immersive()
 	overlay_title.text = "ORBITAL BAZAAR · 궤도 상점"
 	if not run_coordinator.run.shop_open[local_slot]:
 		_set_overlay_compact(true, true)
 		overlay_subtitle.text = "현재 항로에서는 상점을 이용할 수 없습니다."
-		var shop_metrics := HBoxContainer.new()
-		shop_metrics.add_theme_constant_override("separation", 12)
-		shop_metrics.add_child(_metric_card("보유 크레딧", "%d C" % run_coordinator.run.gold[local_slot], COLOR_ORANGE))
-		shop_metrics.add_child(_metric_card("현재 덱", "%d장" % run_coordinator.run.decks[local_slot].size(), COLOR_BLUE))
-		shop_metrics.add_child(_metric_card("접근 조건", "상점 노드", COLOR_CYAN))
-		overlay_content.add_child(shop_metrics)
+		overlay_content.add_child(_game_status_line([
+			["◈", "%d C" % run_coordinator.run.gold[local_slot], COLOR_ORANGE],
+			["▤", "현재 덱 %d장" % run_coordinator.run.decks[local_slot].size(), COLOR_BLUE],
+			["▣", "상점 노드에서 접근", COLOR_CYAN],
+		]))
 		_info_panel("상점 접근 조건", "항로에서 상점 노드를 선택한 플레이어만 구매할 수 있습니다. 다음 항로에서 ▣ 상점 아이콘을 선택하세요.", COLOR_ORANGE)
 		return
 	var inventory := run_coordinator.current_shop(local_slot)
 	overlay_subtitle.text = "P%d 보유 크레딧 %d · 공용 카드는 희소성 때문에 10%% 할증" % [local_slot + 1, run_coordinator.run.gold[local_slot]]
-	var wallet := HBoxContainer.new()
-	wallet.add_theme_constant_override("separation", 12)
-	wallet.add_child(_metric_card("보유 크레딧", "%d C" % run_coordinator.run.gold[local_slot], COLOR_ORANGE))
-	wallet.add_child(_metric_card("카드 재고", "%d장" % inventory.cards.size(), COLOR_CYAN))
-	wallet.add_child(_metric_card("정비 비용", "%d C" % inventory.remove_card_cost, Color("#bc8cff")))
-	overlay_content.add_child(wallet)
+	overlay_content.add_child(_game_status_line([
+		["◈", "보유 %d C" % run_coordinator.run.gold[local_slot], COLOR_ORANGE],
+		["▤", "카드 재고 %d장" % inventory.cards.size(), COLOR_CYAN],
+		["✂", "덱 정비 %d C" % inventory.remove_card_cost, Color("#bc8cff")],
+	]))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
