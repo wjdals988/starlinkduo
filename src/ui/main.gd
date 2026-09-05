@@ -1673,27 +1673,25 @@ func _focus_first_overlay_control() -> void:
 
 func _show_connection() -> void:
 	_clear_overlay()
-	_set_overlay_compact(true, true)
+	_set_overlay_immersive()
 	overlay_title.text = "멀티플레이 · 방 만들기 / 참가하기"
-	var steps := HBoxContainer.new()
-	steps.add_theme_constant_override("separation", 8)
-	steps.add_child(_status_chip("1  Bluetooth 켜기", COLOR_CYAN))
-	steps.add_child(_status_chip("2  호스트·참가 선택", COLOR_BLUE))
-	steps.add_child(_status_chip("3  호환 코드 확인", COLOR_ORANGE))
-	overlay_content.add_child(steps)
-	_add_connection_notice("호환 코드 · %s" % GameCompatibility.code(), COLOR_MUTED)
+	var protocol := Label.new()
+	protocol.text = "LINK PROTOCOL   01 BLUETOOTH  ›  02 ROLE  ›  03 VERIFY     ·     %s" % GameCompatibility.code()
+	protocol.add_theme_font_size_override("font_size", 14)
+	protocol.add_theme_color_override("font_color", COLOR_CYAN)
+	overlay_content.add_child(protocol)
 	if not Engine.has_singleton(AndroidBluetoothTransport.PLUGIN_NAME):
 		overlay_subtitle.text = "현재 환경에는 Android Bluetooth 플러그인이 없어 로컬 데모로 실행 중입니다."
-		_add_connection_notice("APK를 Android 12 이상 갤럭시에서 실행하세요.", COLOR_YELLOW)
+		_add_connection_briefing("ANDROID DEVICE REQUIRED", "APK를 Android 12 이상 Galaxy에서 실행하면 방 만들기와 참가하기가 활성화됩니다.", COLOR_YELLOW)
 		return
 	if not bluetooth_transport.is_enabled():
 		overlay_subtitle.text = "Bluetooth가 꺼져 있습니다. 빠른 설정에서 Bluetooth를 켠 뒤 새로고침하세요."
-		_info_panel("비행기 안에서 연결하기", "1. 비행기 모드를 유지합니다.\n2. 빠른 설정에서 Bluetooth만 다시 켭니다.\n3. 두 기기를 Android 설정에서 페어링한 뒤 돌아옵니다.", COLOR_CYAN)
+		_add_connection_briefing("비행기 안에서 연결하기", "01  비행기 모드는 유지\n02  빠른 설정에서 Bluetooth만 켜기\n03  Android 설정에서 두 Galaxy를 페어링", COLOR_CYAN)
 		_add_connection_action("상태 새로고침", _show_connection, COLOR_YELLOW)
 		return
 	if not bluetooth_transport.has_permissions():
 		overlay_subtitle.text = "주변 기기 권한이 필요합니다. 위치 정보는 수집하지 않습니다."
-		_info_panel("권한 안내", "Android 12 이상에서는 Bluetooth 연결에 주변 기기 권한이 필요합니다. 앱은 위치나 인터넷 연결을 사용하지 않습니다.", COLOR_BLUE)
+		_add_connection_briefing("주변 기기 권한", "Bluetooth 연결에만 사용합니다. 위치 정보와 인터넷 연결은 사용하지 않습니다.", COLOR_BLUE)
 		_add_connection_action("주변 기기 권한 허용", _request_bluetooth_permissions, COLOR_CYAN)
 		return
 	overlay_subtitle.text = "방장은 방을 만들고, 참가자는 페어링된 방장의 기기를 선택하세요. 연결되면 대기실로 이동합니다."
@@ -1728,7 +1726,24 @@ func _show_connection() -> void:
 			var device_button := _action_button(label, _join_bluetooth_host.bind(device.address), COLOR_ORANGE, 72)
 			device_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			join_column.add_child(device_button)
-	_info_panel("연결 전 확인", "두 기기에 같은 APK가 설치되어 있어야 합니다. 연결 후 12자리 호환 코드가 일치하면 방장이 게임을 시작합니다.", COLOR_CYAN)
+	_add_connection_briefing("연결 전 확인", "두 기기에 같은 APK가 필요합니다. 연결 뒤 12자리 호환 코드가 일치하면 방장이 게임을 시작합니다.", COLOR_CYAN)
+
+func _add_connection_briefing(title: String, body: String, accent: Color) -> void:
+	var briefing := VBoxContainer.new()
+	briefing.add_theme_constant_override("separation", 6)
+	briefing.add_theme_constant_override("margin_left", 18)
+	var heading := Label.new()
+	heading.text = "◆  %s" % title
+	heading.add_theme_font_size_override("font_size", 16)
+	heading.add_theme_color_override("font_color", accent)
+	briefing.add_child(heading)
+	var description := Label.new()
+	description.text = body
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	description.add_theme_font_size_override("font_size", 15)
+	description.add_theme_color_override("font_color", COLOR_TEXT)
+	briefing.add_child(description)
+	overlay_content.add_child(briefing)
 
 func _request_bluetooth_permissions() -> void:
 	bluetooth_transport.request_permissions()
@@ -1930,6 +1945,9 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 	local_slot = 0
 	var run := run_coordinator.run
 	match preview_name:
+		"connection":
+			game_started = false
+			_show_connection()
 		"combat":
 			active_route_combat = false
 			state = _create_training_combat()
