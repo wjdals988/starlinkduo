@@ -73,8 +73,16 @@ func _add_node_button(option: Dictionary, slot: int, step_index: int, center: Ve
 	button.tooltip_text = "%s · %s" % [_label(node_type), _preview(node_type)]
 	button.accessibility_name = "%s 노드" % _label(node_type)
 	var selection_hint := ""
-	if is_selected and slot >= 0:
-		selection_hint = ". 현재 선택됨. 같은 대원의 다른 노드를 누르면 변경됩니다"
+	if is_selected:
+		selection_hint = ". 현재 선택됨%s" % (". 같은 대원의 다른 노드를 누르면 변경됩니다" if slot >= 0 else "")
+	elif step_index < current_step:
+		selection_hint = ". 이미 지나간 좌표입니다"
+	elif step_index > current_step:
+		selection_hint = ". 이전 항로를 완료하면 선택할 수 있습니다"
+	elif slot >= 0 and not can_select_all_slots and slot != local_slot:
+		selection_hint = ". P%d 전용 항로라 현재 플레이어는 선택할 수 없습니다" % [slot + 1]
+	elif slot < 0 and has_selection:
+		selection_hint = ". 공통 목적지가 이미 선택되었습니다"
 	elif has_selection and slot >= 0:
 		selection_hint = ". 선택하면 기존 목적지를 변경합니다"
 	button.accessibility_description = "%s. %s%s" % [("공통" if slot < 0 else "P%d" % [slot + 1]), _preview(node_type), selection_hint]

@@ -238,13 +238,17 @@ func _test_route_map_selection_authority() -> void:
 	var solo_map := StarRouteMapView.new()
 	solo_map.configure(stage, 1, 0, {}, true)
 	_expect(_enabled_button_count(solo_map) == 4, "single-player map lets one player choose all four P1 and P2 branch options")
+	_expect(_has_accessibility_description(solo_map, "이미 지나간 좌표"), "completed map nodes announce why they are disabled")
+	_expect(_has_accessibility_description(solo_map, "이전 항로를 완료하면"), "future map nodes announce their unlock condition")
 	var p1_node: String = stage.steps[1].lanes[0].options[0].id
 	var solo_after_p1 := StarRouteMapView.new()
 	solo_after_p1.configure(stage, 1, 0, {0: p1_node}, true)
 	_expect(_enabled_button_count(solo_after_p1) == 4, "single-player map keeps both P1 and P2 choices available so P1 can be corrected before entry")
+	_expect(_has_accessibility_description(solo_after_p1, "현재 선택됨"), "selected map node announces its selected state")
 	var multiplayer_map := StarRouteMapView.new()
 	multiplayer_map.configure(stage, 1, 0, {}, false)
 	_expect(_enabled_button_count(multiplayer_map) == 2, "multiplayer map limits each device to its local player's two branch options")
+	_expect(_has_accessibility_description(multiplayer_map, "전용 항로라 현재 플레이어는 선택할 수 없습니다"), "remote lane nodes announce why they are unavailable")
 	solo_map.free()
 	solo_after_p1.free()
 	multiplayer_map.free()
@@ -255,6 +259,12 @@ func _enabled_button_count(control: Control) -> int:
 		if child is Button and not child.disabled:
 			count += 1
 	return count
+
+func _has_accessibility_description(control: Control, fragment: String) -> bool:
+	for child in control.get_children():
+		if child is Button and String(child.accessibility_description).contains(fragment):
+			return true
+	return false
 
 func _test_reward_and_shop_generation() -> void:
 	var catalog := DemoCardCatalog.build()
