@@ -654,9 +654,9 @@ func _show_single_resume_confirmation() -> void:
 	_info_panel("저장된 원정", "STAGE %d · 구간 %d/8 · 팀 내구도 %d/%d\n덱 %d+%d장 · 스타 키 %d개" % [run.stage, mini(run.step + 1, 8), run.team_health, run.team_max_health, run.decks[0].size(), run.decks[1].size(), run.keys.count(true)], COLOR_CYAN)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
-	var restart := _action_button("↻  새 원정 시작", _confirm_single_reset, COLOR_RED, 64)
+	var restart := _action_button("↻  새 원정 시작", _show_single_reset_confirmation, COLOR_RED, 64)
 	restart.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_set_button_accessibility(restart, "새 원정 시작", "현재 저장된 STAGE %d 원정을 삭제하고 캐릭터 선택부터 다시 시작합니다" % run.stage)
+	_set_button_accessibility(restart, "새 원정 시작", "삭제되는 진행 정보를 확인한 뒤 캐릭터 선택부터 다시 시작합니다")
 	actions.add_child(restart)
 	var resume := _action_button("▶  결과 다시 보기" if ended else "▶  이어하기", _show_run_outcome.bind(run.phase == "completed") if ended else _continue_singleplayer, COLOR_CYAN, 64)
 	resume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
