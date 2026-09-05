@@ -5,6 +5,7 @@ const EnemyAura := preload("res://src/ui/enemy_visual.gd")
 const CardFrames := preload("res://src/ui/card_frame_visual.gd")
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
 const CardIdentity := preload("res://src/ui/card_identity_visual.gd")
+const StarRouteMapView := preload("res://src/ui/star_route_map.gd")
 
 var failures: Array[String] = []
 
@@ -15,6 +16,7 @@ func _init() -> void:
 	_test_deterministic_hash()
 	_test_loopback_transport()
 	_test_run_map_generation()
+	_test_route_map_selection_authority()
 	_test_legacy_route_map_migration()
 	_test_reward_and_shop_generation()
 	_test_run_save_round_trip()
@@ -226,6 +228,29 @@ func _test_legacy_route_map_migration() -> void:
 	_expect(coordinator._migrate_route_map_layout(), "future stages migrate while an active stage is preserved")
 	_expect(coordinator.run.map.stages[0].steps[0].kind == "parallel", "migration does not rewrite the current stage after route progress")
 	_expect(coordinator.run.map.stages[1].steps[0].kind == "common", "migration repairs a future stage before it begins")
+
+func _test_route_map_selection_authority() -> void:
+	var stage: Dictionary = MapGenerator.new().generate_run(7302).stages[0]
+	var solo_map := StarRouteMapView.new()
+	solo_map.configure(stage, 1, 0, {}, true)
+	_expect(_enabled_button_count(solo_map) == 4, "single-player map lets one player choose all four P1 and P2 branch options")
+	var p1_node: String = stage.steps[1].lanes[0].options[0].id
+	var solo_after_p1 := StarRouteMapView.new()
+	solo_after_p1.configure(stage, 1, 0, {0: p1_node}, true)
+	_expect(_enabled_button_count(solo_after_p1) == 2, "single-player map keeps both P2 choices available after selecting P1")
+	var multiplayer_map := StarRouteMapView.new()
+	multiplayer_map.configure(stage, 1, 0, {}, false)
+	_expect(_enabled_button_count(multiplayer_map) == 2, "multiplayer map limits each device to its local player's two branch options")
+	solo_map.free()
+	solo_after_p1.free()
+	multiplayer_map.free()
+
+func _enabled_button_count(control: Control) -> int:
+	var count := 0
+	for child in control.get_children():
+		if child is Button and not child.disabled:
+			count += 1
+	return count
 
 func _test_reward_and_shop_generation() -> void:
 	var catalog := DemoCardCatalog.build()

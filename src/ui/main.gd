@@ -2017,6 +2017,12 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 			run.step = 0
 			run.pending_routes.clear()
 			_show_map()
+		"map_branch":
+			run.phase = "traversal"
+			run.stage = 1
+			run.step = 1
+			run.pending_routes.clear()
+			_show_map()
 		"deck":
 			_show_current_deck()
 		"hub":
@@ -2638,14 +2644,25 @@ func _show_map() -> void:
 	map_header.add_child(location)
 	overlay_content.add_child(map_header)
 	var route_map := StarRouteMapView.new()
-	route_map.configure(stage, run.step, local_slot, run.pending_routes)
+	route_map.configure(stage, run.step, local_slot, run.pending_routes, cooperative_session == null)
 	route_map.node_selected.connect(_choose_route)
 	overlay_content.add_child(route_map)
 	var route_guide := Label.new()
-	route_guide.text = "P1 상단 항로  ·  P2 하단 항로  ·  밝게 점등된 목적지를 직접 선택"
+	var step_data: Dictionary = stage.steps[run.step]
+	if step_data.kind == "common":
+		route_guide.text = "공통 전투 선택 완료  ·  아래 버튼으로 두 대원이 함께 진입" if run.pending_routes.size() == 2 else "두 대원이 함께 진입하는 첫 전투  ·  승리 후 항로가 4갈래로 나뉩니다"
+	elif cooperative_session == null:
+		var remaining_slots: Array[String] = []
+		for slot in 2:
+			if not run.pending_routes.has(slot):
+				remaining_slots.append("P%d" % [slot + 1])
+		route_guide.text = "P1 상단 · P2 하단  ·  %s 목적지를 선택하세요" % [" / ".join(remaining_slots)] if not remaining_slots.is_empty() else "P1 · P2 항로 선택 완료  ·  아래 버튼으로 진입"
+	else:
+		route_guide.text = "P1 상단 · P2 하단  ·  자신의 밝게 점등된 목적지를 선택"
 	route_guide.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	route_guide.add_theme_font_size_override("font_size", 12)
 	route_guide.add_theme_color_override("font_color", COLOR_MUTED)
+	route_guide.accessibility_name = "항로 선택 안내"
 	overlay_content.add_child(route_guide)
 	if run.pending_routes.size() == 2:
 		_add_connection_action("워프 좌표 확정 · 선택 노드 진입", _enter_selected_routes, COLOR_CYAN)
@@ -2707,10 +2724,6 @@ func _choose_route(slot: int, node_id: String) -> void:
 	if not result.ok:
 		overlay_subtitle.text = "항로를 선택하지 못했습니다: %s" % result.error
 		return
-	if cooperative_session == null and not result.ready:
-		var step_data: Dictionary = run_coordinator.run.map.stages[run_coordinator.run.stage - 1].steps[run_coordinator.run.step]
-		var teammate_slot := 1 - slot
-		run_coordinator.choose_route(teammate_slot, step_data.lanes[teammate_slot].options[0].id)
 	_show_map()
 
 func _enter_selected_routes() -> void:

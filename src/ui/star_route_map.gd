@@ -13,13 +13,15 @@ const MUTED := Color("#516079")
 var stage: Dictionary
 var current_step := 0
 var local_slot := 0
+var can_select_all_slots := false
 var pending_routes: Dictionary = {}
 var node_positions: Array[Array] = []
 
-func configure(stage_data: Dictionary, step_index: int, player_slot: int, selected_routes: Dictionary) -> void:
+func configure(stage_data: Dictionary, step_index: int, player_slot: int, selected_routes: Dictionary, select_all_slots: bool = false) -> void:
 	stage = stage_data
 	current_step = step_index
 	local_slot = player_slot
+	can_select_all_slots = select_all_slots
 	pending_routes = selected_routes.duplicate()
 	custom_minimum_size = MAP_SIZE
 	size = MAP_SIZE
@@ -55,7 +57,8 @@ func _add_node_button(option: Dictionary, slot: int, step_index: int, center: Ve
 	button.add_theme_font_size_override("font_size", 12)
 	var accent := _type_color(node_type)
 	var is_current := step_index == current_step
-	var is_reachable := is_current and (slot < 0 or slot == local_slot) and not pending_routes.has(local_slot)
+	var selection_slot := local_slot if slot < 0 else slot
+	var is_reachable := is_current and (slot < 0 or can_select_all_slots or slot == local_slot) and not pending_routes.has(selection_slot)
 	var selected_node_id := String(pending_routes.get(local_slot, "")) if slot < 0 else String(pending_routes.get(slot, ""))
 	var is_selected := is_current and selected_node_id == String(option.id)
 	button.disabled = not is_reachable
@@ -68,9 +71,9 @@ func _add_node_button(option: Dictionary, slot: int, step_index: int, center: Ve
 	button.add_theme_stylebox_override("disabled", _diamond_style(Color(accent, 0.28 if is_selected else 0.16), accent if is_selected else Color("#71819b"), 2 if is_selected else 1))
 	button.tooltip_text = "%s · %s" % [_label(node_type), _preview(node_type)]
 	button.accessibility_name = "%s 노드" % _label(node_type)
-	button.accessibility_description = _preview(node_type)
+	button.accessibility_description = "%s. %s" % [("공통" if slot < 0 else "P%d" % [slot + 1]), _preview(node_type)]
 	if is_reachable:
-		button.pressed.connect(func() -> void: node_selected.emit(local_slot if slot < 0 else slot, String(option.id)))
+		button.pressed.connect(func() -> void: node_selected.emit(selection_slot, String(option.id)))
 	add_child(button)
 
 func _draw() -> void:
