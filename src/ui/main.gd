@@ -1702,6 +1702,9 @@ func _close_overlay() -> void:
 	if overlay_title.text == "훈련 전투 완료":
 		_return_to_main_menu()
 		return
+	if game_started and overlay_title.text == "현재 덱" and run_coordinator.run.phase in ["completed", "failed"]:
+		_show_run_outcome(run_coordinator.run.phase == "completed")
+		return
 	if not game_started:
 		if in_multiplayer_lobby and cooperative_session != null:
 			cooperative_session.close()
@@ -3165,6 +3168,7 @@ func _show_training_victory() -> void:
 func _show_run_outcome(victory: bool) -> void:
 	_clear_overlay()
 	_set_overlay_immersive()
+	overlay_close_button.hide()
 	overlay_title.text = "런 완주 · 두 별의 승리" if victory else "런 종료 · 열쇠 부족"
 	overlay_subtitle.text = "별을 삼키는 자를 격파했습니다. 최종 기록이 저장되었습니다." if victory else "3개 열쇠를 모두 확보하지 못해 진 최종 보스에 진입할 수 없습니다."
 	var outcome_color := COLOR_CYAN if victory else COLOR_RED
