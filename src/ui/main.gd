@@ -506,13 +506,13 @@ func _show_version_info() -> void:
 	var update_available := _is_update_available()
 	var remote_version := str(latest_release.get("version", CURRENT_VERSION))
 	var newest_version := remote_version if update_available else CURRENT_VERSION
-	overlay_title.text = "함선 업데이트 기록"
-	overlay_subtitle.text = "CURRENT  v%s    ·    LATEST  v%s" % [CURRENT_VERSION, newest_version]
+	overlay_title.text = "항해 기록"
+	overlay_subtitle.text = "함선 시스템 변경 이력  ·  설치 v%s  /  최신 v%s" % [CURRENT_VERSION, newest_version]
 	var status_row := HBoxContainer.new()
 	status_row.add_theme_constant_override("separation", 18)
 	overlay_content.add_child(status_row)
 	var status := Label.new()
-	status.text = "●  새 항해 데이터가 도착했습니다" if update_available else "◆  모든 항해 데이터가 최신입니다"
+	status.text = "●  신규 항해 데이터 수신" if update_available else "◆  항해 데이터 동기화 완료"
 	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status.add_theme_font_size_override("font_size", 17)
@@ -522,12 +522,18 @@ func _show_version_info() -> void:
 		var download := _action_button("⇩  최신 버전 받기", _open_download_page, COLOR_RED, 52)
 		download.custom_minimum_size.x = 250
 		status_row.add_child(download)
-	var divider := HSeparator.new()
-	divider.modulate = Color(COLOR_CYAN, 0.32)
-	overlay_content.add_child(divider)
+	var section_label := Label.new()
+	section_label.text = "FLIGHT LOG  /  최근 변경"
+	section_label.add_theme_font_size_override("font_size", 13)
+	section_label.add_theme_color_override("font_color", Color(COLOR_CYAN, 0.78))
+	overlay_content.add_child(section_label)
 	var history: Array = latest_release.get("releases", RELEASE_HISTORY)
 	for release in history:
-		_add_release_log(release, str(release.get("version", "")) == newest_version)
+		var is_latest := str(release.get("version", "")) == newest_version
+		if is_latest:
+			var latest_notes: Array = release.get("notes", [])
+			overlay_subtitle.accessibility_name = "대화상자 안내. 최신 버전 변경 내용: %s" % ", ".join(latest_notes)
+		_add_release_log(release, is_latest)
 	var navigation := HBoxContainer.new()
 	navigation.alignment = BoxContainer.ALIGNMENT_END
 	navigation.add_theme_constant_override("separation", 16)
@@ -536,25 +542,50 @@ func _show_version_info() -> void:
 	overlay_content.add_child(navigation)
 
 func _add_release_log(release: Dictionary, is_latest: bool) -> void:
+	var entry := PanelContainer.new()
+	entry.custom_minimum_size.y = 92
+	entry.add_theme_stylebox_override("panel", _panel_style(Color(COLOR_CYAN, 0.10) if is_latest else Color("#06101c88"), 16, Color.TRANSPARENT, 0, 0, 0))
 	var row := HBoxContainer.new()
-	row.custom_minimum_size.y = 66
-	row.add_theme_constant_override("separation", 22)
-	var version := Label.new()
-	version.text = "◈  v%s\n    %s" % [release.get("version", "-"), release.get("date", "")]
-	version.custom_minimum_size.x = 176
-	version.add_theme_font_size_override("font_size", 15)
-	version.add_theme_color_override("font_color", COLOR_CYAN if is_latest else COLOR_MUTED)
+	row.add_theme_constant_override("separation", 18)
+	entry.add_child(row)
+	var signal_bar := ColorRect.new()
+	signal_bar.custom_minimum_size.x = 5
+	signal_bar.color = COLOR_CYAN if is_latest else Color("#53617f88")
+	signal_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(signal_bar)
+	var version := VBoxContainer.new()
+	version.custom_minimum_size.x = 184
+	version.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(version)
+	var version_name := Label.new()
+	version_name.text = "v%s%s" % [release.get("version", "-"), "  ·  최신" if is_latest else ""]
+	version_name.add_theme_font_size_override("font_size", 18)
+	version_name.add_theme_color_override("font_color", COLOR_CYAN if is_latest else COLOR_TEXT)
+	version.add_child(version_name)
+	var date := Label.new()
+	date.text = str(release.get("date", ""))
+	date.add_theme_font_size_override("font_size", 12)
+	date.add_theme_color_override("font_color", COLOR_MUTED)
+	version.add_child(date)
 	var notes: Array = release.get("notes", [])
-	var copy := Label.new()
-	copy.text = "  ·  ".join(notes)
-	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	copy.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	copy.add_theme_font_size_override("font_size", 14)
-	copy.add_theme_color_override("font_color", COLOR_TEXT)
-	row.add_child(copy)
-	overlay_content.add_child(row)
+	var note_grid := GridContainer.new()
+	note_grid.columns = 2
+	note_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	note_grid.add_theme_constant_override("h_separation", 22)
+	note_grid.add_theme_constant_override("v_separation", 6)
+	row.add_child(note_grid)
+	for note in notes:
+		var copy := Label.new()
+		copy.text = "◆  %s" % note
+		copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		copy.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		copy.add_theme_font_size_override("font_size", 13)
+		copy.add_theme_color_override("font_color", COLOR_TEXT if is_latest else Color("#c7d0e6"))
+		note_grid.add_child(copy)
+	entry.accessibility_name = "버전 %s%s" % [release.get("version", "-"), ", 최신 버전" if is_latest else ""]
+	entry.accessibility_description = "%s. %s" % [release.get("date", ""), ", ".join(notes)]
+	overlay_content.add_child(entry)
 
 func _log_link_button(text_value: String, callback: Callable, accent: Color) -> Button:
 	var button := Button.new()
