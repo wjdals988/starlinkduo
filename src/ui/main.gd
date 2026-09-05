@@ -1985,19 +1985,32 @@ func _add_connection_action(text: String, callback: Callable, accent: Color) -> 
 
 func _main_action_button(title: String, subtitle: String, callback: Callable, accent: Color, primary: bool) -> Button:
 	var button := Button.new()
-	button.text = "%s\n%s" % [title, subtitle]
+	button.text = "%s  %s\n     %s" % ["◆" if primary else "◇", title.trim_prefix("▶  ").trim_prefix("◇  "), subtitle]
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.custom_minimum_size.y = 72 if primary else 62
+	button.custom_minimum_size.y = 76 if primary else 66
 	button.add_theme_font_size_override("font_size", 18 if primary else 16)
-	button.add_theme_color_override("font_color", Color.WHITE)
-	var normal_color := Color(accent, 0.68) if primary else Color("#101d36dd")
-	button.add_theme_stylebox_override("normal", _panel_style(normal_color, 18, Color.TRANSPARENT, 0, 22, 10))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.82 if primary else 0.28), 18, Color.TRANSPARENT, 0, 22, 10))
-	button.add_theme_stylebox_override("pressed", _panel_style(Color(accent, 0.92 if primary else 0.4), 18, Color.TRANSPARENT, 0, 22, 10))
-	button.add_theme_stylebox_override("focus", _focus_style(Color.WHITE if primary else accent, 18))
+	button.add_theme_color_override("font_color", Color.WHITE if primary else COLOR_TEXT)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_stylebox_override("normal", _main_menu_choice_style(accent, 0.18 if primary else 0.03, 5 if primary else 2))
+	button.add_theme_stylebox_override("hover", _main_menu_choice_style(accent, 0.30 if primary else 0.13, 6))
+	button.add_theme_stylebox_override("pressed", _main_menu_choice_style(accent, 0.42, 7))
+	button.add_theme_stylebox_override("focus", _main_menu_choice_style(Color.WHITE, 0.08, 6))
 	_set_button_accessibility(button, title, subtitle)
 	button.pressed.connect(callback)
 	return button
+
+func _main_menu_choice_style(accent: Color, fill_alpha: float, rail_width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(accent, fill_alpha)
+	style.border_color = Color(accent, 0.95)
+	style.border_width_left = rail_width
+	style.corner_radius_top_right = 18
+	style.corner_radius_bottom_right = 18
+	style.content_margin_left = 22
+	style.content_margin_right = 18
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	return style
 
 func _lobby_player_card(title: String, state_text: String, character_id: StringName, accent: Color, ready: bool) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -2060,7 +2073,9 @@ func _build_main_menu_art() -> Control:
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	badge.add_theme_font_size_override("font_size", 14)
 	badge.add_theme_color_override("font_color", COLOR_TEXT)
-	badge.add_theme_stylebox_override("normal", _panel_style(Color("#071426d9"), 18, Color.TRANSPARENT, 0, 12, 6))
+	badge.add_theme_color_override("font_shadow_color", Color("#000000e6"))
+	badge.add_theme_constant_override("shadow_offset_x", 2)
+	badge.add_theme_constant_override("shadow_offset_y", 2)
 	stage.add_child(badge)
 	return stage
 
