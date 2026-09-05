@@ -106,6 +106,8 @@ func _test_initial_state() -> void:
 	var tap_tone: AudioStreamWAV = main_script._synth_ui_tone([520.0], 0.055)
 	var confirm_tone: AudioStreamWAV = main_script._synth_ui_tone([440.0, 660.0, 880.0], 0.16)
 	_expect(tap_tone.data.size() > 2000 and confirm_tone.data.size() > tap_tone.data.size(), "procedural tap and confirmation effects contain distinct PCM envelopes")
+	_expect(main_script._relic_effect_text({"trigger": "combat_end", "effect": "heal", "value": 3}) == "전투 종료 · 내구도 +3", "shop relic preview exposes trigger and effect before purchase")
+	_expect(main_script._consumable_effect_text({"effect": "draw", "value": 2}) == "카드 2장 드로우", "shop consumable preview exposes its immediate effect before purchase")
 	main_script.free()
 
 func _test_simultaneous_resolution() -> void:

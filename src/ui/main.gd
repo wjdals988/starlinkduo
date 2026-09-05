@@ -2750,13 +2750,14 @@ func _show_event() -> void:
 	signal_id.add_theme_color_override("font_color", COLOR_MUTED)
 	emblem.add_child(signal_id)
 	event_header.add_child(emblem)
-	var status_column := VBoxContainer.new()
-	status_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	status_column.add_theme_constant_override("separation", 8)
-	event_header.add_child(status_column)
+	var status_row := HBoxContainer.new()
+	status_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_row.alignment = BoxContainer.ALIGNMENT_END
+	status_row.add_theme_constant_override("separation", 34)
+	event_header.add_child(status_row)
 	for slot in 2:
 		var voted := votes.has(slot) or votes.has(str(slot))
-		status_column.add_child(_status_chip("P%d  ·  %s" % [slot + 1, "선택 완료" if voted else "선택 중"], COLOR_BLUE if slot == 0 else COLOR_ORANGE))
+		status_row.add_child(_event_vote_status(slot, voted))
 	overlay_content.add_child(event_header)
 	var risky_choice: Dictionary = event.choices[0]
 	var risk := int(risky_choice.risk)
@@ -2782,6 +2783,33 @@ func _show_event() -> void:
 		choice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		choices.add_child(choice_button)
 	_info_panel("협동 판정", "두 플레이어가 각각 선택합니다. 같은 선택은 그대로 실행되고, 선택이 다르면 안전과 보상 사이의 절충 결과를 적용합니다.", Color("#bc8cff"))
+
+func _event_vote_status(slot: int, voted: bool) -> HBoxContainer:
+	var station := HBoxContainer.new()
+	station.custom_minimum_size = Vector2(260, 76)
+	station.add_theme_constant_override("separation", 10)
+	var portrait := TextureRect.new()
+	portrait.custom_minimum_size = Vector2(64, 76)
+	portrait.texture = load(_character_portrait(run_coordinator.run.characters[slot]))
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	station.add_child(portrait)
+	var copy := VBoxContainer.new()
+	copy.alignment = BoxContainer.ALIGNMENT_CENTER
+	copy.add_theme_constant_override("separation", 3)
+	var callsign := Label.new()
+	callsign.text = "P%d · %s" % [slot + 1, _character_name(run_coordinator.run.characters[slot])]
+	callsign.add_theme_font_size_override("font_size", 15)
+	callsign.add_theme_color_override("font_color", COLOR_BLUE if slot == 0 else COLOR_ORANGE)
+	copy.add_child(callsign)
+	var state_label := Label.new()
+	state_label.text = "✓ 선택 완료" if voted else "◌ 선택 신호 대기"
+	state_label.add_theme_font_size_override("font_size", 14)
+	state_label.add_theme_color_override("font_color", COLOR_CYAN if voted else COLOR_MUTED)
+	copy.add_child(state_label)
+	station.add_child(copy)
+	return station
 
 func _choose_event(choice_index: int) -> void:
 	var result := cooperative_session.submit_event_choice(local_slot, choice_index) if cooperative_session != null else run_coordinator.submit_event_choice(local_slot, choice_index)
@@ -3140,14 +3168,17 @@ func _show_shop() -> void:
 	var item_row := HBoxContainer.new()
 	item_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	item_row.add_theme_constant_override("separation", 10)
+	var run_content := RunContentCatalog.build()
 	for relic in inventory.relics:
 		var relic_sold := run_coordinator.run.shop_purchases[local_slot].has("relic:%s" % String(relic.id))
-		var relic_button := _shop_item_button("유물 · %s\n%s" % [relic.name, "✓ 판매 완료" if relic_sold else "%d C" % relic.price], COLOR_BLUE, relic_sold or run_coordinator.run.gold[local_slot] < int(relic.price))
+		var relic_detail := _content_item_by_id(run_content.relics, relic.id)
+		var relic_button := _shop_item_button("✦  유물 · %s\n%s\n%s" % [relic.name, _relic_effect_text(relic_detail), "✓ 판매 완료" if relic_sold else "%d C · 장착" % relic.price], COLOR_BLUE, relic_sold or run_coordinator.run.gold[local_slot] < int(relic.price))
 		relic_button.pressed.connect(_buy_shop_relic.bind(relic))
 		item_row.add_child(relic_button)
 	for consumable in inventory.consumables:
 		var consumable_sold := run_coordinator.run.shop_purchases[local_slot].has("consumable:%s" % String(consumable.id))
-		var consumable_button := _shop_item_button("소비품 · %s\n%s" % [consumable.name, "✓ 판매 완료" if consumable_sold else "%d C" % consumable.price], COLOR_ORANGE, consumable_sold or run_coordinator.run.gold[local_slot] < int(consumable.price))
+		var consumable_detail := _content_item_by_id(run_content.consumables, consumable.id)
+		var consumable_button := _shop_item_button("◆  소비품 · %s\n%s\n%s" % [consumable.name, _consumable_effect_text(consumable_detail), "✓ 판매 완료" if consumable_sold else "%d C · 보관" % consumable.price], COLOR_ORANGE, consumable_sold or run_coordinator.run.gold[local_slot] < int(consumable.price))
 		consumable_button.pressed.connect(_buy_shop_consumable.bind(consumable))
 		item_row.add_child(consumable_button)
 	overlay_content.add_child(item_row)
@@ -3336,6 +3367,31 @@ func _consumable_effect_text(item: Dictionary) -> String:
 		"upgrade": "이번 전투 최대 에너지 +%d" % int(item.value),
 	}.get(String(item.effect), String(item.effect))
 
+func _content_item_by_id(items: Array, item_id: Variant) -> Dictionary:
+	for item in items:
+		if String(item.id) == String(item_id):
+			return item
+	return {}
+
+func _relic_effect_text(item: Dictionary) -> String:
+	if item.is_empty():
+		return "자동 발동 장비"
+	var trigger: String = {
+		"combat_start": "전투 시작",
+		"turn_start": "턴 시작",
+		"card_played": "카드 사용",
+		"support_played": "지원 사용",
+		"damage_taken": "피해 받을 때",
+		"combat_end": "전투 종료",
+	}.get(String(item.trigger), String(item.trigger))
+	var effect: String = {
+		"block": "방어 +%d" % int(item.value),
+		"energy": "에너지 +%d" % int(item.value),
+		"damage": "피해 %d" % int(item.value),
+		"heal": "내구도 +%d" % int(item.value),
+	}.get(String(item.effect), String(item.effect))
+	return "%s · %s" % [trigger, effect]
+
 func _buy_shop_card(entry: Dictionary) -> void:
 	if run_coordinator.buy_card(local_slot, entry):
 		_show_shop()
@@ -3350,15 +3406,16 @@ func _buy_shop_consumable(entry: Dictionary) -> void:
 
 func _shop_item_button(text: String, accent: Color, disabled: bool) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(210, 62)
+	button.custom_minimum_size = Vector2(218, 86)
 	button.text = text
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.disabled = disabled
 	_set_button_accessibility(button, _first_text_line(text), "%s. %s" % [_remaining_text_lines(text), "판매 완료 또는 구매 조건을 충족하지 못했습니다" if disabled else "두 번 탭하여 구매합니다"])
 	button.add_theme_font_size_override("font_size", 14)
-	button.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, 30, Color.TRANSPARENT, 0, 12, 6))
-	button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 30, Color.TRANSPARENT, 0, 12, 6))
-	button.add_theme_stylebox_override("disabled", _panel_style(Color.TRANSPARENT, 30, Color.TRANSPARENT, 0, 12, 6))
-	button.add_theme_stylebox_override("focus", _focus_style(accent, 30))
+	button.add_theme_stylebox_override("normal", _main_menu_choice_style(accent, 0.07, 3))
+	button.add_theme_stylebox_override("hover", _main_menu_choice_style(accent, 0.18, 4))
+	button.add_theme_stylebox_override("disabled", _main_menu_choice_style(Color("#59647a"), 0.03, 2))
+	button.add_theme_stylebox_override("focus", _main_menu_choice_style(accent, 0.16, 5))
 	return button
 
 func _show_mode_locked_notice(title: String, message: String) -> void:
