@@ -2656,9 +2656,9 @@ func _show_map() -> void:
 		for slot in 2:
 			if not run.pending_routes.has(slot):
 				remaining_slots.append("P%d" % [slot + 1])
-		route_guide.text = "P1 상단 · P2 하단  ·  %s 목적지를 선택하세요" % [" / ".join(remaining_slots)] if not remaining_slots.is_empty() else "P1 · P2 항로 선택 완료  ·  아래 버튼으로 진입"
+		route_guide.text = "P1 상단 · P2 하단  ·  %s 목적지를 선택하세요  ·  선택한 노드는 다시 변경 가능" % [" / ".join(remaining_slots)] if not remaining_slots.is_empty() else "P1 · P2 항로 선택 완료  ·  선택 변경 또는 아래 버튼으로 진입"
 	else:
-		route_guide.text = "P1 상단 · P2 하단  ·  자신의 밝게 점등된 목적지를 선택"
+		route_guide.text = "P1 상단 · P2 하단  ·  자신의 목적지를 선택  ·  진입 전 변경 가능"
 	route_guide.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	route_guide.add_theme_font_size_override("font_size", 12)
 	route_guide.add_theme_color_override("font_color", COLOR_MUTED)

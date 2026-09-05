@@ -58,20 +58,26 @@ func _add_node_button(option: Dictionary, slot: int, step_index: int, center: Ve
 	var accent := _type_color(node_type)
 	var is_current := step_index == current_step
 	var selection_slot := local_slot if slot < 0 else slot
-	var is_reachable := is_current and (slot < 0 or can_select_all_slots or slot == local_slot) and not pending_routes.has(selection_slot)
+	var has_selection := pending_routes.has(selection_slot)
+	var is_reachable := is_current and (slot < 0 or can_select_all_slots or slot == local_slot) and (slot >= 0 or not has_selection)
 	var selected_node_id := String(pending_routes.get(local_slot, "")) if slot < 0 else String(pending_routes.get(slot, ""))
 	var is_selected := is_current and selected_node_id == String(option.id)
 	button.disabled = not is_reachable
 	button.modulate = Color.WHITE if is_current else (Color(0.72, 0.80, 0.92, 0.84) if step_index > current_step else Color(0.52, 0.70, 0.82, 0.62))
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.add_theme_color_override("font_disabled_color", accent if is_selected else Color("#a7b2c7"))
-	button.add_theme_stylebox_override("normal", _diamond_style(Color(accent, 0.34), accent, 2))
+	button.add_theme_stylebox_override("normal", _diamond_style(Color(accent, 0.66 if is_selected else 0.34), Color.WHITE if is_selected else accent, 3 if is_selected else 2))
 	button.add_theme_stylebox_override("hover", _diamond_style(Color(accent, 0.58), Color.WHITE, 3))
 	button.add_theme_stylebox_override("pressed", _diamond_style(Color(accent, 0.76), Color.WHITE, 3))
 	button.add_theme_stylebox_override("disabled", _diamond_style(Color(accent, 0.28 if is_selected else 0.16), accent if is_selected else Color("#71819b"), 2 if is_selected else 1))
 	button.tooltip_text = "%s · %s" % [_label(node_type), _preview(node_type)]
 	button.accessibility_name = "%s 노드" % _label(node_type)
-	button.accessibility_description = "%s. %s" % [("공통" if slot < 0 else "P%d" % [slot + 1]), _preview(node_type)]
+	var selection_hint := ""
+	if is_selected and slot >= 0:
+		selection_hint = ". 현재 선택됨. 같은 대원의 다른 노드를 누르면 변경됩니다"
+	elif has_selection and slot >= 0:
+		selection_hint = ". 선택하면 기존 목적지를 변경합니다"
+	button.accessibility_description = "%s. %s%s" % [("공통" if slot < 0 else "P%d" % [slot + 1]), _preview(node_type), selection_hint]
 	if is_reachable:
 		button.pressed.connect(func() -> void: node_selected.emit(selection_slot, String(option.id)))
 	add_child(button)

@@ -237,7 +237,7 @@ func _test_route_map_selection_authority() -> void:
 	var p1_node: String = stage.steps[1].lanes[0].options[0].id
 	var solo_after_p1 := StarRouteMapView.new()
 	solo_after_p1.configure(stage, 1, 0, {0: p1_node}, true)
-	_expect(_enabled_button_count(solo_after_p1) == 2, "single-player map keeps both P2 choices available after selecting P1")
+	_expect(_enabled_button_count(solo_after_p1) == 4, "single-player map keeps both P1 and P2 choices available so P1 can be corrected before entry")
 	var multiplayer_map := StarRouteMapView.new()
 	multiplayer_map.configure(stage, 1, 0, {}, false)
 	_expect(_enabled_button_count(multiplayer_map) == 2, "multiplayer map limits each device to its local player's two branch options")
