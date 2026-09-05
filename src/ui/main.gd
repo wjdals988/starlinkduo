@@ -3213,6 +3213,7 @@ func _show_reward() -> void:
 		button.custom_minimum_size = Vector2(250, 248)
 		var accent := _scope_color(card.owner_scope)
 		button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, false, "＋ 이 카드 획득")
+		button.accessibility_description += ". 선택하면 나머지 두 장은 사라지고 즉시 저장됩니다"
 		button.add_theme_stylebox_override("normal", _panel_style(COLOR_PANEL, 18, accent, 3, 14, 10))
 		button.add_theme_stylebox_override("hover", _panel_style(Color(accent, 0.18), 18, accent, 4, 14, 10))
 		button.pressed.connect(_claim_reward.bind(card_id))
@@ -3239,6 +3240,7 @@ func _claim_reward(card_id: StringName) -> void:
 		acquired.custom_minimum_size = Vector2(280, 260)
 		var accent := _scope_color(card.owner_scope)
 		acquired.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, true, "✓ 덱에 추가됨")
+		acquired.accessibility_name = "%s 카드, 획득 완료" % card.display_name
 		acquired.disabled = true
 		acquired.add_theme_stylebox_override("disabled", _panel_style(Color(accent, 0.12), 18, accent, 3, 14, 10))
 		row.add_child(acquired)
