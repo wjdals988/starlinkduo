@@ -10,7 +10,9 @@ func configure(slot: int, count: int, color: Color) -> void:
 	card_count = count
 	accent = color
 	text = ""
-	tooltip_text = "P%d 드로우 덱 · %d장 남음" % [slot + 1, count]
+	# Touch input can leave a synthetic hover at the edge of the Android
+	# viewport, which otherwise leaks this tooltip above full-screen menus.
+	tooltip_text = "" if OS.has_feature("android") else "P%d 드로우 덱 · %d장 남음" % [slot + 1, count]
 	accessibility_name = "P%d 드로우 덱" % [slot + 1]
 	accessibility_description = "%d장 남음. 두 번 탭하여 현재 덱을 봅니다" % count
 	queue_redraw()
