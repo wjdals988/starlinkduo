@@ -2445,13 +2445,12 @@ func _show_boss_briefing(true_boss: bool) -> void:
 	confrontation.add_child(_briefing_actor(String(enemy_profile.texture), String(enemy.name), "보스 교전", accent, Vector2(300, 150)))
 	confrontation.add_child(_briefing_actor(_character_portrait(run.characters[1]), "P2 · %s" % _character_name(run.characters[1]), "덱 %d장" % run.decks[1].size(), COLOR_ORANGE, Vector2(150, 150)))
 	overlay_content.add_child(confrontation)
-	var metrics := HBoxContainer.new()
-	metrics.add_theme_constant_override("separation", 12)
-	metrics.add_child(_metric_card("적 내구도", "%d" % int(enemy.health), accent))
-	metrics.add_child(_metric_card("예고 피해", "팀에 %d" % int(enemy.intent_damage), COLOR_RED))
-	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run.team_health, run.team_max_health], COLOR_CYAN))
-	metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run.keys.count(true), COLOR_YELLOW))
-	overlay_content.add_child(metrics)
+	overlay_content.add_child(_game_status_line([
+		["☠", "적 내구도 %d" % int(enemy.health), accent],
+		["⚠", "예고 피해 %d" % int(enemy.intent_damage), COLOR_RED],
+		["♥", "팀 %d/%d" % [run.team_health, run.team_max_health], COLOR_CYAN],
+		["✦", "열쇠 %d/3" % run.keys.count(true), COLOR_YELLOW],
+	]))
 	var warning := "승리하면 런을 완주합니다. 패배 시 현재 체크포인트에서 다시 준비할 수 있습니다." if true_boss else "승리하면 다음 스테이지가 열립니다. P1/P2 보유 크레딧 %d + %d C · 진입 전 덱과 소비품을 점검하세요." % [run.gold[0], run.gold[1]]
 	_info_panel("최종 교전 브리핑" if true_boss else "보스 교전 브리핑", warning, accent)
 
@@ -2567,7 +2566,7 @@ func _finish_route_combat() -> void:
 
 func _show_event() -> void:
 	_clear_overlay()
-	_set_overlay_tall()
+	_set_overlay_immersive()
 	var event := run_coordinator.current_event()
 	if event.is_empty():
 		overlay_title.text = "이벤트 오류"
@@ -2606,13 +2605,12 @@ func _show_event() -> void:
 	overlay_content.add_child(event_header)
 	var risky_choice: Dictionary = event.choices[0]
 	var risk := int(risky_choice.risk)
-	var event_metrics := HBoxContainer.new()
-	event_metrics.add_theme_constant_override("separation", 12)
-	event_metrics.add_child(_metric_card("조사 성공률", "%d%%" % (65 - risk * 10), Color("#bc8cff")))
-	event_metrics.add_child(_metric_card("성공 보상", "각 +%d C" % (24 + risk * 8), COLOR_YELLOW))
-	event_metrics.add_child(_metric_card("실패 위험", "내구도 -%d" % (risk * 6), COLOR_RED))
-	event_metrics.add_child(_metric_card("안전 선택", "내구도 +4", COLOR_CYAN))
-	overlay_content.add_child(event_metrics)
+	overlay_content.add_child(_game_status_line([
+		["◌", "조사 성공 %d%%" % (65 - risk * 10), Color("#bc8cff")],
+		["◈", "성공 시 각 +%d C" % (24 + risk * 8), COLOR_YELLOW],
+		["⚠", "실패 시 내구도 -%d" % (risk * 6), COLOR_RED],
+		["♥", "안전 선택 +4", COLOR_CYAN],
+	]))
 	var local_voted := votes.has(local_slot) or votes.has(str(local_slot))
 	if local_voted:
 		_info_panel("내 선택 확정", "동료의 결정을 기다리고 있습니다. 두 선택이 다르면 이벤트 규칙에 따라 절충 결과가 적용됩니다.", COLOR_CYAN)
@@ -2647,6 +2645,7 @@ func _choose_event(choice_index: int) -> void:
 
 func _show_route_result(title: String, summary: String) -> void:
 	_clear_overlay()
+	_set_overlay_immersive()
 	var combat_victory := "승리" in title or "격파" in title
 	if combat_victory:
 		_set_overlay_immersive()
@@ -2734,13 +2733,12 @@ func _show_route_result(title: String, summary: String) -> void:
 	verdict_row.add_child(p2_status)
 	verdict.add_child(verdict_row)
 	overlay_content.add_child(verdict)
-	var metrics := HBoxContainer.new()
-	metrics.add_theme_constant_override("separation", 12)
-	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], COLOR_CYAN))
-	metrics.add_child(_metric_card("항로 진행", "%d / 8" % run_coordinator.run.step, COLOR_BLUE))
-	metrics.add_child(_metric_card("P1 크레딧", "%d C" % run_coordinator.run.gold[0], COLOR_BLUE))
-	metrics.add_child(_metric_card("P2 크레딧", "%d C" % run_coordinator.run.gold[1], COLOR_ORANGE))
-	overlay_content.add_child(metrics)
+	overlay_content.add_child(_game_status_line([
+		["♥", "팀 %d/%d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], COLOR_CYAN],
+		["⌁", "항로 %d/8" % run_coordinator.run.step, COLOR_BLUE],
+		["◈", "P1 %d C" % run_coordinator.run.gold[0], COLOR_BLUE],
+		["◈", "P2 %d C" % run_coordinator.run.gold[1], COLOR_ORANGE],
+	]))
 	_info_panel("체크포인트 저장 완료", "결과와 두 플레이어의 진행 상황을 이 기기에 저장했습니다.", COLOR_CYAN)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
@@ -2756,7 +2754,7 @@ func _show_route_result(title: String, summary: String) -> void:
 
 func _show_training_victory() -> void:
 	_clear_overlay()
-	_set_overlay_tall()
+	_set_overlay_immersive()
 	overlay_title.text = "훈련 전투 완료"
 	overlay_subtitle.text = "두 대원의 연계로 훈련 드론을 격파했습니다."
 	var hero := VBoxContainer.new()
@@ -2792,12 +2790,11 @@ func _show_training_victory() -> void:
 	crew.add_child(clear_mark)
 	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[1]), "P2 · %s" % _character_name(run_coordinator.run.characters[1]), "연계 전투 완료", COLOR_ORANGE, Vector2(190, 132)))
 	overlay_content.add_child(crew)
-	var metrics := HBoxContainer.new()
-	metrics.add_theme_constant_override("separation", 12)
-	metrics.add_child(_metric_card("전투 등급", grade, COLOR_YELLOW))
-	metrics.add_child(_metric_card("해결 턴", "%02d" % state.turn, COLOR_CYAN))
-	metrics.add_child(_metric_card("팀 생존", "%d / %d" % [state.team_health, state.team_max_health], COLOR_BLUE))
-	overlay_content.add_child(metrics)
+	overlay_content.add_child(_game_status_line([
+		["✦", "전투 등급 %s" % grade, COLOR_YELLOW],
+		["⌛", "%02d턴" % state.turn, COLOR_CYAN],
+		["♥", "팀 생존 %d/%d" % [state.team_health, state.team_max_health], COLOR_BLUE],
+	]))
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
 	var retry := _action_button("↻  다시 훈련", _activate_mode.bind("cooperative"), COLOR_BLUE, 64)
@@ -2810,7 +2807,7 @@ func _show_training_victory() -> void:
 
 func _show_run_outcome(victory: bool) -> void:
 	_clear_overlay()
-	_set_overlay_compact(true)
+	_set_overlay_immersive()
 	overlay_title.text = "런 완주 · 두 별의 승리" if victory else "런 종료 · 열쇠 부족"
 	overlay_subtitle.text = "별을 삼키는 자를 격파했습니다. 최종 기록이 저장되었습니다." if victory else "3개 열쇠를 모두 확보하지 못해 진 최종 보스에 진입할 수 없습니다."
 	var outcome_color := COLOR_CYAN if victory else COLOR_RED
@@ -2833,13 +2830,12 @@ func _show_run_outcome(victory: bool) -> void:
 	crew.add_child(outcome_mark)
 	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[1]), "P2 · %s" % _character_name(run_coordinator.run.characters[1]), "최종 덱 %d장" % run_coordinator.run.decks[1].size(), COLOR_ORANGE, Vector2(210, 150)))
 	overlay_content.add_child(crew)
-	var metrics := HBoxContainer.new()
-	metrics.add_theme_constant_override("separation", 12)
-	metrics.add_child(_metric_card("팀 내구도", "%d / %d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], outcome_color))
-	metrics.add_child(_metric_card("확보한 열쇠", "%d / 3" % run_coordinator.run.keys.count(true), COLOR_YELLOW))
-	metrics.add_child(_metric_card("도달 스테이지", "%d / 3" % run_coordinator.run.stage, COLOR_BLUE))
-	metrics.add_child(_metric_card("최종 재화", "%d + %d C" % [run_coordinator.run.gold[0], run_coordinator.run.gold[1]], COLOR_ORANGE))
-	overlay_content.add_child(metrics)
+	overlay_content.add_child(_game_status_line([
+		["♥", "팀 %d/%d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], outcome_color],
+		["✦", "열쇠 %d/3" % run_coordinator.run.keys.count(true), COLOR_YELLOW],
+		["⌁", "STAGE %d/3" % run_coordinator.run.stage, COLOR_BLUE],
+		["◈", "%d + %d C" % [run_coordinator.run.gold[0], run_coordinator.run.gold[1]], COLOR_ORANGE],
+	]))
 	_info_panel("원정 기록 저장됨", "완료된 런의 편성·덱·항로 결과를 로컬 체크포인트에 반영했습니다.", outcome_color)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
@@ -2851,42 +2847,11 @@ func _show_run_outcome(victory: bool) -> void:
 	actions.add_child(main_button)
 	overlay_content.add_child(actions)
 
-func _metric_card(title: String, value: String, accent: Color) -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.custom_minimum_size.y = 74
-	panel.add_theme_stylebox_override("panel", _panel_style(Color.TRANSPARENT, 0, Color.TRANSPARENT, 0, 10, 6))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	panel.add_child(row)
-	var accent_bar := ColorRect.new()
-	accent_bar.color = accent
-	accent_bar.custom_minimum_size = Vector2(4, 46)
-	accent_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(accent_bar)
-	var copy := VBoxContainer.new()
-	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	copy.alignment = BoxContainer.ALIGNMENT_CENTER
-	copy.add_theme_constant_override("separation", 0)
-	row.add_child(copy)
-	var title_label := Label.new()
-	title_label.text = title.to_upper()
-	title_label.accessibility_name = title
-	title_label.accessibility_description = value
-	title_label.add_theme_font_size_override("font_size", 12)
-	title_label.add_theme_color_override("font_color", COLOR_MUTED)
-	copy.add_child(title_label)
-	var value_label := Label.new()
-	value_label.text = value
-	value_label.add_theme_font_size_override("font_size", 21)
-	value_label.add_theme_color_override("font_color", accent)
-	copy.add_child(value_label)
-	return panel
-
-func _game_status_line(items: Array) -> HBoxContainer:
-	var line := HBoxContainer.new()
-	line.alignment = BoxContainer.ALIGNMENT_CENTER
+func _game_status_line(items: Array) -> HFlowContainer:
+	var line := HFlowContainer.new()
+	line.alignment = FlowContainer.ALIGNMENT_CENTER
 	line.add_theme_constant_override("separation", 30)
+	line.add_theme_constant_override("v_separation", 8)
 	line.custom_minimum_size.y = 38
 	for item in items:
 		var status := Label.new()
@@ -3110,7 +3075,7 @@ func _show_consumables() -> void:
 		_show_mode_locked_notice("아이템", "유물과 소비 아이템은 결투 밸런스에서 제외됩니다.")
 		return
 	_clear_overlay()
-	_set_overlay_compact(true)
+	_set_overlay_immersive()
 	overlay_title.text = "소비 아이템"
 	var relic_names: Array[String] = []
 	for relic_id in run_coordinator.run.relics[local_slot]:
@@ -3341,7 +3306,7 @@ func _show_duel_outcome() -> void:
 	if game_mode != "duel" or duel_state == null or duel_state.phase != DuelState.Phase.FINISHED:
 		return
 	_clear_overlay()
-	_set_overlay_balanced()
+	_set_overlay_immersive()
 	overlay_title.text = "결투 종료 · 무승부" if duel_state.winner == -1 else "결투 종료 · P%d 승리" % (duel_state.winner + 1)
 	overlay_subtitle.text = "최종 내구도 P1 %d / %d · P2 %d / %d · %d턴" % [duel_state.health[0], duel_state.max_health[0], duel_state.health[1], duel_state.max_health[1], duel_state.turn]
 	var emblem := Label.new()
@@ -3352,12 +3317,11 @@ func _show_duel_outcome() -> void:
 	emblem.add_theme_font_size_override("font_size", 52)
 	emblem.add_theme_color_override("font_color", COLOR_MUTED if duel_state.winner == -1 else (COLOR_BLUE if duel_state.winner == 0 else COLOR_ORANGE))
 	overlay_content.add_child(emblem)
-	var metrics := HBoxContainer.new()
-	metrics.add_theme_constant_override("separation", 12)
-	metrics.add_child(_metric_card("P1 최종 내구도", "%d / %d" % [duel_state.health[0], duel_state.max_health[0]], COLOR_BLUE))
-	metrics.add_child(_metric_card("해결 턴", "%02d" % duel_state.turn, COLOR_CYAN))
-	metrics.add_child(_metric_card("P2 최종 내구도", "%d / %d" % [duel_state.health[1], duel_state.max_health[1]], COLOR_ORANGE))
-	overlay_content.add_child(metrics)
+	overlay_content.add_child(_game_status_line([
+		["♥", "P1 %d/%d" % [duel_state.health[0], duel_state.max_health[0]], COLOR_BLUE],
+		["⌛", "%02d턴" % duel_state.turn, COLOR_CYAN],
+		["♥", "P2 %d/%d" % [duel_state.health[1], duel_state.max_health[1]], COLOR_ORANGE],
+	]))
 	_info_panel("공정한 결투 기록", "원정 성장과 소비 아이템을 제외한 표준 덱 결과입니다. 재대결하면 같은 편성과 초기 조건으로 다시 시작합니다.", COLOR_CYAN)
 	if cooperative_session == null or cooperative_session.role == CooperativeSession.Role.HOST:
 		var actions := HBoxContainer.new()
