@@ -1713,6 +1713,15 @@ func _close_overlay() -> void:
 	if overlay_title.text == "훈련 전투 완료":
 		_return_to_main_menu()
 		return
+	if overlay_title.text in ["진행 중인 게임이 있습니다", "완료된 원정 기록이 있습니다", "종료된 원정 기록이 있습니다"]:
+		_show_main_menu()
+		return
+	if overlay_title.text == "새 원정을 시작할까요?":
+		if game_started:
+			_show_hub()
+		else:
+			_show_main_menu()
+		return
 	if game_started and overlay_title.text == "현재 덱" and run_coordinator.run.phase in ["completed", "failed"]:
 		_show_run_outcome(run_coordinator.run.phase == "completed")
 		return
