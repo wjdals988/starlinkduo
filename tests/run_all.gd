@@ -116,6 +116,8 @@ func _test_initial_state() -> void:
 	_expect(main_script._starter_deck_profile(&"guardian") == "시작덱 8 · 공4 방3 지1 전0", "guardian roster profile keeps all five deck metrics")
 	_expect(main_script._starter_deck_profile_compact(&"guardian") == "8장 · 공4 방3\n지1 전0", "large-text roster profile preserves every deck metric across two lines")
 	_expect(main_script._roster_role_legend().contains("지원(턴당 1장)"), "roster legend explains the support-card limit beside abbreviated deck metrics")
+	_expect(main_script._setting_toggle_accessibility_description(true) == "현재 켜짐. 두 번 탭하여 설정을 변경합니다", "enabled setting toggle announces only its current state and action")
+	_expect(main_script._setting_toggle_accessibility_description(false) == "현재 꺼짐. 두 번 탭하여 설정을 변경합니다", "disabled setting toggle announces only its current state and action")
 	_expect(main_script._disabled_character_reason(0, &"guardian", true, true) == "현재 선택된 직업입니다", "selected portrait announces why it cannot be selected again")
 	_expect(main_script._disabled_character_reason(0, &"engineer", true, true) == "다른 플레이어가 이미 선택한 직업입니다", "teammate portrait announces why it is unavailable")
 	_expect(main_script._disabled_character_reason(0, &"hacker", true, true).contains("두 번 탭"), "available portrait announces its selection action")

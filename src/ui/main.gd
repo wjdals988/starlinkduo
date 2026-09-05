@@ -1072,14 +1072,18 @@ func _add_setting_toggle(title: String, description: String, value: bool, callba
 	toggle.text = "켜짐" if value else "꺼짐"
 	toggle.button_pressed = value
 	toggle.accessibility_name = title
-	toggle.accessibility_description = "%s. 두 번 탭하여 설정을 변경합니다" % description
+	toggle.accessibility_description = _setting_toggle_accessibility_description(value)
 	toggle.custom_minimum_size = Vector2(120, 48)
 	toggle.toggled.connect(func(enabled: bool) -> void:
 		toggle.text = "켜짐" if enabled else "꺼짐"
+		toggle.accessibility_description = _setting_toggle_accessibility_description(enabled)
 		callback.call(enabled)
 	)
 	content.add_child(toggle)
 	overlay_content.add_child(row)
+
+func _setting_toggle_accessibility_description(enabled: bool) -> String:
+	return "현재 %s. 두 번 탭하여 설정을 변경합니다" % ("켜짐" if enabled else "꺼짐")
 
 func _add_settings_note(title: String, body: String, accent: Color) -> void:
 	var row := HBoxContainer.new()
