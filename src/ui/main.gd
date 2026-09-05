@@ -2419,6 +2419,14 @@ func _show_roster() -> void:
 		identity.pressed.connect(_set_roster_edit_slot.bind(slot))
 		crew_row.add_child(identity)
 	overlay_content.add_child(crew_row)
+	var role_legend := Label.new()
+	role_legend.text = _roster_role_legend()
+	role_legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	role_legend.add_theme_font_size_override("font_size", 12)
+	role_legend.add_theme_color_override("font_color", COLOR_MUTED)
+	role_legend.accessibility_name = "시작 덱 역할 범례"
+	role_legend.accessibility_description = "공격, 방어, 지원, 전술 카드 수를 뜻하며 지원 카드는 한 턴에 한 장만 사용할 수 있습니다"
+	overlay_content.add_child(role_legend)
 	var lineup := HBoxContainer.new()
 	lineup.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lineup.add_theme_constant_override("separation", 8)
@@ -2526,6 +2534,9 @@ func _character_name(character_id: StringName) -> String:
 func _starter_deck_profile(character_id: StringName) -> String:
 	var counts := _starter_deck_role_counts(character_id)
 	return "시작덱 %d · 공%d 방%d 지%d 전%d" % [counts.total, counts.attack, counts.defense, counts.support, counts.tactic]
+
+func _roster_role_legend() -> String:
+	return "공  공격   ·   방  방어   ·   지  지원(턴당 1장)   ·   전  전술"
 
 func _starter_deck_profile_compact(character_id: StringName) -> String:
 	var counts := _starter_deck_role_counts(character_id)
