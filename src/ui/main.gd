@@ -839,7 +839,7 @@ func _show_current_deck() -> void:
 		draw_count = player.draw_pile.size()
 		discard_count = player.discard_pile.size()
 		progression_deck_count = deck.size()
-	elif state != null and state.players.size() > local_slot:
+	elif state != null and state.players.size() > local_slot and (active_route_combat or (game_started and run_coordinator.is_pristine_run())):
 		var player := state.players[local_slot]
 		deck.append_array(player.draw_pile)
 		deck.append_array(player.hand)
@@ -857,6 +857,7 @@ func _show_current_deck() -> void:
 	var attack_count := 0
 	var defense_count := 0
 	var support_count := 0
+	var tactic_count := 0
 	for card_id in deck:
 		if catalog.has(StringName(card_id)):
 			var deck_card: CardData = catalog[StringName(card_id)]
@@ -864,13 +865,22 @@ func _show_current_deck() -> void:
 			match _card_tactical_role(deck_card):
 				"attack": attack_count += 1
 				"defense": defense_count += 1
-				_: support_count += 1
-	var deck_status := Label.new()
-	deck_status.text = "원정 %d장    평균 비용 %.1f    공격 %d  ·  방어 %d  ·  지원 %d    손 %d  ·  뽑을 카드 %d  ·  버린 카드 %d" % [progression_deck_count, float(total_cost) / maxf(float(deck.size()), 1.0), attack_count, defense_count, support_count, hand_count, draw_count, discard_count]
-	deck_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	deck_status.add_theme_font_size_override("font_size", 14)
-	deck_status.add_theme_color_override("font_color", COLOR_MUTED)
-	overlay_content.add_child(deck_status)
+				"support": support_count += 1
+				_: tactic_count += 1
+	overlay_subtitle.text = "P%d  ·  %d장 / %d종  ·  평균 에너지 %.1f" % [local_slot + 1, deck.size(), counts.size(), float(total_cost) / maxf(float(deck.size()), 1.0)]
+	overlay_content.add_child(_game_status_line([
+		["⚔", "공격 %d" % attack_count, Color("#ef536c")],
+		["⬡", "방어 %d" % defense_count, Color("#4d91ec")],
+		["＋", "지원 %d · 1/턴" % support_count, Color("#24b987")],
+		["✦", "전술 %d" % tactic_count, Color("#9a70df")],
+	]))
+	if hand_count + draw_count + discard_count > 0:
+		var pile_status := Label.new()
+		pile_status.text = "현재 전투   손 %d   ⌁   드로우 %d   ⌁   버림 %d   ·   원정 덱 %d장" % [hand_count, draw_count, discard_count, progression_deck_count]
+		pile_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pile_status.add_theme_font_size_override("font_size", 13)
+		pile_status.add_theme_color_override("font_color", COLOR_MUTED)
+		overlay_content.add_child(pile_status)
 	var ids := counts.keys()
 	ids.sort_custom(func(a: Variant, b: Variant) -> bool: return String(a) < String(b))
 	var grid := GridContainer.new()
@@ -1900,7 +1910,7 @@ func _debug_ui_preview_name() -> String:
 
 func _show_debug_ui_preview(preview_name: String) -> void:
 	if preview_name == "gallery":
-		for gallery_screen in ["reward", "shop", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
+		for gallery_screen in ["roster", "map", "deck", "hub", "reward", "shop", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
 			_show_debug_ui_preview(gallery_screen)
 			print("STARLINK_UI_PREVIEW %s" % gallery_screen)
 			await get_tree().create_timer(2.0).timeout
@@ -1910,6 +1920,14 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 	local_slot = 0
 	var run := run_coordinator.run
 	match preview_name:
+		"roster":
+			_show_roster()
+		"map":
+			_show_map()
+		"deck":
+			_show_current_deck()
+		"hub":
+			_show_hub()
 		"reward":
 			run.pending_card_rewards[0] = true
 			_show_reward()
@@ -2405,6 +2423,7 @@ func _starter_deck_profile(character_id: StringName) -> String:
 	var attack := 0
 	var defense := 0
 	var support := 0
+	var tactic := 0
 	for card_id in deck:
 		if not catalog.has(StringName(card_id)):
 			continue
@@ -2414,16 +2433,20 @@ func _starter_deck_profile(character_id: StringName) -> String:
 			attack += 1
 		elif kind == "defense":
 			defense += 1
-		else:
+		elif kind == "support":
 			support += 1
-	return "시작덱 %d · 공%d 방%d 지%d" % [deck.size(), attack, defense, support]
+		else:
+			tactic += 1
+	return "시작덱 %d · 공%d 방%d 지%d 전%d" % [deck.size(), attack, defense, support, tactic]
 
 func _card_tactical_role(card: CardData) -> String:
+	if card.is_support():
+		return "support"
 	if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == "damage"):
 		return "attack"
 	if card.effects.any(func(effect: Dictionary) -> bool: return String(effect.get("type", "")) == "block"):
 		return "defense"
-	return "support"
+	return "tactic"
 
 func _character_role(character_id: StringName) -> String:
 	return {
