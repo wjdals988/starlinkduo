@@ -15,6 +15,7 @@ func _init() -> void:
 	_test_deterministic_hash()
 	_test_loopback_transport()
 	_test_run_map_generation()
+	_test_legacy_route_map_migration()
 	_test_reward_and_shop_generation()
 	_test_run_save_round_trip()
 	_test_run_coordinator_economy()
@@ -209,6 +210,22 @@ func _test_run_map_generation() -> void:
 				if not required.values().all(func(value: bool) -> bool: return value):
 					invalid_seed_count += 1
 	_expect(invalid_seed_count == 0, "10,000 map seeds preserve every lane guarantee")
+
+func _test_legacy_route_map_migration() -> void:
+	var coordinator := RunCoordinator.new(FullCardCatalog.build(), RunSaveStore.new("user://legacy-map-migration.json"))
+	coordinator.start_new(7301)
+	var legacy_opening: Dictionary = coordinator.run.map.stages[0].steps[1].duplicate(true)
+	legacy_opening.index = 0
+	coordinator.run.map.stages[0].steps[0] = legacy_opening
+	coordinator.run.map.stages[1].steps[0] = legacy_opening.duplicate(true)
+	_expect(coordinator._migrate_route_map_layout(), "legacy route maps are detected before the first node")
+	_expect(coordinator.run.map.stages[0].steps[0].kind == "common" and coordinator.run.map.stages[0].steps[0].options[0].type == "combat", "an unstarted stage migrates to one shared opening combat")
+	coordinator.run.step = 1
+	coordinator.run.map.stages[0].steps[0] = legacy_opening.duplicate(true)
+	coordinator.run.map.stages[1].steps[0] = legacy_opening.duplicate(true)
+	_expect(coordinator._migrate_route_map_layout(), "future stages migrate while an active stage is preserved")
+	_expect(coordinator.run.map.stages[0].steps[0].kind == "parallel", "migration does not rewrite the current stage after route progress")
+	_expect(coordinator.run.map.stages[1].steps[0].kind == "common", "migration repairs a future stage before it begins")
 
 func _test_reward_and_shop_generation() -> void:
 	var catalog := DemoCardCatalog.build()

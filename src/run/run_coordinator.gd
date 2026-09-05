@@ -46,7 +46,37 @@ func is_pristine_run() -> bool:
 
 func resume_or_start(seed: int) -> RunState:
 	run = save_store.load_active()
-	return run if run != null else start_new(seed)
+	if run == null:
+		return start_new(seed)
+	if _migrate_route_map_layout():
+		checkpoint("map_layout_migrated")
+	return run
+
+func _migrate_route_map_layout() -> bool:
+	if run == null or run.map.is_empty() or not run.map.has("stages"):
+		return false
+	var fresh_map := MapGenerator.new().generate_run(run.seed)
+	var stages: Array = run.map.get("stages", [])
+	var fresh_stages: Array = fresh_map.stages
+	var changed := false
+	for stage_index in mini(stages.size(), fresh_stages.size()):
+		var stage_number := stage_index + 1
+		var is_completed_stage := stage_number < run.stage
+		var current_stage_in_progress := stage_number == run.stage and (run.step > 0 or not run.pending_routes.is_empty())
+		if is_completed_stage or current_stage_in_progress:
+			continue
+		if not _stage_opens_with_shared_combat(stages[stage_index]):
+			stages[stage_index] = fresh_stages[stage_index].duplicate(true)
+			changed = true
+	return changed
+
+func _stage_opens_with_shared_combat(stage: Dictionary) -> bool:
+	var steps: Array = stage.get("steps", [])
+	if steps.is_empty():
+		return false
+	var opening: Dictionary = steps[0]
+	var options: Array = opening.get("options", [])
+	return opening.get("kind", "") == "common" and options.size() == 1 and options[0].get("type", "") == "combat"
 
 func current_card_reward(player_slot: int, encounter_type: String = "combat") -> Array[StringName]:
 	if not _valid_slot(player_slot) or not run.pending_card_rewards[player_slot]:
