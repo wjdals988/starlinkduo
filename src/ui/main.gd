@@ -3723,6 +3723,7 @@ func _rebuild_hand() -> void:
 		var card: CardData = catalog[card_id]
 		var card_button := preload("res://src/ui/card_button.gd").new()
 		var selected := selected_hand_indices.has(hand_index)
+		var selection_order := selected_hand_indices.find(hand_index) + 1 if selected else 0
 		var card_slot := Control.new()
 		card_slot.custom_minimum_size = Vector2(174, 182)
 		card_slot.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -3730,7 +3731,7 @@ func _rebuild_hand() -> void:
 		card_button.position = Vector2(0, 0 if selected else 12)
 		card_button.size = Vector2(174, 168)
 		var accent := _scope_color(card.owner_scope)
-		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected, "", false)
+		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected, "", false, selection_order)
 		var base_color := Color(accent, 0.22) if selected else COLOR_PANEL
 		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 16, Color.TRANSPARENT, 0, 12, 8))
 		card_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 16, Color.TRANSPARENT, 0, 12, 8))

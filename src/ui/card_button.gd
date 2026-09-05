@@ -12,7 +12,7 @@ var role_accent := Color("#bc8cff")
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
 const CardIdentity := preload("res://src/ui/card_identity_visual.gd")
 
-func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "", show_footer: bool = true) -> void:
+func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "", show_footer: bool = true, selection_order: int = 0) -> void:
 	accent = accent_color
 	selected = is_selected
 	seed_value = String(card.id).hash()
@@ -25,7 +25,7 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	# so a hidden native button caption would not improve TalkBack and can cause duplicate rendering.
 	text = ""
 	tooltip_text = "%s · %s · %s · 에너지 %d" % [card.display_name, _role_name(card_role), effect_text, card.energy_cost]
-	accessibility_name = "%s 카드%s" % [card.display_name, ", 선택됨" if is_selected else ""]
+	accessibility_name = "%s 카드%s" % [card.display_name, ", 행동 큐 %d번 선택됨" % selection_order if is_selected and selection_order > 0 else (", 선택됨" if is_selected else "")]
 	var action_hint := footer_text if not footer_text.is_empty() else ("누르면 선택을 취소합니다" if is_selected else "누르면 행동 큐에 추가합니다")
 	accessibility_description = "%s, %s, 에너지 %d, %s, 대상 %s. %s" % [
 		rarity_text.lstrip("●◆✦ "),
@@ -66,6 +66,15 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	meta.add_child(spacer)
+	if is_selected and selection_order > 0:
+		var order_badge := PanelContainer.new()
+		order_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		order_badge.add_theme_stylebox_override("panel", _badge_style(Color.WHITE, 9))
+		var order := _label("%d번" % selection_order, 11, Color("#09152b"))
+		order.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		order.custom_minimum_size.x = 30
+		order_badge.add_child(order)
+		meta.add_child(order_badge)
 	var role_badge := PanelContainer.new()
 	role_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	role_badge.add_theme_stylebox_override("panel", _badge_style(role_accent, 9))

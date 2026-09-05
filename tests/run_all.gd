@@ -5,6 +5,7 @@ const EnemyAura := preload("res://src/ui/enemy_visual.gd")
 const CardFrames := preload("res://src/ui/card_frame_visual.gd")
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
 const CardIdentity := preload("res://src/ui/card_identity_visual.gd")
+const CardButtonView := preload("res://src/ui/card_button.gd")
 const StarRouteMapView := preload("res://src/ui/star_route_map.gd")
 
 var failures: Array[String] = []
@@ -98,6 +99,11 @@ func _test_initial_state() -> void:
 	_expect(custom_training.players[0].character_id == &"hacker" and custom_training.players[1].character_id == &"medic", "training combat preserves selected character identities")
 	_expect(custom_training.players[0].hand.all(func(card_id: StringName) -> bool: return full_catalog[card_id].owner_scope in [CardData.Scope.HACKER, CardData.Scope.NEUTRAL]), "hacker training hand contains only hacker or neutral cards")
 	_expect(custom_training.players[1].hand.all(func(card_id: StringName) -> bool: return full_catalog[card_id].owner_scope in [CardData.Scope.MEDIC, CardData.Scope.NEUTRAL]), "medic training hand contains only medic or neutral cards")
+	var ordered_card := CardButtonView.new()
+	ordered_card.configure(full_catalog[&"guardian_strike"], "일반 · 수호자", "피해 7", Color.WHITE, true, "", false, 2)
+	_expect(String(ordered_card.accessibility_name).contains("행동 큐 2번 선택됨"), "selected combat card announces its exact resolution order")
+	_expect(ordered_card.get_child_count() > 1, "selected combat card renders its order badge")
+	ordered_card.free()
 	var main_script: Variant = load("res://src/ui/main.gd").new()
 	main_script.system_font_scale = 1.0
 	main_script.large_text_enabled = false
