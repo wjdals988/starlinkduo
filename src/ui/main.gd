@@ -1653,6 +1653,10 @@ func _set_overlay_compact(compact: bool, dense: bool = false) -> void:
 func _set_overlay_minimal() -> void:
 	if overlay_panel == null:
 		return
+	main_menu_backdrop.visible = true
+	main_menu_shade.visible = true
+	main_menu_shade.color = Color("#020a18df")
+	overlay_scrim.color = Color.TRANSPARENT
 	overlay_panel.offset_left = 150
 	overlay_panel.offset_right = -150
 	var enlarged_text := _effective_text_scale() >= 1.20
@@ -2006,9 +2010,11 @@ func _on_multiplayer_reset_requested(requester_slot: int) -> void:
 	actions.add_theme_constant_override("separation", 12)
 	var decline := _action_button("거절 · 진행 유지", _respond_multiplayer_reset.bind(false), COLOR_CYAN, 64)
 	decline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_set_button_accessibility(decline, "초기화 거절, 진행 유지", "양쪽 기기의 현재 체크포인트, 덱, 보상, 재화를 모두 유지합니다")
 	actions.add_child(decline)
 	var accept := _action_button("동의 · 처음부터", _respond_multiplayer_reset.bind(true), COLOR_RED, 64)
 	accept.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_set_button_accessibility(accept, "초기화 동의, 처음부터", "상대의 요청을 승인하고 양쪽 기기의 현재 협동 원정을 새 원정으로 교체합니다")
 	actions.add_child(accept)
 	overlay_content.add_child(actions)
 
@@ -2061,7 +2067,7 @@ func _debug_ui_preview_name() -> String:
 
 func _show_debug_ui_preview(preview_name: String) -> void:
 	if preview_name == "gallery":
-		for gallery_screen in ["settings", "version_update", "roster", "map", "deck", "hub", "quick_chat", "reward", "shop", "remove_card_picker", "remove_card_confirm", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
+		for gallery_screen in ["settings", "version_update", "roster", "map", "deck", "hub", "quick_chat", "reward", "shop", "remove_card_picker", "remove_card_confirm", "event", "route_result", "training_victory", "run_victory", "run_failed", "multiplayer_reset_consent", "consumables"]:
 			_show_debug_ui_preview(gallery_screen)
 			print("STARLINK_UI_PREVIEW %s" % gallery_screen)
 			await get_tree().create_timer(2.0).timeout
@@ -2165,6 +2171,9 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 			run.step = 5
 			run.keys = [true, false, false]
 			_show_run_outcome(false)
+		"multiplayer_reset_consent":
+			game_started = false
+			_on_multiplayer_reset_requested(1)
 		"consumables":
 			var content := RunContentCatalog.build()
 			run.consumables[0] = [content.consumables[0].id, content.consumables[1].id]
