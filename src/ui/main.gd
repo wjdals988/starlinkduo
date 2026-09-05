@@ -1956,7 +1956,7 @@ func _debug_ui_preview_name() -> String:
 
 func _show_debug_ui_preview(preview_name: String) -> void:
 	if preview_name == "gallery":
-		for gallery_screen in ["settings", "roster", "map", "deck", "hub", "reward", "shop", "remove_card_picker", "remove_card_confirm", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
+		for gallery_screen in ["settings", "roster", "map", "deck", "hub", "quick_chat", "reward", "shop", "remove_card_picker", "remove_card_confirm", "event", "route_result", "training_victory", "run_victory", "run_failed", "consumables"]:
 			_show_debug_ui_preview(gallery_screen)
 			print("STARLINK_UI_PREVIEW %s" % gallery_screen)
 			await get_tree().create_timer(2.0).timeout
@@ -1969,6 +1969,10 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 		"settings":
 			game_started = false
 			_show_settings()
+		"quick_chat":
+			game_started = true
+			game_mode = "cooperative"
+			_show_quick_chat()
 		"remove_card_picker":
 			game_started = true
 			game_mode = "cooperative"
