@@ -2003,10 +2003,14 @@ func _show_debug_ui_preview(preview_name: String) -> void:
 			_show_training_victory()
 		"run_victory":
 			run.phase = "completed"
+			run.stage = 3
+			run.step = 8
 			run.keys = [true, true, true]
 			_show_run_outcome(true)
 		"run_failed":
 			run.phase = "failed"
+			run.stage = 2
+			run.step = 5
 			run.keys = [true, false, false]
 			_show_run_outcome(false)
 		"consumables":
@@ -3019,7 +3023,8 @@ func _show_run_outcome(victory: bool) -> void:
 		["⌁", "STAGE %d/3" % run_coordinator.run.stage, COLOR_BLUE],
 		["◈", "%d + %d C" % [run_coordinator.run.gold[0], run_coordinator.run.gold[1]], COLOR_ORANGE],
 	]))
-	_info_panel("원정 기록 저장됨", "완료된 런의 편성·덱·항로 결과를 로컬 체크포인트에 반영했습니다.", outcome_color)
+	var record_subject := "완주한 원정" if victory else "종료된 원정"
+	_info_panel("원정 기록 저장됨", "%s의 편성·덱·항로 결과를 로컬 체크포인트에 반영했습니다." % record_subject, outcome_color)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
 	var deck_button := _action_button("▤  최종 덱 확인", _show_current_deck, COLOR_BLUE, 64)
