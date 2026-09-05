@@ -37,6 +37,7 @@ var accessibility_bridge: AndroidAccessibilityBridge
 var cooperative_session: CooperativeSession
 var local_slot := 0
 var roster_edit_slot := 0
+var deck_view_slot := 0
 var selected_plays: Array[Dictionary] = []
 var selected_hand_indices: Array[int] = []
 var selected_energy: int = 0
@@ -847,17 +848,37 @@ func _return_to_main_menu() -> void:
 	selected_energy = 0
 	_show_main_menu()
 
-func _show_current_deck() -> void:
+func _show_current_deck(requested_slot: int = -1) -> void:
+	deck_view_slot = local_slot if requested_slot < 0 else clampi(requested_slot, 0, 1)
+	var inspected_slot := deck_view_slot
 	_clear_overlay()
 	_set_overlay_immersive()
 	overlay_title.text = "현재 덱"
+	if cooperative_session == null and game_mode != "duel":
+		var pilot_switcher := HBoxContainer.new()
+		pilot_switcher.alignment = BoxContainer.ALIGNMENT_CENTER
+		pilot_switcher.add_theme_constant_override("separation", 24)
+		for slot in 2:
+			var pilot_button := Button.new()
+			var selected := slot == inspected_slot
+			pilot_button.text = "%s  P%d · %s" % ["◆" if selected else "◇", slot + 1, _character_name(run_coordinator.run.characters[slot])]
+			pilot_button.custom_minimum_size = Vector2(260, 48)
+			pilot_button.add_theme_font_size_override("font_size", 15)
+			pilot_button.add_theme_color_override("font_color", COLOR_TEXT if selected else COLOR_MUTED)
+			pilot_button.add_theme_stylebox_override("normal", _panel_style(Color(_character_color(run_coordinator.run.characters[slot]), 0.20) if selected else Color.TRANSPARENT, 20, Color.TRANSPARENT, 0, 14, 6))
+			pilot_button.add_theme_stylebox_override("hover", _panel_style(Color(_character_color(run_coordinator.run.characters[slot]), 0.30), 20, Color.TRANSPARENT, 0, 14, 6))
+			pilot_button.add_theme_stylebox_override("focus", _focus_style(_character_color(run_coordinator.run.characters[slot]), 20))
+			_set_button_accessibility(pilot_button, "P%d %s 덱%s" % [slot + 1, _character_name(run_coordinator.run.characters[slot]), ", 현재 표시 중" if selected else ""], "이 대원의 현재 덱을 표시합니다")
+			pilot_button.pressed.connect(_show_current_deck.bind(slot))
+			pilot_switcher.add_child(pilot_button)
+		overlay_content.add_child(pilot_switcher)
 	var deck: Array = []
 	var hand_count := 0
 	var draw_count := 0
 	var discard_count := 0
-	var progression_deck_count := run_coordinator.run.decks[local_slot].size()
+	var progression_deck_count := run_coordinator.run.decks[inspected_slot].size()
 	if game_mode == "duel" and duel_state != null:
-		var player := duel_state.players[local_slot]
+		var player := duel_state.players[inspected_slot]
 		deck.append_array(player.draw_pile)
 		deck.append_array(player.hand)
 		deck.append_array(player.discard_pile)
@@ -865,8 +886,8 @@ func _show_current_deck() -> void:
 		draw_count = player.draw_pile.size()
 		discard_count = player.discard_pile.size()
 		progression_deck_count = deck.size()
-	elif state != null and state.players.size() > local_slot and (active_route_combat or (game_started and run_coordinator.is_pristine_run())):
-		var player := state.players[local_slot]
+	elif state != null and state.players.size() > inspected_slot and (active_route_combat or (game_started and run_coordinator.is_pristine_run())):
+		var player := state.players[inspected_slot]
 		deck.append_array(player.draw_pile)
 		deck.append_array(player.hand)
 		deck.append_array(player.discard_pile)
@@ -874,11 +895,11 @@ func _show_current_deck() -> void:
 		draw_count = player.draw_pile.size()
 		discard_count = player.discard_pile.size()
 	else:
-		deck = run_coordinator.run.decks[local_slot].duplicate()
+		deck = run_coordinator.run.decks[inspected_slot].duplicate()
 	var counts := {}
 	for card_id in deck:
 		counts[StringName(card_id)] = int(counts.get(StringName(card_id), 0)) + 1
-	overlay_subtitle.text = "P%d  ·  %d장 / %d종  ·  카드 전체 구성을 한눈에 확인하세요" % [local_slot + 1, deck.size(), counts.size()]
+	overlay_subtitle.text = "P%d %s  ·  %d장 / %d종" % [inspected_slot + 1, _character_name(run_coordinator.run.characters[inspected_slot]), deck.size(), counts.size()]
 	var total_cost := 0
 	var attack_count := 0
 	var defense_count := 0
@@ -893,7 +914,7 @@ func _show_current_deck() -> void:
 				"defense": defense_count += 1
 				"support": support_count += 1
 				_: tactic_count += 1
-	overlay_subtitle.text = "P%d  ·  %d장 / %d종  ·  평균 에너지 %.1f" % [local_slot + 1, deck.size(), counts.size(), float(total_cost) / maxf(float(deck.size()), 1.0)]
+	overlay_subtitle.text = "P%d %s  ·  %d장 / %d종  ·  평균 에너지 %.1f" % [inspected_slot + 1, _character_name(run_coordinator.run.characters[inspected_slot]), deck.size(), counts.size(), float(total_cost) / maxf(float(deck.size()), 1.0)]
 	overlay_content.add_child(_game_status_line([
 		["⚔", "공격 %d" % attack_count, Color("#ef536c")],
 		["⬡", "방어 %d" % defense_count, Color("#4d91ec")],
