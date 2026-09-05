@@ -107,6 +107,10 @@ func _test_initial_state() -> void:
 	main_script.system_font_scale = 1.0
 	main_script.large_text_enabled = false
 	_expect(not main_script._destructive_confirm_needs_tall_layout(), "default text keeps destructive confirmations compact")
+	main_script.catalog = FullCardCatalog.build()
+	main_script.run_coordinator = RunCoordinator.new(main_script.catalog)
+	_expect(main_script._starter_deck_profile(&"guardian") == "시작덱 8 · 공4 방3 지1 전0", "guardian roster profile keeps all five deck metrics")
+	_expect(main_script._starter_deck_profile_compact(&"guardian") == "8장 · 공4 방3\n지1 전0", "large-text roster profile preserves every deck metric across two lines")
 	var tap_tone: AudioStreamWAV = main_script._synth_ui_tone([520.0], 0.055)
 	var confirm_tone: AudioStreamWAV = main_script._synth_ui_tone([440.0, 660.0, 880.0], 0.16)
 	_expect(tap_tone.data.size() > 2000 and confirm_tone.data.size() > tap_tone.data.size(), "procedural tap and confirmation effects contain distinct PCM envelopes")

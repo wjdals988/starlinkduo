@@ -2463,7 +2463,9 @@ func _show_roster() -> void:
 		var button := Button.new()
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.custom_minimum_size.y = 72
-		button.text = "%s\n%s" % [_character_name(character_id), _starter_deck_profile(character_id)]
+		var deck_profile := _starter_deck_profile_compact(character_id) if _effective_text_scale() >= 1.20 else _starter_deck_profile(character_id)
+		button.text = "%s\n%s" % [_character_name(character_id), deck_profile]
+		button.clip_text = true
 		button.disabled = not selection_open or not can_edit or is_current or is_teammate
 		_set_button_accessibility(button, "P%d %s 선택" % [roster_edit_slot + 1, _character_name(character_id)], "%s. %s. %s" % [_character_role(character_id), _starter_deck_profile(character_id), _disabled_character_reason(roster_edit_slot, character_id, selection_open, can_edit)])
 		button.add_theme_font_size_override("font_size", 13)
@@ -2522,6 +2524,14 @@ func _character_name(character_id: StringName) -> String:
 	return {&"guardian": "수호자", &"engineer": "기술자", &"hacker": "해커", &"assault": "강습병", &"medic": "의무관", &"navigator": "항법사"}.get(character_id, String(character_id))
 
 func _starter_deck_profile(character_id: StringName) -> String:
+	var counts := _starter_deck_role_counts(character_id)
+	return "시작덱 %d · 공%d 방%d 지%d 전%d" % [counts.total, counts.attack, counts.defense, counts.support, counts.tactic]
+
+func _starter_deck_profile_compact(character_id: StringName) -> String:
+	var counts := _starter_deck_role_counts(character_id)
+	return "%d장 · 공%d 방%d\n지%d 전%d" % [counts.total, counts.attack, counts.defense, counts.support, counts.tactic]
+
+func _starter_deck_role_counts(character_id: StringName) -> Dictionary:
 	var deck := run_coordinator.starter_deck_for(character_id)
 	var attack := 0
 	var defense := 0
@@ -2540,7 +2550,7 @@ func _starter_deck_profile(character_id: StringName) -> String:
 			support += 1
 		else:
 			tactic += 1
-	return "시작덱 %d · 공%d 방%d 지%d 전%d" % [deck.size(), attack, defense, support, tactic]
+	return {"total": deck.size(), "attack": attack, "defense": defense, "support": support, "tactic": tactic}
 
 func _card_tactical_role(card: CardData) -> String:
 	if card.is_support():
