@@ -1517,8 +1517,9 @@ func _set_overlay_minimal() -> void:
 		return
 	overlay_panel.offset_left = 150
 	overlay_panel.offset_right = -150
-	overlay_panel.offset_top = 112
-	overlay_panel.offset_bottom = -300
+	var enlarged_text := _effective_text_scale() >= 1.20
+	overlay_panel.offset_top = 90 if enlarged_text else 112
+	overlay_panel.offset_bottom = -230 if enlarged_text else -300
 
 func _set_overlay_balanced() -> void:
 	if overlay_panel == null:
@@ -3361,7 +3362,7 @@ func _rebuild_hand() -> void:
 		card_button.position = Vector2(0, 0 if selected else 12)
 		card_button.size = Vector2(174, 168)
 		var accent := _scope_color(card.owner_scope)
-		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected)
+		card_button.configure(card, "%s · %s" % [_rarity_label(card.rarity), _scope_label(card.owner_scope)], _effect_summary(card), accent, selected, "", false)
 		var base_color := Color(accent, 0.22) if selected else COLOR_PANEL
 		card_button.add_theme_stylebox_override("normal", _panel_style(base_color, 16, Color.TRANSPARENT, 0, 12, 8))
 		card_button.add_theme_stylebox_override("hover", _panel_style(COLOR_PANEL_SOFT, 16, Color.TRANSPARENT, 0, 12, 8))

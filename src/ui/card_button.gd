@@ -12,7 +12,7 @@ var role_accent := Color("#bc8cff")
 const CardArt := preload("res://src/ui/card_art_catalog.gd")
 const CardIdentity := preload("res://src/ui/card_identity_visual.gd")
 
-func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "") -> void:
+func configure(card: CardData, rarity_text: String, effect_text: String, accent_color: Color, is_selected: bool, footer_text: String = "", show_footer: bool = true) -> void:
 	accent = accent_color
 	selected = is_selected
 	seed_value = String(card.id).hash()
@@ -107,11 +107,12 @@ func configure(card: CardData, rarity_text: String, effect_text: String, accent_
 	var target := _label(detail, 10, role_accent.lightened(0.22) if card_role == "support" else Color("#aebbd2"))
 	target.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(target)
-	var resolved_footer := footer_text if not footer_text.is_empty() else ("◆ 선택됨" if is_selected else "탭하여 선택")
-	var state_label := _label(resolved_footer, 10, accent.lightened(0.18) if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
-	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	state_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	column.add_child(state_label)
+	if show_footer:
+		var resolved_footer := footer_text if not footer_text.is_empty() else ("◆ 선택됨" if is_selected else "탭하여 선택")
+		var state_label := _label(resolved_footer, 10, accent.lightened(0.18) if is_selected or not footer_text.is_empty() else Color("#8fa0bc"))
+		state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		state_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		column.add_child(state_label)
 	queue_redraw()
 
 func _label(value: String, font_size: int, color: Color) -> Label:
