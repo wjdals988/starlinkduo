@@ -1001,9 +1001,15 @@ func _send_quick_chat(macro_id: String) -> void:
 		return
 	var result := cooperative_session.send_macro_chat(macro_id)
 	if result.ok:
+		_play_ui_sound("confirm")
 		_close_overlay()
 	else:
 		overlay_subtitle.text = "전송 실패 · 연결 상태를 확인하세요."
+		overlay_subtitle.queue_accessibility_update()
+		_play_ui_sound("cancel")
+		if haptics_enabled:
+			Input.vibrate_handheld(52, 0.38)
+		_sync_android_accessibility.call_deferred()
 
 func _on_macro_chat_received(from_slot: int, macro_id: String) -> void:
 	var text := _macro_chat_text(macro_id)
@@ -1483,6 +1489,7 @@ func _build_overlay() -> void:
 	overlay_subtitle.add_theme_font_size_override("font_size", 16)
 	overlay_subtitle.add_theme_color_override("font_color", COLOR_MUTED)
 	overlay_subtitle.accessibility_name = "대화상자 안내"
+	overlay_subtitle.accessibility_live = AccessibilityServer.LIVE_POLITE
 	overlay_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	titles.add_child(overlay_subtitle)
 	overlay_close_button = Button.new()
