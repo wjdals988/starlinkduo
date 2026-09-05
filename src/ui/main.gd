@@ -3096,22 +3096,23 @@ func _show_run_outcome(victory: bool) -> void:
 	var outcome_color := COLOR_CYAN if victory else COLOR_RED
 	var crew := HBoxContainer.new()
 	crew.alignment = BoxContainer.ALIGNMENT_CENTER
-	crew.add_theme_constant_override("separation", 24)
-	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[0]), "P1 · %s" % _character_name(run_coordinator.run.characters[0]), "최종 덱 %d장" % run_coordinator.run.decks[0].size(), COLOR_BLUE, Vector2(210, 150)))
+	crew.custom_minimum_size.y = 240
+	crew.add_theme_constant_override("separation", 36)
+	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[0]), "P1 · %s" % _character_name(run_coordinator.run.characters[0]), "최종 덱 %d장" % run_coordinator.run.decks[0].size(), COLOR_BLUE, Vector2(280, 230)))
 	var outcome_mark := VBoxContainer.new()
-	outcome_mark.custom_minimum_size = Vector2(240, 130)
+	outcome_mark.custom_minimum_size = Vector2(300, 210)
 	var outcome_label := Label.new()
-	outcome_label.text = "MISSION\nCOMPLETE" if victory else "KEY GATE\nCLOSED"
+	outcome_label.text = "✦\nMISSION\nCOMPLETE" if victory else "×\nKEY GATE\nCLOSED"
 	outcome_label.accessibility_name = "원정 성공" if victory else "열쇠 관문 진입 실패"
 	outcome_label.accessibility_description = "최종 원정 결과"
 	outcome_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	outcome_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	outcome_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	outcome_label.add_theme_font_size_override("font_size", 26)
+	outcome_label.add_theme_font_size_override("font_size", 34)
 	outcome_label.add_theme_color_override("font_color", outcome_color)
 	outcome_mark.add_child(outcome_label)
 	crew.add_child(outcome_mark)
-	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[1]), "P2 · %s" % _character_name(run_coordinator.run.characters[1]), "최종 덱 %d장" % run_coordinator.run.decks[1].size(), COLOR_ORANGE, Vector2(210, 150)))
+	crew.add_child(_briefing_actor(_character_portrait(run_coordinator.run.characters[1]), "P2 · %s" % _character_name(run_coordinator.run.characters[1]), "최종 덱 %d장" % run_coordinator.run.decks[1].size(), COLOR_ORANGE, Vector2(280, 230)))
 	overlay_content.add_child(crew)
 	overlay_content.add_child(_game_status_line([
 		["♥", "팀 %d/%d" % [run_coordinator.run.team_health, run_coordinator.run.team_max_health], outcome_color],
@@ -3122,12 +3123,13 @@ func _show_run_outcome(victory: bool) -> void:
 	var record_subject := "완주한 원정" if victory else "종료된 원정"
 	_info_panel("원정 기록 저장됨", "%s의 편성·덱·항로 결과를 로컬 체크포인트에 반영했습니다." % record_subject, outcome_color)
 	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
 	actions.add_theme_constant_override("separation", 12)
 	var deck_button := _action_button("▤  최종 덱 확인", _show_current_deck, COLOR_BLUE, 64)
-	deck_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	deck_button.custom_minimum_size.x = 460
 	actions.add_child(deck_button)
 	var main_button := _action_button("←  메인 화면으로", _return_to_main_menu, COLOR_CYAN, 64)
-	main_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_button.custom_minimum_size.x = 460
 	actions.add_child(main_button)
 	overlay_content.add_child(actions)
 
