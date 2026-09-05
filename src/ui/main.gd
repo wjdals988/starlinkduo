@@ -990,21 +990,40 @@ func _show_quick_chat() -> void:
 	_set_overlay_immersive()
 	overlay_title.text = "✉  COMMS LINK"
 	overlay_subtitle.text = "동료에게 보낼 전술 신호를 선택하세요"
-	var comms_signal := Label.new()
-	comms_signal.text = "·  · ─── ◉ ─── ·  ·"
-	comms_signal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	comms_signal.add_theme_font_size_override("font_size", 24)
-	comms_signal.add_theme_color_override("font_color", COLOR_CYAN)
-	overlay_content.add_child(comms_signal)
 	var grid := GridContainer.new()
 	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 18)
-	grid.add_theme_constant_override("v_separation", 18)
+	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 14)
 	overlay_content.add_child(grid)
-	for macro_id in ["ready", "wait", "attack", "defend", "nice", "sorry"]:
-		var button := _comms_button(macro_id)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(button)
+	for slot_value in ["ready", "", "wait", "defend", "core", "attack", "nice", "", "sorry"]:
+		var slot := str(slot_value)
+		if slot == "core":
+			grid.add_child(_comms_core())
+		elif slot.is_empty():
+			var spacer := Control.new()
+			spacer.custom_minimum_size.y = 104
+			spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			grid.add_child(spacer)
+		else:
+			var button := _comms_button(slot)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			grid.add_child(button)
+
+func _comms_core() -> PanelContainer:
+	var core := PanelContainer.new()
+	core.custom_minimum_size = Vector2(220, 112)
+	core.add_theme_stylebox_override("panel", _panel_style(Color(COLOR_CYAN, 0.08), 56, Color(COLOR_CYAN, 0.46), 2, 18, 10))
+	var signal_label := Label.new()
+	signal_label.text = "◉\n통신 채널"
+	signal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	signal_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	signal_label.add_theme_font_size_override("font_size", 16)
+	signal_label.add_theme_color_override("font_color", COLOR_CYAN)
+	signal_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	core.add_child(signal_label)
+	return core
 
 func _comms_button(macro_id: String) -> Button:
 	var icons := {"ready": "✓", "wait": "⌛", "attack": "⚔", "defend": "⬡", "nice": "★", "sorry": "…"}
